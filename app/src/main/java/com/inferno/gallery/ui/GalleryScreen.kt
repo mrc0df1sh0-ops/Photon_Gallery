@@ -71,6 +71,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.ui.res.painterResource
+import com.inferno.gallery.R
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import com.inferno.gallery.ui.components.WavyProgressIndicator
 import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
@@ -427,7 +429,7 @@ fun GalleryGridItem(
                         }
                     )
                     .aspectRatio(1f)
-                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp)) 
+                    .clip(RectangleShape)
                     .clickable(
                         interactionSource = interactionSource,
                         indication = LocalIndication.current
@@ -478,7 +480,7 @@ fun GalleryGridItem(
                 modifier = Modifier
                     .matchParentSize()
                     .background(Color.Black.copy(alpha = 0.3f))
-                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
+                    .clip(RectangleShape)
             ) {
                 Icon(
                     imageVector = Icons.Outlined.CheckCircle,
@@ -492,21 +494,51 @@ fun GalleryGridItem(
         }
 
         val ext = item.name.substringAfterLast('.', "").lowercase()
+
+        // RAW icon badge (bottom-start corner, prominent icon)
+        val isRaw = ext in listOf("dng", "tiff", "tif", "raw", "cr2", "nef", "arw", "orf", "rw2", "pef", "srw")
+        if (isRaw && !item.isVideo) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(4.dp)
+                    .background(
+                        color = Color(0xCC1A1A2E),
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(4.dp)
+                    )
+                    .padding(horizontal = 4.dp, vertical = 2.dp)
+            ) {
+                Icon(
+                    painter = painterResource(id = R.drawable.ic_raw_on),
+                    contentDescription = "RAW file",
+                    tint = Color(0xFFE8C95D),
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+        }
+
+        // Text badge for GIF / animated / SVG (bottom-end corner)
         val badgeText = when (ext) {
-            "gif", "webp" -> "GIF"
+            "gif" -> "GIF"
+            "webp" -> "WEBP"
             "svg" -> "SVG"
-            "dng", "tiff", "tif", "raw", "cr2", "nef", "arw" -> "RAW"
             else -> null
+        }
+        val badgeColor = when (ext) {
+            "gif" -> Color(0xCC7B2FBE)  // purple — animated
+            "webp" -> Color(0xCC1565C0) // blue — web format
+            "svg" -> Color(0xCC2E7D32)  // green — vector
+            else -> Color(0xCC37474F)
         }
 
         if (badgeText != null && !item.isVideo) {
             Surface(
-                color = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.7f),
-                contentColor = MaterialTheme.colorScheme.onSurface,
+                color = badgeColor,
+                contentColor = Color.White,
                 shape = androidx.compose.foundation.shape.RoundedCornerShape(4.dp),
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
-                    .padding(6.dp)
+                    .padding(4.dp)
             ) {
                 Text(
                     text = badgeText,
