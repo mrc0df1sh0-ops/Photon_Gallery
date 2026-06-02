@@ -8,7 +8,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Delete
+
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.BrightnessAuto
 import androidx.compose.material.icons.outlined.LightMode
@@ -288,17 +288,7 @@ fun SettingsScreen(
                     },
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent)
                 )
-                ListItem(
-                    leadingContent = { Icon(Icons.Outlined.Delete, contentDescription = null) },
-                    headlineContent = { Text("Clear Image Cache") },
-                    supportingContent = { Text("Frees up space used by thumbnail previews") },
-                    trailingContent = {
-                        IconButton(onClick = { /* TODO */ }) {
-                            Icon(Icons.Outlined.Delete, contentDescription = "Clear cache")
-                        }
-                    },
-                    colors = ListItemDefaults.colors(containerColor = Color.Transparent)
-                )
+
             }
 
             SettingsGroup(title = "Local AI Engine") {
