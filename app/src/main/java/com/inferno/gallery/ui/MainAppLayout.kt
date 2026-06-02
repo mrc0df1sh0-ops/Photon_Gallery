@@ -37,7 +37,7 @@ import androidx.compose.material.icons.automirrored.outlined.Sort
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.ArrowDropDown
-import androidx.compose.material.icons.outlined.DriveFileMove
+import androidx.compose.material.icons.automirrored.outlined.DriveFileMove
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
@@ -425,7 +425,7 @@ fun MainAppLayout(
 
                     DropdownMenuItem(
                         text = { Text("Move") },
-                        leadingIcon = { Icon(Icons.Outlined.DriveFileMove, contentDescription = null) },
+                        leadingIcon = { Icon(Icons.AutoMirrored.Outlined.DriveFileMove, contentDescription = null) },
                         onClick = { 
                             expanded = false
                             // TODO: Move

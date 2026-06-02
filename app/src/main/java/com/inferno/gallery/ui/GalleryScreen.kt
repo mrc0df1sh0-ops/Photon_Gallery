@@ -94,6 +94,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.ContentScale
@@ -111,6 +112,24 @@ import coil3.size.Size
 import coil3.compose.rememberAsyncImagePainter
 import coil3.compose.AsyncImagePainter
 import coil3.asDrawable
+
+import androidx.compose.foundation.layout.width
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.delay
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
@@ -135,9 +154,8 @@ fun GalleryScreen(
     val selectedUris by viewModel.selectedUris.collectAsState()
     val gridAutoPlay by viewModel.gridAutoPlay.collectAsState()
     val gridCellsCount by viewModel.gridCellsCount.collectAsState()
-
-
     val lazyGridState = rememberLazyGridState()
+    val isScrollInProgress = lazyGridState.isScrollInProgress
     val context = LocalContext.current
 
     BackHandler(enabled = isSelectionMode) {
@@ -155,11 +173,11 @@ fun GalleryScreen(
             columns = GridCells.Fixed(gridCellsCount),
             state = lazyGridState,
         contentPadding = contentPadding,
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
         modifier = modifier
             .fillMaxSize()
-            .padding(horizontal = 8.dp)
+            .padding(horizontal = 4.dp)
             .gridZoomGestureModifier(gridCellsCount, viewModel::setGridCellsCount, isSelectionMode)
             .pointerInput(lazyGridState) {
                 var initialItemUri: String? = null
@@ -228,7 +246,7 @@ fun GalleryScreen(
                         }
                     },
                     modifier = Modifier.animateItem(
-                        placementSpec = spring(
+                        placementSpec = if (isScrollInProgress) null else spring(
                             dampingRatio = Spring.DampingRatioNoBouncy,
                             stiffness = Spring.StiffnessMediumLow
                         )
@@ -263,7 +281,7 @@ fun GalleryScreen(
                         }
                     },
                     modifier = Modifier.animateItem(
-                        placementSpec = spring(
+                        placementSpec = if (isScrollInProgress) null else spring(
                             dampingRatio = Spring.DampingRatioNoBouncy,
                             stiffness = Spring.StiffnessMediumLow
                         )
@@ -278,50 +296,16 @@ fun GalleryScreen(
     }
 
 
-        val actualTotalItems = lazyGridState.layoutInfo.totalItemsCount
-        if (actualTotalItems > 100) {
-            var dragOffset by remember { mutableStateOf(0f) }
-            
-            Box(
-                modifier = Modifier
-                    .align(Alignment.CenterEnd)
-                    .padding(end = 8.dp)
-            ) {
-                Surface(
-                    shape = androidx.compose.foundation.shape.CircleShape,
-                    color = MaterialTheme.colorScheme.surfaceContainerLowest,
-                    shadowElevation = 4.dp,
-                    modifier = Modifier.pointerInput(Unit) {
-                        detectVerticalDragGestures(
-                            onDragStart = { 
-                                if (actualTotalItems > 0 && boxHeight > 0f) {
-                                    val currentPct = lazyGridState.firstVisibleItemIndex.toFloat() / actualTotalItems
-                                    dragOffset = currentPct * boxHeight
-                                }
-                            }
-                        ) { change, dragAmount ->
-                            change.consume()
-                            if (boxHeight > 0f) {
-                                dragOffset = (dragOffset + dragAmount).coerceIn(0f, boxHeight)
-                                val percentage = dragOffset / boxHeight
-                                val targetIndex = (percentage * actualTotalItems).toInt().coerceIn(0, actualTotalItems - 1)
-                                coroutineScope.launch {
-                                    lazyGridState.scrollToItem(targetIndex)
-                                }
-                            }
-                        }
-                    }
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.padding(vertical = 8.dp, horizontal = 4.dp)
-                    ) {
-                        Icon(Icons.Filled.PlayArrow, contentDescription = null, modifier = Modifier.rotate(-90f))
-                        Icon(Icons.Filled.PlayArrow, contentDescription = null, modifier = Modifier.rotate(90f))
-                    }
-                }
-            }
-        }
+        FastScroller(
+            lazyGridState = lazyGridState,
+            images = images,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(
+                    top = contentPadding.calculateTopPadding(),
+                    bottom = contentPadding.calculateBottomPadding() + 56.dp
+                )
+        )
     }
 }
 
@@ -339,14 +323,14 @@ fun GalleryGridItem(
 ) {
     val context = LocalContext.current
     val screenWidth = context.resources.displayMetrics.widthPixels
-    val maxThumbnailSize = screenWidth / 2
+    val bucketSize = if (gridCellsCount <= 3) screenWidth / 2 else screenWidth / 4
 
-    val request = remember(item.uri) {
+    val request = remember<ImageRequest>(item.uri, bucketSize) {
         ImageRequest.Builder(context)
             .data(item.uri)
-            .size(maxThumbnailSize, maxThumbnailSize)
-            .memoryCacheKey("photo_${item.uri}_$maxThumbnailSize")
-            .precision(Precision.INEXACT) 
+            .size(bucketSize, bucketSize)
+            .memoryCacheKey("photo_${item.uri}_$bucketSize")
+            .precision(Precision.INEXACT)
             .memoryCachePolicy(CachePolicy.ENABLED)
             .diskCachePolicy(CachePolicy.ENABLED)
             .crossfade(false)
@@ -365,13 +349,14 @@ fun GalleryGridItem(
     
     val combinedScale = scale
 
-    val videoThumbnail by produceState<Bitmap?>(initialValue = null, item.uri) {
+    val videoThumbnail by produceState<Bitmap?>(initialValue = null, item.uri, bucketSize) {
         if (item.isVideo && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            kotlinx.coroutines.delay(150)
             value = withContext(Dispatchers.IO) {
                 runCatching {
                     context.contentResolver.loadThumbnail(
                         item.uri,
-                        android.util.Size(maxThumbnailSize, maxThumbnailSize),
+                        android.util.Size(bucketSize, bucketSize),
                         null
                     )
                 }.getOrNull()
@@ -380,13 +365,16 @@ fun GalleryGridItem(
     }
 
     val painter = rememberAsyncImagePainter(
-        model = videoThumbnail ?: request
+        model = videoThumbnail ?: request,
+        filterQuality = FilterQuality.High
     )
 
     LaunchedEffect(gridAutoPlay, painter.state) {
         val state = painter.state
         if (state is AsyncImagePainter.State.Success) {
-            val drawable = state.result.image.asDrawable(context.resources)
+            val image = state.result.image
+            val drawable = (image as? coil3.DrawableImage)?.drawable
+            @Suppress("USELESS_IS_CHECK")
             if (drawable is Animatable) {
                 if (gridAutoPlay) {
                     drawable.start()
@@ -571,4 +559,140 @@ private fun Modifier.gridZoomGestureModifier(
             }
         }
     )
+}
+
+@Composable
+fun FastScroller(
+    lazyGridState: androidx.compose.foundation.lazy.grid.LazyGridState,
+    images: List<GalleryItem>,
+    modifier: Modifier = Modifier
+) {
+    val actualTotalItems = lazyGridState.layoutInfo.totalItemsCount
+    if (actualTotalItems < 50) return
+
+    var isDragging by remember { mutableStateOf(false) }
+    var dragOffset by remember { mutableStateOf(0f) }
+    var boxHeight by remember { mutableStateOf(0f) }
+    
+    val haptic = LocalHapticFeedback.current
+    var currentDateString by remember { mutableStateOf("") }
+    
+    val thumbHeight = if (isDragging) 48.dp else 36.dp
+    val thumbWidth = if (isDragging) 8.dp else 4.dp
+    
+    val animatedThumbHeight by animateDpAsState(
+        targetValue = thumbHeight, 
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow), label = "thumbH"
+    )
+    val animatedThumbWidth by animateDpAsState(
+        targetValue = thumbWidth, 
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow), label = "thumbW"
+    )
+
+    val density = LocalDensity.current
+    val thumbHeightPx = with(density) { 48.dp.toPx() } 
+
+    LaunchedEffect(lazyGridState, boxHeight, isDragging) {
+        snapshotFlow { lazyGridState.firstVisibleItemIndex }.collectLatest { firstVisible ->
+            if (!isDragging && actualTotalItems > 0 && boxHeight > thumbHeightPx) {
+                val currentPct = firstVisible.toFloat() / actualTotalItems
+                dragOffset = currentPct * (boxHeight - thumbHeightPx)
+            }
+        }
+    }
+
+    var targetIndex by remember { mutableStateOf(-1) }
+
+    LaunchedEffect(targetIndex) {
+        if (targetIndex >= 0) {
+            delay(16)
+            lazyGridState.scrollToItem(targetIndex)
+        }
+    }
+
+    val isVisible = lazyGridState.isScrollInProgress || isDragging
+
+    AnimatedVisibility(
+        visible = isVisible,
+        enter = fadeIn() + slideInHorizontally(initialOffsetX = { it }),
+        exit = fadeOut() + slideOutHorizontally(targetOffsetX = { it }),
+        modifier = modifier
+    ) {
+        Box(
+            modifier = Modifier
+                .onGloballyPositioned { boxHeight = it.size.height.toFloat() }
+                .fillMaxHeight()
+                .width(48.dp) 
+        ) {
+            AnimatedVisibility(
+                visible = isDragging && currentDateString.isNotEmpty(),
+                enter = fadeIn() + slideInHorizontally(initialOffsetX = { it / 2 }),
+                exit = fadeOut() + slideOutHorizontally(targetOffsetX = { it / 2 }),
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .offset { IntOffset(-120, dragOffset.roundToInt()) }
+            ) {
+                Surface(
+                    shape = androidx.compose.foundation.shape.CircleShape,
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    shadowElevation = 4.dp
+                ) {
+                    Text(
+                        text = currentDateString,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(end = 4.dp)
+                    .offset { IntOffset(0, dragOffset.roundToInt()) }
+                    .size(width = animatedThumbWidth, height = animatedThumbHeight)
+                    .clip(androidx.compose.foundation.shape.CircleShape)
+                    .background(if (isDragging) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant)
+            )
+
+            Spacer(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pointerInput(actualTotalItems) {
+                        detectVerticalDragGestures(
+                            onDragStart = { offset ->
+                                isDragging = true
+                                if (boxHeight > thumbHeightPx) {
+                                    dragOffset = offset.y.coerceIn(0f, boxHeight - thumbHeightPx)
+                                }
+                            },
+                            onDragEnd = { isDragging = false },
+                            onDragCancel = { isDragging = false }
+                        ) { change, dragAmount ->
+                            change.consume()
+                            if (boxHeight > thumbHeightPx) {
+                                dragOffset = (dragOffset + dragAmount).coerceIn(0f, boxHeight - thumbHeightPx)
+                                val percentage = dragOffset / (boxHeight - thumbHeightPx)
+                                targetIndex = (percentage * actualTotalItems).toInt().coerceIn(0, actualTotalItems - 1)
+                                
+                                val imagesIndex = (percentage * images.size).toInt().coerceIn(0, maxOf(0, images.size - 1))
+                                val itemDate = images.getOrNull(imagesIndex)?.dateAdded
+                                if (itemDate != null) {
+                                    val date = Date(itemDate * 1000L) // dateAdded is likely in seconds, but we should check. Wait, dateAdded in MediaStore is seconds.
+
+                                    val formatter = SimpleDateFormat("MMMM yyyy", Locale.getDefault())
+                                    val newDateString = formatter.format(date)
+                                    if (newDateString != currentDateString) {
+                                        currentDateString = newDateString
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    }
+                                }
+                            }
+                        }
+                    }
+            )
+        }
+    }
 }
