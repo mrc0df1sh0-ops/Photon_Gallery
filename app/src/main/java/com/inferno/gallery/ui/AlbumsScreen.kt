@@ -57,6 +57,9 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Row
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Shadow
 @Composable
 fun AlbumsScreen(
     modifier: Modifier = Modifier,
@@ -213,33 +216,50 @@ fun AlbumCard(
             .build()
     }
 
-    Column(
+    Box(
         modifier = modifier
             .fillMaxWidth()
-            .expressiveClick(onClick)
+            .aspectRatio(0.85f)
+            .clip(MaterialTheme.shapes.extraLarge)
+            .expressiveClick(onClick),
+        contentAlignment = Alignment.BottomCenter
     ) {
         AsyncImage(
             model = request,
             contentDescription = bucket.bucketName,
             contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(1f)
+            modifier = Modifier.fillMaxSize()
         )
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = bucket.bucketName,
-            style = MaterialTheme.typography.titleSmall,
-            color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 1,
-            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-        )
-        val formattedSize = android.text.format.Formatter.formatShortFileSize(context, bucket.totalSizeBytes)
-        Text(
-            text = "${bucket.itemCount} items • $formattedSize",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(bottom = 24.dp).padding(horizontal = 8.dp)
+        ) {
+            Text(
+                text = bucket.bucketName,
+                style = MaterialTheme.typography.displayMedium.copy(
+                    shadow = Shadow(
+                        color = Color.Black.copy(alpha = 0.6f),
+                        offset = Offset(0f, 4f),
+                        blurRadius = 12f
+                    )
+                ),
+                color = Color.White,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+            )
+            Text(
+                text = "${bucket.itemCount} items",
+                style = MaterialTheme.typography.titleMedium.copy(
+                    shadow = Shadow(
+                        color = Color.Black.copy(alpha = 0.6f),
+                        offset = Offset(0f, 2f),
+                        blurRadius = 8f
+                    )
+                ),
+                color = Color.White
+            )
+        }
     }
 }
 
