@@ -237,12 +237,13 @@ fun AlbumCard(
         ) {
             Text(
                 text = bucket.bucketName,
-                style = MaterialTheme.typography.displayMedium.copy(
+                style = MaterialTheme.typography.titleLarge.copy(
                     shadow = Shadow(
                         color = Color.Black.copy(alpha = 0.6f),
                         offset = Offset(0f, 4f),
                         blurRadius = 12f
-                    )
+                    ),
+                    fontWeight = FontWeight.Bold
                 ),
                 color = Color.White,
                 maxLines = 1,
@@ -250,7 +251,7 @@ fun AlbumCard(
             )
             Text(
                 text = "${bucket.itemCount} items",
-                style = MaterialTheme.typography.titleMedium.copy(
+                style = MaterialTheme.typography.labelMedium.copy(
                     shadow = Shadow(
                         color = Color.Black.copy(alpha = 0.6f),
                         offset = Offset(0f, 2f),
