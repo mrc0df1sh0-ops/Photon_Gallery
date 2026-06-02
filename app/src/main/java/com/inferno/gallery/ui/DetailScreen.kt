@@ -618,7 +618,7 @@ fun DetailScreen(
                 LazyRow(
                     state = listState,
                     flingBehavior = snapFling,
-                    contentPadding = PaddingValues(horizontal = (screenWidthDp / 2) - 24.dp),
+                    contentPadding = PaddingValues(horizontal = (screenWidthDp / 2) - 19.dp),
                     horizontalArrangement = Arrangement.spacedBy(2.dp),
                     modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp)
                 ) {
@@ -627,7 +627,7 @@ fun DetailScreen(
                         Box(
                             contentAlignment = Alignment.Center,
                             modifier = Modifier
-                                .size(48.dp)
+                                .size(38.dp)
                                 .clickable { coroutineScope.launch { pagerState.animateScrollToPage(index) } }
                         ) {
                             AsyncImage(
