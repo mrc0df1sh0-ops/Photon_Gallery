@@ -3,6 +3,7 @@ package com.inferno.gallery.ui
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -194,6 +195,29 @@ fun SettingsScreen(
                     onValueChange = { galleryViewModel.setGridCellsCount(it.toInt()) },
                     valueRange = 2f..6f,
                     steps = 3
+                )
+            }
+
+            val thumbnailCornerRadius by viewModel.thumbnailCornerRadius.collectAsState()
+            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 32.dp, vertical = 8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                    horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(text = "Thumbnail Corner Radius", style = MaterialTheme.typography.bodyLarge)
+                    // Live preview tile
+                    Surface(
+                        modifier = Modifier.size(48.dp),
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(thumbnailCornerRadius.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer
+                    ) {}
+                }
+                
+                androidx.compose.material3.Slider(
+                    value = thumbnailCornerRadius,
+                    onValueChange = { viewModel.setThumbnailCornerRadius(it) },
+                    valueRange = 0f..32f
                 )
             }
 

@@ -80,5 +80,15 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    val thumbnailCornerRadius: StateFlow<Float> = repository.thumbnailCornerRadiusFlow.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = 0f
+    )
 
+    fun setThumbnailCornerRadius(radius: Float) {
+        viewModelScope.launch {
+            repository.updateThumbnailCornerRadius(radius)
+        }
+    }
 }

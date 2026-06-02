@@ -161,6 +161,18 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
         initialValue = 4
     )
 
+    val thumbnailCornerRadius: StateFlow<Float> = settingsRepository.thumbnailCornerRadiusFlow.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = 0f
+    )
+
+    fun setThumbnailCornerRadius(radius: Float) {
+        viewModelScope.launch {
+            settingsRepository.updateThumbnailCornerRadius(radius)
+        }
+    }
+
     val images: StateFlow<List<GalleryItem>> = combine(
         allMedia, sortOrder, _currentBucket, selectedFilterIndex
     ) { raw, order, bucket, filterIndex ->

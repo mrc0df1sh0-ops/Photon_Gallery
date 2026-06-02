@@ -3,6 +3,7 @@ package com.inferno.gallery.data
 import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
@@ -23,6 +24,7 @@ class SettingsRepository(private val context: Context) {
         val GRID_AUTO_PLAY = booleanPreferencesKey("grid_auto_play")
         val SELECTED_FILTER_INDEX = androidx.datastore.preferences.core.intPreferencesKey("selected_filter_index")
         val GRID_CELLS_COUNT = androidx.datastore.preferences.core.intPreferencesKey("grid_cells_count")
+        val THUMBNAIL_CORNER_RADIUS = floatPreferencesKey("thumbnail_corner_radius")
     }
 
     val themeModeFlow: Flow<String> = context.dataStore.data
@@ -123,6 +125,17 @@ class SettingsRepository(private val context: Context) {
     suspend fun updateGridCellsCount(count: Int) {
         context.dataStore.edit { preferences ->
             preferences[GRID_CELLS_COUNT] = count
+        }
+    }
+
+    val thumbnailCornerRadiusFlow: Flow<Float> = context.dataStore.data
+        .map { preferences ->
+            preferences[THUMBNAIL_CORNER_RADIUS] ?: 0f
+        }
+
+    suspend fun updateThumbnailCornerRadius(radius: Float) {
+        context.dataStore.edit { preferences ->
+            preferences[THUMBNAIL_CORNER_RADIUS] = radius
         }
     }
 }

@@ -154,6 +154,7 @@ fun GalleryScreen(
     val selectedUris by viewModel.selectedUris.collectAsState()
     val gridAutoPlay by viewModel.gridAutoPlay.collectAsState()
     val gridCellsCount by viewModel.gridCellsCount.collectAsState()
+    val thumbnailCornerRadius by viewModel.thumbnailCornerRadius.collectAsState()
     val lazyGridState = rememberLazyGridState()
     val isScrollInProgress = lazyGridState.isScrollInProgress
     val context = LocalContext.current
@@ -253,7 +254,8 @@ fun GalleryScreen(
                     ),
                     isSelected = selectedUris.contains(item.uri.toString()),
                     gridAutoPlay = gridAutoPlay,
-                    gridCellsCount = gridCellsCount
+                    gridCellsCount = gridCellsCount,
+                    thumbnailCornerRadius = thumbnailCornerRadius
                 )
             }
         } else {
@@ -288,7 +290,8 @@ fun GalleryScreen(
                     ),
                     isSelected = selectedUris.contains(item.uri.toString()),
                     gridAutoPlay = gridAutoPlay,
-                    gridCellsCount = gridCellsCount
+                    gridCellsCount = gridCellsCount,
+                    thumbnailCornerRadius = thumbnailCornerRadius
                     )
                 }
             }
@@ -319,7 +322,8 @@ fun GalleryGridItem(
     modifier: Modifier = Modifier,
     isSelected: Boolean = false,
     gridAutoPlay: Boolean = true,
-    gridCellsCount: Int = 3
+    gridCellsCount: Int = 3,
+    thumbnailCornerRadius: Float = 0f
 ) {
     val context = LocalContext.current
     val screenWidth = context.resources.displayMetrics.widthPixels
@@ -386,6 +390,9 @@ fun GalleryGridItem(
     }
 
     Box(modifier = modifier.scale(combinedScale)) {
+        val isSkeletonVisible = painter.state !is AsyncImagePainter.State.Success
+        val skeletonColor = if (isSkeletonVisible) MaterialTheme.colorScheme.surfaceContainerHigh else Color.Transparent
+
         with(sharedTransitionScope) {
             Image(
                 painter = painter,
@@ -403,6 +410,8 @@ fun GalleryGridItem(
                         }
                     )
                     .aspectRatio(1f)
+                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(thumbnailCornerRadius.dp))
+                    .background(skeletonColor)
                     .clickable { onClick() }
             )
         }
@@ -438,7 +447,11 @@ fun GalleryGridItem(
             Box(
                 modifier = Modifier
                     .matchParentSize()
-                    .border(4.dp, MaterialTheme.colorScheme.primary)
+                    .border(
+                        width = 4.dp,
+                        color = MaterialTheme.colorScheme.primary,
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(thumbnailCornerRadius.dp)
+                    )
             )
             Surface(
                 modifier = Modifier
