@@ -4,7 +4,6 @@ import android.content.Context
 import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtSession
-import ai.djl.huggingface.tokenizers.HuggingFaceTokenizer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.nio.LongBuffer
@@ -14,16 +13,13 @@ class ONNXTextEncoder(private val context: Context) {
 
     private var ortEnv: OrtEnvironment? = null
     private var ortSession: OrtSession? = null
-    private var tokenizer: HuggingFaceTokenizer? = null
+    private var tokenizer: BPETokenizer? = null
 
     fun initialize() {
         if (ortEnv != null && tokenizer != null) return
         
         // Initialize Tokenizer
-        val assetManager = context.assets
-        assetManager.open("tokenizer.json").use { inputStream ->
-            tokenizer = HuggingFaceTokenizer.newInstance(inputStream, mapOf("padding" to "true", "truncation" to "true", "maxLength" to "77"))
-        }
+        tokenizer = BPETokenizer(context)
 
         // Initialize ONNX
         ortEnv = OrtEnvironment.getEnvironment()
@@ -31,6 +27,7 @@ class ONNXTextEncoder(private val context: Context) {
             // Use CPU via XNNPACK/default instead of NNAPI to prevent hardware driver DEAD_OBJECT crashes
             setIntraOpNumThreads(4)
         }
+        val assetManager = context.assets
         val modelBytes = assetManager.open("mobileclip_s2_text_int8.onnx").readBytes()
         ortSession = ortEnv?.createSession(modelBytes, options)
     }
@@ -41,8 +38,7 @@ class ONNXTextEncoder(private val context: Context) {
         }
 
         // Tokenize
-        val encoding = tokenizer!!.encode(query)
-        val tokenIds = encoding.ids
+        val tokenIds = tokenizer!!.encode(query)
         
         // Pad or truncate to exactly 77 tokens (CLIP standard)
         val targetLength = 77
