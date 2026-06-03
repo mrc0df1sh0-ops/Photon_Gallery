@@ -39,7 +39,8 @@ enum class SortOrder {
     NewToOld,
     OldToNew,
     SmallToBig,
-    BigToSmall
+    BigToSmall,
+    NameAsc
 }
 
 enum class ViewMode {
@@ -51,7 +52,8 @@ data class AlbumBucket(
     val bucketName: String,
     val coverUri: Uri,
     val itemCount: Int,
-    val totalSizeBytes: Long = 0L
+    val totalSizeBytes: Long = 0L,
+    val maxDate: Long = 0L
 )
 
 class GalleryViewModel(application: Application) : AndroidViewModel(application) {
@@ -119,6 +121,18 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
         initialValue = SortOrder.NewToOld
     )
 
+    val albumSortOrder: StateFlow<SortOrder> = settingsRepository.albumSortOrderFlow.map {
+        try {
+            SortOrder.valueOf(it)
+        } catch (e: Exception) {
+            SortOrder.NameAsc
+        }
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = SortOrder.NameAsc
+    )
+
     val viewMode: StateFlow<ViewMode> = settingsRepository.viewModeFlow.map {
         try {
             ViewMode.valueOf(it)
@@ -181,7 +195,11 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
             2 -> "Screenshots"
             else -> null
         }
-        val filtered = if (bucket != null) {
+        val filtered = if (bucket == "All") {
+            raw
+        } else if (bucket == "Videos") {
+            raw.filter { it.isVideo }
+        } else if (bucket != null) {
             raw.filter { it.bucketName == bucket }
         } else if (folderName != null) {
             raw.filter { it.bucketName == folderName }
@@ -194,6 +212,7 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
             SortOrder.OldToNew -> filtered.sortedBy { it.dateAdded }
             SortOrder.SmallToBig -> filtered.sortedBy { it.size }
             SortOrder.BigToSmall -> filtered.sortedByDescending { it.size }
+            SortOrder.NameAsc -> filtered.sortedBy { it.name }
         }
     }.stateIn(
         scope = viewModelScope,
@@ -268,16 +287,81 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    val allAlbums: StateFlow<List<AlbumBucket>> = allMedia.map { mediaList ->
-        mediaList.groupBy { it.bucketName }.map { (bucketName, items) ->
+    val allAlbums: StateFlow<List<AlbumBucket>> = combine(allMedia, albumSortOrder) { mediaList, order ->
+        val excludedBuckets = setOf("Camera", "Screenshots")
+        
+        val buckets = mediaList.groupBy { it.bucketName }
+            .filterKeys { !excludedBuckets.contains(it) && !it.contains("Screenrecordings", ignoreCase = true) }
+            .map { (bucketName, items) ->
             val totalSize = items.sumOf { it.size }
+            val maxDate = items.maxOfOrNull { it.dateAdded } ?: 0L
             AlbumBucket(
                 bucketName = bucketName,
                 coverUri = items.first().uri,
                 itemCount = items.size,
-                totalSizeBytes = totalSize
+                totalSizeBytes = totalSize,
+                maxDate = maxDate
             )
-        }.sortedWith(compareBy<AlbumBucket> { it.bucketName != "Camera" }.thenBy { it.bucketName })
+        }
+        
+        val sortedBuckets = when (order) {
+            SortOrder.NewToOld -> buckets.sortedByDescending { it.maxDate }
+            SortOrder.OldToNew -> buckets.sortedBy { it.maxDate }
+            SortOrder.SmallToBig -> buckets.sortedBy { it.totalSizeBytes }
+            SortOrder.BigToSmall -> buckets.sortedByDescending { it.totalSizeBytes }
+            SortOrder.NameAsc -> buckets.sortedBy { it.bucketName }
+        }
+        
+        sortedBuckets
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val pinnedAlbums: StateFlow<List<AlbumBucket>> = allMedia.map { mediaList ->
+        val allBucket = AlbumBucket(
+            bucketName = "All",
+            coverUri = mediaList.firstOrNull()?.uri ?: Uri.EMPTY,
+            itemCount = mediaList.size,
+            totalSizeBytes = mediaList.sumOf { it.size },
+            maxDate = mediaList.maxOfOrNull { it.dateAdded } ?: 0L
+        )
+        
+        val videos = mediaList.filter { it.isVideo }
+        val videosBucket = AlbumBucket(
+            bucketName = "Videos",
+            coverUri = videos.firstOrNull()?.uri ?: Uri.EMPTY,
+            itemCount = videos.size,
+            totalSizeBytes = videos.sumOf { it.size },
+            maxDate = videos.maxOfOrNull { it.dateAdded } ?: 0L
+        )
+
+        val cameraItems = mediaList.filter { it.bucketName == "Camera" }
+        val cameraBucket = AlbumBucket(
+            bucketName = "Camera",
+            coverUri = cameraItems.firstOrNull()?.uri ?: Uri.EMPTY,
+            itemCount = cameraItems.size,
+            totalSizeBytes = cameraItems.sumOf { it.size },
+            maxDate = cameraItems.maxOfOrNull { it.dateAdded } ?: 0L
+        )
+
+        val screenshotsItems = mediaList.filter { it.bucketName == "Screenshots" }
+        val screenshotsBucket = AlbumBucket(
+            bucketName = "Screenshots",
+            coverUri = screenshotsItems.firstOrNull()?.uri ?: Uri.EMPTY,
+            itemCount = screenshotsItems.size,
+            totalSizeBytes = screenshotsItems.sumOf { it.size },
+            maxDate = screenshotsItems.maxOfOrNull { it.dateAdded } ?: 0L
+        )
+
+        val screenrecordingsItems = mediaList.filter { it.bucketName.contains("Screenrecordings", ignoreCase = true) }
+        val screenrecordingsBucket = AlbumBucket(
+            bucketName = "Screenrecordings",
+            coverUri = screenrecordingsItems.firstOrNull()?.uri ?: Uri.EMPTY,
+            itemCount = screenrecordingsItems.size,
+            totalSizeBytes = screenrecordingsItems.sumOf { it.size },
+            maxDate = screenrecordingsItems.maxOfOrNull { it.dateAdded } ?: 0L
+        )
+
+        listOf(allBucket, cameraBucket, videosBucket, screenshotsBucket, screenrecordingsBucket)
+            .filter { it.itemCount > 0 }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _searchQuery = MutableStateFlow("")
@@ -307,6 +391,12 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
     fun setSortOrder(order: SortOrder) {
         viewModelScope.launch {
             settingsRepository.updateSortOrder(order.name)
+        }
+    }
+
+    fun setAlbumSortOrder(order: SortOrder) {
+        viewModelScope.launch {
+            settingsRepository.updateAlbumSortOrder(order.name)
         }
     }
 

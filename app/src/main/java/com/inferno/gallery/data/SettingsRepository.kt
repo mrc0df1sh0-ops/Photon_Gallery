@@ -18,6 +18,7 @@ class SettingsRepository(private val context: Context) {
         val THEME_MODE = stringPreferencesKey("theme_mode")
         val VIEW_MODE = stringPreferencesKey("view_mode")
         val SORT_ORDER = stringPreferencesKey("sort_order")
+        val ALBUM_SORT_ORDER = stringPreferencesKey("album_sort_order")
         val DOCK_STYLE = stringPreferencesKey("dock_style")
         val USE_MATERIAL_YOU = booleanPreferencesKey("use_material_you")
         val USE_AMOLED_BLACK = booleanPreferencesKey("use_amoled_black")
@@ -40,6 +41,11 @@ class SettingsRepository(private val context: Context) {
     val sortOrderFlow: Flow<String> = context.dataStore.data
         .map { preferences ->
             preferences[SORT_ORDER] ?: "NewToOld"
+        }
+
+    val albumSortOrderFlow: Flow<String> = context.dataStore.data
+        .map { preferences ->
+            preferences[ALBUM_SORT_ORDER] ?: "NameAsc"
         }
 
     val dockStyleFlow: Flow<String> = context.dataStore.data
@@ -72,6 +78,12 @@ class SettingsRepository(private val context: Context) {
     suspend fun updateSortOrder(order: String) {
         context.dataStore.edit { preferences ->
             preferences[SORT_ORDER] = order
+        }
+    }
+
+    suspend fun updateAlbumSortOrder(order: String) {
+        context.dataStore.edit { preferences ->
+            preferences[ALBUM_SORT_ORDER] = order
         }
     }
 

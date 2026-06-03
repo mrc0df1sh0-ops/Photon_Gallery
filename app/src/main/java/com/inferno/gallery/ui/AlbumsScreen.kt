@@ -54,6 +54,7 @@ import coil3.size.Size
 import com.inferno.gallery.ui.theme.AppShapes
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.automirrored.outlined.Sort
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Row
 import androidx.compose.ui.text.font.FontWeight
@@ -69,13 +70,16 @@ fun AlbumsScreen(
 
 ) {
     val albums by viewModel.allAlbums.collectAsState()
+    val pinnedAlbums by viewModel.pinnedAlbums.collectAsState()
+    val albumSortOrder by viewModel.albumSortOrder.collectAsState()
     val allMedia by viewModel.images.collectAsState()
     val favoriteIds by viewModel.favoriteIds.collectAsState()
+    
+    var showSortMenu by remember { mutableStateOf(false) }
     
     val favoriteItems = remember(allMedia, favoriteIds) {
         allMedia.filter { favoriteIds.contains(it.id) }
     }
-    
 
 
 
@@ -135,12 +139,104 @@ fun AlbumsScreen(
                 }
             }
         }
+        if (pinnedAlbums.isNotEmpty()) {
+            items(
+                items = pinnedAlbums,
+                key = { "pinned_${it.bucketName}" }
+            ) { bucket ->
+                AlbumCard(bucket = bucket, onClick = { onAlbumClick(bucket.bucketName) })
+            }
+        }
         
-        items(
-            items = albums,
-            key = { it.bucketName }
-        ) { bucket ->
-            AlbumCard(bucket = bucket, onClick = { onAlbumClick(bucket.bucketName) })
+        if (albums.isNotEmpty()) {
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Device Folders",
+                        style = MaterialTheme.typography.titleLarge
+                    )
+                    Box {
+                        androidx.compose.material3.IconButton(
+                            onClick = { showSortMenu = true },
+                            modifier = Modifier.background(MaterialTheme.colorScheme.surfaceContainerHighest, androidx.compose.foundation.shape.CircleShape)
+                        ) {
+                            androidx.compose.material3.Icon(
+                                imageVector = Icons.AutoMirrored.Outlined.Sort,
+                                contentDescription = "Sort",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        androidx.compose.material3.DropdownMenu(
+                            expanded = showSortMenu,
+                            onDismissRequest = { showSortMenu = false },
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                        ) {
+                            androidx.compose.material3.DropdownMenuItem(
+                                text = { Text("Newest to Oldest") },
+                                trailingIcon = {
+                                    androidx.compose.material3.RadioButton(
+                                        selected = albumSortOrder == SortOrder.NewToOld,
+                                        onClick = null
+                                    )
+                                },
+                                onClick = { viewModel.setAlbumSortOrder(SortOrder.NewToOld); showSortMenu = false }
+                            )
+                            androidx.compose.material3.DropdownMenuItem(
+                                text = { Text("Oldest to Newest") },
+                                trailingIcon = {
+                                    androidx.compose.material3.RadioButton(
+                                        selected = albumSortOrder == SortOrder.OldToNew,
+                                        onClick = null
+                                    )
+                                },
+                                onClick = { viewModel.setAlbumSortOrder(SortOrder.OldToNew); showSortMenu = false }
+                            )
+                            androidx.compose.material3.DropdownMenuItem(
+                                text = { Text("Largest to Smallest") },
+                                trailingIcon = {
+                                    androidx.compose.material3.RadioButton(
+                                        selected = albumSortOrder == SortOrder.BigToSmall,
+                                        onClick = null
+                                    )
+                                },
+                                onClick = { viewModel.setAlbumSortOrder(SortOrder.BigToSmall); showSortMenu = false }
+                            )
+                            androidx.compose.material3.DropdownMenuItem(
+                                text = { Text("Smallest to Largest") },
+                                trailingIcon = {
+                                    androidx.compose.material3.RadioButton(
+                                        selected = albumSortOrder == SortOrder.SmallToBig,
+                                        onClick = null
+                                    )
+                                },
+                                onClick = { viewModel.setAlbumSortOrder(SortOrder.SmallToBig); showSortMenu = false }
+                            )
+                            androidx.compose.material3.DropdownMenuItem(
+                                text = { Text("A to Z") },
+                                trailingIcon = {
+                                    androidx.compose.material3.RadioButton(
+                                        selected = albumSortOrder == SortOrder.NameAsc,
+                                        onClick = null
+                                    )
+                                },
+                                onClick = { viewModel.setAlbumSortOrder(SortOrder.NameAsc); showSortMenu = false }
+                            )
+                        }
+                    }
+                }
+            }
+            
+            items(
+                items = albums,
+                key = { "folder_${it.bucketName}" }
+            ) { bucket ->
+                AlbumCard(bucket = bucket, onClick = { onAlbumClick(bucket.bucketName) })
+            }
         }
 
         item(span = { GridItemSpan(maxLineSpan) }) {

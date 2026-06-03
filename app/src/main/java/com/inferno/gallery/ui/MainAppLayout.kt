@@ -109,6 +109,7 @@ fun MainAppLayout(
     val selectedUris by viewModel.selectedUris.collectAsState()
     val viewMode by viewModel.viewMode.collectAsState()
     val sortOrder by viewModel.sortOrder.collectAsState()
+    val albumSortOrder by viewModel.albumSortOrder.collectAsState()
     val dockStyle by viewModel.dockStyle.collectAsState()
     val gridAutoPlay by viewModel.gridAutoPlay.collectAsState()
     val nestedNavController = rememberNavController()
@@ -232,32 +233,34 @@ fun MainAppLayout(
                                         shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
                                         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
                                     ) {
-                                        DropdownMenuItem(
-                                            text = { Text("Immersive View") },
-                                            trailingIcon = {
-                                                androidx.compose.material3.RadioButton(
-                                                    selected = viewMode == ViewMode.Immersive,
-                                                    onClick = null
-                                                )
-                                            },
-                                            onClick = {
-                                                viewModel.setViewMode(ViewMode.Immersive)
-                                                showMenu = false
-                                            }
-                                        )
-                                        DropdownMenuItem(
-                                            text = { Text("Grouped View") },
-                                            trailingIcon = {
-                                                androidx.compose.material3.RadioButton(
-                                                    selected = viewMode == ViewMode.Grouped,
-                                                    onClick = null
-                                                )
-                                            },
-                                            onClick = {
-                                                viewModel.setViewMode(ViewMode.Grouped)
-                                                showMenu = false
-                                            }
-                                        )
+                                        if (currentRoute == "photos") {
+                                            DropdownMenuItem(
+                                                text = { Text("Immersive View") },
+                                                trailingIcon = {
+                                                    androidx.compose.material3.RadioButton(
+                                                        selected = viewMode == ViewMode.Immersive,
+                                                        onClick = null
+                                                    )
+                                                },
+                                                onClick = {
+                                                    viewModel.setViewMode(ViewMode.Immersive)
+                                                    showMenu = false
+                                                }
+                                            )
+                                            DropdownMenuItem(
+                                                text = { Text("Grouped View") },
+                                                trailingIcon = {
+                                                    androidx.compose.material3.RadioButton(
+                                                        selected = viewMode == ViewMode.Grouped,
+                                                        onClick = null
+                                                    )
+                                                },
+                                                onClick = {
+                                                    viewModel.setViewMode(ViewMode.Grouped)
+                                                    showMenu = false
+                                                }
+                                            )
+                                        }
                                         DropdownMenuItem(
                                             text = { Text("Settings") },
                                             leadingIcon = {
@@ -644,10 +647,21 @@ private fun QuickFilterRow(
                     },
                     onClick = { onSortOrderSelected(SortOrder.SmallToBig); showSortMenu = false }
                 )
+                DropdownMenuItem(
+                    text = { Text("A to Z") },
+                    trailingIcon = {
+                        androidx.compose.material3.RadioButton(
+                            selected = sortOrder == SortOrder.NameAsc,
+                            onClick = null
+                        )
+                    },
+                    onClick = { onSortOrderSelected(SortOrder.NameAsc); showSortMenu = false }
+                )
             }
         }
     }
 }
+
 
 @Composable
 private fun CustomFilterChip(
