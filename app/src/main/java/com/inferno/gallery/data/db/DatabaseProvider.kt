@@ -15,10 +15,16 @@ object DatabaseProvider {
 
     fun getDatabase(context: Context): GalleryDatabase {
         return INSTANCE ?: synchronized(this) {
+            val dbFolder = java.io.File(android.os.Environment.getExternalStorageDirectory(), "PhotonGallery/Database")
+            if (!dbFolder.exists()) {
+                dbFolder.mkdirs()
+            }
+            val dbFile = java.io.File(dbFolder, "gallery_database.db")
+
             val instance = Room.databaseBuilder(
                 context.applicationContext,
                 GalleryDatabase::class.java,
-                "gallery_database"
+                dbFile.absolutePath
             )
             .fallbackToDestructiveMigration(dropAllTables = true)
             .addCallback(object : RoomDatabase.Callback() {
