@@ -39,14 +39,20 @@ android {
     buildFeatures {
         compose = true
     }
+
+    androidResources {
+        noCompress += listOf("onnx")
+    }
 }
 
-room3 {
+room {
     schemaDirectory("$projectDir/schemas")
 }
 
 ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
+    // Force Kotlin codegen — avoids 'unexpected jvm signature V' KSP bug with suspend Unit DAOs
+    arg("room.generateKotlin", "true")
 }
 
 dependencies {
@@ -93,9 +99,19 @@ dependencies {
     // ── EXIF ──
     implementation(libs.androidx.exifinterface)
 
-    // ── Room 3 — Database ──
+    // ── Room — Database (stable 2.6.1, FTS5 support) ──
     implementation(libs.room.runtime)
+    implementation(libs.room.ktx)
     ksp(libs.room.compiler)
+
+    // ── ML Kit (OCR) ──
+    implementation(libs.mlkit.text.recognition)
+
+    // ── ONNX Runtime ──
+    implementation(libs.onnxruntime.android)
+
+    // ── HuggingFace Tokenizer (DJL) ──
+    implementation("ai.djl.huggingface:tokenizers:0.28.0")
 
     // ── WorkManager ──
     implementation(libs.androidx.work.runtime.ktx)
