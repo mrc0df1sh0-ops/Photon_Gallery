@@ -561,7 +561,20 @@ fun MainAppLayout(
                 CustomSplitButton(
                     leadingIcon = { Icon(Icons.Outlined.Share, contentDescription = null) },
                     leadingText = "Share",
-                    onLeadingClick = { /* TODO: Share */ },
+                    onLeadingClick = {
+                        if (selectedUris.isNotEmpty()) {
+                            val shareIntent = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+                                type = "*/*"
+                                putParcelableArrayListExtra(Intent.EXTRA_STREAM, ArrayList(selectedUris.map { Uri.parse(it) }))
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            }
+                            try {
+                                context.startActivity(Intent.createChooser(shareIntent, "Share Selected Media"))
+                            } catch (e: Exception) {
+                                e.printStackTrace()
+                            }
+                        }
+                    },
                     onTrailingClick = { expanded = true }
                 )
                 androidx.compose.material3.DropdownMenu(

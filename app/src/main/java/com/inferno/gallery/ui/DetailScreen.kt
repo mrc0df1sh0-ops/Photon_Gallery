@@ -691,7 +691,21 @@ fun DetailScreen(
                         IconButton(onClick = { showShareSheet = true }) { 
                             Icon(Icons.Outlined.Share, contentDescription = "Share") 
                         }
-                        IconButton(onClick = { /* TODO: Edit */ }) { 
+                        IconButton(
+                            onClick = {
+                                if (currentItem != null) {
+                                    val editIntent = Intent(Intent.ACTION_EDIT).apply {
+                                        setDataAndType(currentItem.uri, if (currentItem.isVideo) "video/*" else "image/*")
+                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+                                    }
+                                    try {
+                                        context.startActivity(Intent.createChooser(editIntent, "Edit Media"))
+                                    } catch (e: Exception) {
+                                        android.widget.Toast.makeText(context, "No editor available on device", android.widget.Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            }
+                        ) { 
                             Icon(Icons.Outlined.Edit, contentDescription = "Edit") 
                         }
                         IconButton(
