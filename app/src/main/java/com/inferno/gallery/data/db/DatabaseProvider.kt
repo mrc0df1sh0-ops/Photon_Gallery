@@ -85,13 +85,26 @@ object DatabaseProvider {
         query: String
     ): List<CoreMediaEntity> = withContext(Dispatchers.IO) {
         val rawDb = db.openHelper.readableDatabase
+        val terms = query.trim().split("\\s+".toRegex()).filter { it.isNotBlank() }
+        if (terms.isEmpty()) return@withContext emptyList()
+
+        val whereClauses = terms.map {
+            "(fts.extractedText LIKE ? OR fts.generatedTags LIKE ?)"
+        }.joinToString(" AND ")
+
         val sql = """
             SELECT cm.* FROM core_media cm
             INNER JOIN image_fts fts ON CAST(cm.id AS TEXT) = fts.mediaId
-            WHERE image_fts MATCH ?
+            WHERE $whereClauses
             ORDER BY cm.dateAdded DESC
         """.trimIndent()
-        val cursor: Cursor = rawDb.query(sql, arrayOf(query))
+
+        val selectionArgs = Array(terms.size * 2) { i ->
+            val term = terms[i / 2]
+            "%$term%"
+        }
+
+        val cursor: Cursor = rawDb.query(sql, selectionArgs)
         val results = mutableListOf<CoreMediaEntity>()
         cursor.use { c ->
             val idIdx            = c.getColumnIndexOrThrow("id")
