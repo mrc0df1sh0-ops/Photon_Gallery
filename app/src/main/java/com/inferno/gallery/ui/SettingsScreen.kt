@@ -22,7 +22,7 @@ import androidx.compose.material.icons.outlined.Menu
 import androidx.compose.material.icons.outlined.SmartToy
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Face
-import androidx.compose.material.icons.outlined.PhotoLibrary
+import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material3.SwitchDefaults
@@ -133,7 +133,7 @@ fun SettingsScreen(
                     modifier = Modifier.padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Icon(Icons.Outlined.PhotoLibrary, contentDescription = null, modifier = Modifier.size(64.dp))
+                    Icon(Icons.Outlined.Image, contentDescription = null, modifier = Modifier.size(64.dp))
                     Spacer(modifier = Modifier.height(16.dp))
                     Text("Photon Gallery", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
                     Text("Version 1.0 (Expressive)", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f))

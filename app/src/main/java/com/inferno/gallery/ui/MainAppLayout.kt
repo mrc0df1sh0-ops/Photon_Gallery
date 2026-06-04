@@ -31,7 +31,7 @@ import androidx.compose.material.icons.outlined.Close
 
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.PhotoAlbum
-import androidx.compose.material.icons.outlined.PhotoLibrary
+import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.Sort
@@ -146,7 +146,7 @@ fun MainAppLayout(
     if (!hasPermission) {
         Box(modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(Icons.Outlined.PhotoLibrary, contentDescription = null, modifier = Modifier.size(64.dp))
+                Icon(Icons.Outlined.Image, contentDescription = null, modifier = Modifier.size(64.dp))
                 Spacer(modifier = Modifier.height(16.dp))
                 Text("All Files Access Required", style = MaterialTheme.typography.headlineMedium)
                 Spacer(modifier = Modifier.height(8.dp))
@@ -329,7 +329,7 @@ fun MainAppLayout(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 DockItem(
-                                    icon = { Icon(Icons.Outlined.PhotoLibrary, contentDescription = "Photos", modifier = Modifier.size(19.dp)) },
+                                    icon = { Icon(Icons.Outlined.Image, contentDescription = "Photos", modifier = Modifier.size(19.dp)) },
                                     label = "Photos",
                                     isSelected = currentRoute == "photos",
                                     onClick = { nestedNavController.navigate("photos") {
@@ -371,7 +371,7 @@ fun MainAppLayout(
                             tonalElevation = 0.dp
                         ) {
                             NavigationBarItem(
-                                icon = { Icon(Icons.Outlined.PhotoLibrary, contentDescription = "Photos") },
+                                icon = { Icon(Icons.Outlined.Image, contentDescription = "Photos") },
                                 label = { Text("Photos") },
                                 selected = currentRoute == "photos",
                                 onClick = { nestedNavController.navigate("photos") {
@@ -663,7 +663,7 @@ private fun QuickFilterRow(
             item {
                 CustomFilterChip(
                     text = "All",
-                    icon = Icons.Outlined.PhotoLibrary,
+                    icon = Icons.Outlined.Image,
                     selected = selectedFilter == 0,
                     onClick = { onFilterSelected(0) }
                 )
