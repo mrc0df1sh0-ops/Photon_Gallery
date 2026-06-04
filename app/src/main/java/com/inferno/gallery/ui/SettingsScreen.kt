@@ -20,6 +20,7 @@ import androidx.compose.material.icons.outlined.PlayCircleOutline
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Menu
 import androidx.compose.material.icons.outlined.SmartToy
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Face
 import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material.icons.outlined.Check
@@ -107,9 +108,11 @@ fun SettingsScreen(
             val gridCellsCount by galleryViewModel.gridCellsCount.collectAsState()
             val thumbnailCornerRadius by viewModel.thumbnailCornerRadius.collectAsState()
             val gridAutoPlay by galleryViewModel.gridAutoPlay.collectAsState()
-            val aiIndexWorkInfo by viewModel.aiIndexWorkInfo.collectAsState(initial = null)
+            val clipIndexWorkInfo by viewModel.clipIndexWorkInfo.collectAsState(initial = null)
+            val ocrIndexWorkInfo by viewModel.ocrIndexWorkInfo.collectAsState(initial = null)
             val totalImagesCount by viewModel.totalImagesCount.collectAsState()
-            val unindexedImagesCount by viewModel.unindexedImagesCount.collectAsState()
+            val unindexedClipImagesCount by viewModel.unindexedClipImagesCount.collectAsState()
+            val unindexedOcrImagesCount by viewModel.unindexedOcrImagesCount.collectAsState()
             
             val isCurrentlyDark = when (themeMode) {
                 ThemeMode.SYSTEM -> isSystemDark
@@ -324,13 +327,15 @@ fun SettingsScreen(
             SettingsGroup(title = "Local AI Engine") {
                 ListItem(
                     leadingContent = { Icon(Icons.Outlined.SmartToy, contentDescription = null) },
-                    headlineContent = { Text("Smart Search Indexing") },
+                    headlineContent = { Text("Visual Semantic Indexing") },
                     supportingContent = { 
                         Column {
-                            Text("Index photos locally for semantic search")
+                            Text("Index photos locally for visual search")
                             
-                            val indexed = totalImagesCount - unindexedImagesCount
-                            val total = totalImagesCount
+                            val dbIndexed = totalImagesCount - unindexedClipImagesCount
+                            val workerIndexed = clipIndexWorkInfo?.progress?.getInt("progress", 0) ?: 0
+                            val indexed = maxOf(dbIndexed, workerIndexed)
+                            val total = if (totalImagesCount > 0) totalImagesCount else (clipIndexWorkInfo?.progress?.getInt("total", 0) ?: 0)
                             
                             if (total > 0) {
                                 Spacer(Modifier.height(8.dp))
@@ -352,14 +357,70 @@ fun SettingsScreen(
                         }
                     },
                     trailingContent = {
-                        val isRunning = aiIndexWorkInfo?.state == WorkInfo.State.RUNNING || aiIndexWorkInfo?.state == WorkInfo.State.ENQUEUED
-                        if (isRunning) {
-                            FilledTonalButton(onClick = { viewModel.stopAiIndexing() }) {
-                                Text("Pause")
+                        val isRunning = clipIndexWorkInfo?.state == WorkInfo.State.RUNNING || clipIndexWorkInfo?.state == WorkInfo.State.ENQUEUED
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (isRunning) {
+                                FilledTonalButton(onClick = { viewModel.stopClipIndexing() }) {
+                                    Text("Stop")
+                                }
+                            } else {
+                                FilledTonalButton(onClick = { viewModel.startClipIndexing() }) {
+                                    Text("Start")
+                                }
+                                androidx.compose.material3.OutlinedButton(onClick = { viewModel.rebuildClipIndex() }) {
+                                    Text("Rebuild")
+                                }
                             }
-                        } else {
-                            FilledTonalButton(onClick = { viewModel.startAiIndexing() }) {
-                                Text("Start")
+                        }
+                    },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                )
+
+                ListItem(
+                    leadingContent = { Icon(Icons.Outlined.Search, contentDescription = null) },
+                    headlineContent = { Text("Text (OCR) Indexing") },
+                    supportingContent = { 
+                        Column {
+                            Text("Index photos locally for text search")
+                            
+                            val dbIndexed = totalImagesCount - unindexedOcrImagesCount
+                            val workerIndexed = ocrIndexWorkInfo?.progress?.getInt("progress", 0) ?: 0
+                            val indexed = maxOf(dbIndexed, workerIndexed)
+                            val total = if (totalImagesCount > 0) totalImagesCount else (ocrIndexWorkInfo?.progress?.getInt("total", 0) ?: 0)
+                            
+                            if (total > 0) {
+                                Spacer(Modifier.height(8.dp))
+                                val progressFloat = indexed.toFloat() / total.toFloat()
+                                
+                                LinearProgressIndicator(
+                                    progress = { progressFloat },
+                                    modifier = Modifier.fillMaxWidth().height(8.dp),
+                                    trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    if (indexed == total) "Indexing complete ($total images)" else "Indexed $indexed of $total images", 
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    },
+                    trailingContent = {
+                        val isRunning = ocrIndexWorkInfo?.state == WorkInfo.State.RUNNING || ocrIndexWorkInfo?.state == WorkInfo.State.ENQUEUED
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (isRunning) {
+                                FilledTonalButton(onClick = { viewModel.stopOcrIndexing() }) {
+                                    Text("Stop")
+                                }
+                            } else {
+                                FilledTonalButton(onClick = { viewModel.startOcrIndexing() }) {
+                                    Text("Start")
+                                }
+                                androidx.compose.material3.OutlinedButton(onClick = { viewModel.rebuildOcrIndex() }) {
+                                    Text("Rebuild")
+                                }
                             }
                         }
                     },
