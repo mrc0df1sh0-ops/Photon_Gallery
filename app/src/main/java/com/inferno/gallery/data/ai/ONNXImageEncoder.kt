@@ -34,22 +34,12 @@ class ONNXImageEncoder(private val context: Context) {
 
         var delegateActivated = "CPU (plain)"
         try {
-            // PERF OPT-2: Try NNAPI delegate — uses NPU/GPU for accelerated inference.
-            // OrtSession.SessionOptions.NNAPIFlags is the correct enum in onnxruntime-android.
-            val nnapiFlags = java.util.EnumSet.of(
-                ai.onnxruntime.providers.NNAPIFlags.USE_FP16,
-                ai.onnxruntime.providers.NNAPIFlags.CPU_DISABLED
-            )
-            options.addNnapi(nnapiFlags)
-            delegateActivated = "NNAPI"
+            // PERF OPT-2: Try XNNPack delegate — highly optimized for CPU inference on Android.
+            // (NNAPI is skipped as its driver often crashes with ORT_FAIL 14 on quantized INT8 models).
+            options.addXnnpack(emptyMap())
+            delegateActivated = "XNNPack"
         } catch (e: Throwable) {
-            Log.w(TAG, "NNAPI delegate unavailable for image encoder: ${e.message}. Trying XNNPack.")
-            try {
-                options.addXnnpack(emptyMap())
-                delegateActivated = "XNNPack"
-            } catch (e2: Throwable) {
-                Log.w(TAG, "XNNPack delegate also unavailable: ${e2.message}. Using plain CPU.")
-            }
+            android.util.Log.w("ImageEncoder", "XNNPack unavailable: ${e.message}. Using plain CPU.")
         }
 
         val assetManager = context.assets
