@@ -63,6 +63,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Shadow
 import coil3.gif.repeatCount
 import coil3.video.videoFrameMillis
+import com.inferno.gallery.ui.components.overscrollStretch
 @Composable
 fun AlbumsScreen(
     modifier: Modifier = Modifier,
@@ -95,6 +96,7 @@ fun AlbumsScreen(
         modifier = modifier
             .fillMaxSize()
             .padding(horizontal = 8.dp)
+            .overscrollStretch()
     ) {
         if (favoriteItems.isNotEmpty()) {
             item(span = { GridItemSpan(maxLineSpan) }) {
@@ -164,7 +166,10 @@ fun AlbumsScreen(
         if (albums.isNotEmpty()) {
             item(span = { GridItemSpan(maxLineSpan) }) {
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp)
+                        .padding(top = 16.dp, bottom = 8.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -175,12 +180,15 @@ fun AlbumsScreen(
                     Box {
                         androidx.compose.material3.IconButton(
                             onClick = { showSortMenu = true },
-                            modifier = Modifier.background(MaterialTheme.colorScheme.surfaceContainerHighest, androidx.compose.foundation.shape.CircleShape)
+                            modifier = Modifier
+                                .size(38.dp)
+                                .background(MaterialTheme.colorScheme.surfaceContainerHighest, androidx.compose.foundation.shape.CircleShape)
                         ) {
                             androidx.compose.material3.Icon(
                                 imageVector = Icons.AutoMirrored.Outlined.Sort,
                                 contentDescription = "Sort",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(19.dp)
                             )
                         }
                         androidx.compose.material3.DropdownMenu(
