@@ -650,6 +650,13 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
         .map { it.firstOrNull() }
         .stateIn(viewModelScope, SharingStarted.Lazily, null)
 
+    val unindexedImagesCount: kotlinx.coroutines.flow.StateFlow<Int> = database.mediaDao().observeUnindexedClipImageCount()
+        .stateIn(viewModelScope, SharingStarted.Lazily, 0)
+
+    val totalImagesCount: kotlinx.coroutines.flow.StateFlow<Int> = database.mediaDao().observeTotalImageCount()
+        .stateIn(viewModelScope, SharingStarted.Lazily, 0)
+
+
     fun startAiIndexing() {
         // PERF OPT-7: Expedited request — prioritized by WorkManager.
         val request = OneTimeWorkRequestBuilder<AIIndexWorker>()
@@ -678,13 +685,17 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
             // Cancel any running worker first
             WorkManager.getInstance(getApplication()).cancelUniqueWork("AIIndexWorker")
 
-            // Wipe all stored vectors
+            // Wipe all stored vectors and OCR index
             database.searchDao().clearAllVectors()
+            database.openHelper.writableDatabase.execSQL("DELETE FROM image_fts")
 
-            // Reset the clip-indexed flag so every image is picked up by the worker
+            // Reset the clip-indexed and ocr-indexed flags so every image is picked up by the worker
             val allIds = database.mediaDao().getAllMediaIds()
             allIds.chunked(500).forEach { chunk ->
-                chunk.forEach { id -> database.mediaDao().updateClipIndexStatus(id, false) }
+                chunk.forEach { id -> 
+                    database.mediaDao().updateClipIndexStatus(id, false)
+                    database.mediaDao().updateOcrIndexStatus(id, false)
+                }
             }
 
             android.util.Log.d("GallerySearch", "Index cleared. Restarting indexing for ${allIds.size} items.")

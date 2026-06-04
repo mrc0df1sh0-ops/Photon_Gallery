@@ -61,6 +61,8 @@ fun SearchScreen(
     val ftsResults by viewModel.ftsSearchResults.collectAsState()
     val isSearching by viewModel.isSearching.collectAsState()
     val aiIndexWorkInfo by viewModel.aiIndexWorkInfo.collectAsState(initial = null)
+    val unindexedImagesCount by viewModel.unindexedImagesCount.collectAsState()
+    val totalImagesCount by viewModel.totalImagesCount.collectAsState()
 
     val hasAnyResults = semanticResults.isNotEmpty() || ftsResults.isNotEmpty()
 
@@ -114,6 +116,8 @@ fun SearchScreen(
             when {
                 isBlank -> EmptySearchState(
                     aiIndexWorkInfo = aiIndexWorkInfo,
+                    unindexedCount = unindexedImagesCount,
+                    totalCount = totalImagesCount,
                     onStart = { viewModel.startAiIndexing() },
                     onStop = { viewModel.stopAiIndexing() },
                     onClearAndReindex = { viewModel.clearIndexAndReindex() }
@@ -135,6 +139,8 @@ fun SearchScreen(
 @Composable
 private fun EmptySearchState(
     aiIndexWorkInfo: WorkInfo?,
+    unindexedCount: Int,
+    totalCount: Int,
     onStart: () -> Unit,
     onStop: () -> Unit,
     onClearAndReindex: () -> Unit = {}
@@ -179,7 +185,14 @@ private fun EmptySearchState(
 
             // Live Indexing Banner
             Spacer(modifier = Modifier.height(24.dp))
-            LiveIndexingBanner(aiIndexWorkInfo, onStart, onStop, onClearAndReindex)
+            LiveIndexingBanner(
+                workInfo = aiIndexWorkInfo,
+                unindexedCount = unindexedCount,
+                totalCount = totalCount,
+                onStart = onStart,
+                onStop = onStop,
+                onClearAndReindex = onClearAndReindex
+            )
         }
     }
 }
@@ -318,6 +331,8 @@ private fun UnifiedSearchResults(
 @Composable
 fun LiveIndexingBanner(
     workInfo: WorkInfo?,
+    unindexedCount: Int,
+    totalCount: Int,
     onStart: () -> Unit,
     onStop: () -> Unit,
     onClearAndReindex: () -> Unit = {}
@@ -325,9 +340,14 @@ fun LiveIndexingBanner(
     val state = workInfo?.state
     val isRunning = state == WorkInfo.State.ENQUEUED || state == WorkInfo.State.RUNNING
     val progress = workInfo?.progress
-    val indexed = progress?.getInt("progress", 0) ?: 0
-    val total = progress?.getInt("total", 0) ?: 0
     val recentUris = progress?.getStringArray("recent_uris") ?: emptyArray()
+
+    // Calculate indexed count properly, prioritizing the persistent DB stats
+    val dbIndexed = totalCount - unindexedCount
+    val workerIndexed = progress?.getInt("progress", 0) ?: 0
+    val indexed = maxOf(dbIndexed, workerIndexed)
+    val total = if (totalCount > 0) totalCount else (progress?.getInt("total", 0) ?: 0)
+
 
     Card(
         modifier = Modifier
@@ -387,7 +407,11 @@ fun LiveIndexingBanner(
             } else {
                 Box(modifier = Modifier.fillMaxWidth().height(64.dp), contentAlignment = Alignment.Center) {
                     Text(
-                        if (isRunning) "Scanning for images..." else "Ready to index",
+                        text = when {
+                            isRunning -> "Scanning for images..."
+                            unindexedCount == 0 && total > 0 -> "Indexing Complete!"
+                            else -> "Ready to index"
+                        },
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
