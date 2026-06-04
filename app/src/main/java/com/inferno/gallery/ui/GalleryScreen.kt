@@ -74,7 +74,6 @@ import androidx.compose.material3.Text
 import coil3.gif.repeatCount
 import coil3.video.videoFrameMillis
 import com.inferno.gallery.ui.components.WavyProgressIndicator
-import com.inferno.gallery.ui.components.overscrollStretch
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
@@ -184,7 +183,6 @@ fun GalleryScreen(
         modifier = modifier
             .fillMaxSize()
             .padding(horizontal = 4.dp)
-            .overscrollStretch()
             .gridZoomGestureModifier(gridCellsCount, viewModel::setGridCellsCount, isSelectionMode)
             .pointerInput(lazyGridState) {
                 var initialItemUri: String? = null
