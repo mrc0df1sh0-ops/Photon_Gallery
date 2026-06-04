@@ -31,6 +31,7 @@ fun Modifier.overscrollStretch(): Modifier = composed {
     val nestedScrollConnection = remember {
         object : NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                if (source != NestedScrollSource.UserInput) return Offset.Zero
                 val delta = available.y
                 val currentOffset = overscrollOffset.value
                 if (currentOffset > 0 && delta < 0) { // Pulling down at top, now scrolling back up
@@ -71,13 +72,15 @@ fun Modifier.overscrollStretch(): Modifier = composed {
 
             override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
                 if (overscrollOffset.value != 0f) {
-                    overscrollOffset.animateTo(
-                        targetValue = 0f,
-                        animationSpec = spring(
-                            dampingRatio = Spring.DampingRatioMediumBouncy,
-                            stiffness = Spring.StiffnessLow
+                    coroutineScope.launch {
+                        overscrollOffset.animateTo(
+                            targetValue = 0f,
+                            animationSpec = spring(
+                                dampingRatio = Spring.DampingRatioMediumBouncy,
+                                stiffness = Spring.StiffnessLow
+                            )
                         )
-                    )
+                    }
                 }
                 return super.onPostFling(consumed, available)
             }
