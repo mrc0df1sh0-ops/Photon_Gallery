@@ -410,10 +410,10 @@ fun MainAppLayout(
         NavHost(
             navController = nestedNavController,
             startDestination = "photos",
-            enterTransition = { fadeIn(spring(stiffness = Spring.StiffnessMediumLow)) },
-            exitTransition = { fadeOut(spring(stiffness = Spring.StiffnessMediumLow)) },
-            popEnterTransition = { fadeIn(spring(stiffness = Spring.StiffnessMediumLow)) },
-            popExitTransition = { fadeOut(spring(stiffness = Spring.StiffnessMediumLow)) }
+            enterTransition = { getEnterTransition(initialState.destination.route, targetState.destination.route) },
+            exitTransition = { getExitTransition(initialState.destination.route, targetState.destination.route) },
+            popEnterTransition = { getEnterTransition(initialState.destination.route, targetState.destination.route) },
+            popExitTransition = { getExitTransition(initialState.destination.route, targetState.destination.route) }
         ) {
             composable("photos") {
                 GalleryScreen(
@@ -434,7 +434,7 @@ fun MainAppLayout(
                             animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow)
                         ) + fadeIn(spring(stiffness = Spring.StiffnessMediumLow))
                     } else {
-                        fadeIn(spring(stiffness = Spring.StiffnessMediumLow))
+                        getEnterTransition(initialState.destination.route, targetState.destination.route)
                     }
                 },
                 exitTransition = {
@@ -444,7 +444,7 @@ fun MainAppLayout(
                             animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow)
                         ) + fadeOut(spring(stiffness = Spring.StiffnessMediumLow))
                     } else {
-                        fadeOut(spring(stiffness = Spring.StiffnessMediumLow))
+                        getExitTransition(initialState.destination.route, targetState.destination.route)
                     }
                 },
                 popEnterTransition = {
@@ -454,7 +454,7 @@ fun MainAppLayout(
                             animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow)
                         ) + fadeIn(spring(stiffness = Spring.StiffnessMediumLow))
                     } else {
-                        fadeIn(spring(stiffness = Spring.StiffnessMediumLow))
+                        getEnterTransition(initialState.destination.route, targetState.destination.route)
                     }
                 },
                 popExitTransition = {
@@ -464,7 +464,7 @@ fun MainAppLayout(
                             animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow)
                         ) + fadeOut(spring(stiffness = Spring.StiffnessMediumLow))
                     } else {
-                        fadeOut(spring(stiffness = Spring.StiffnessMediumLow))
+                        getExitTransition(initialState.destination.route, targetState.destination.route)
                     }
                 }
             ) {
@@ -485,7 +485,7 @@ fun MainAppLayout(
                             animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow)
                         ) + fadeIn(spring(stiffness = Spring.StiffnessMediumLow))
                     } else {
-                        fadeIn(spring(stiffness = Spring.StiffnessMediumLow))
+                        getEnterTransition(initialState.destination.route, targetState.destination.route)
                     }
                 },
                 exitTransition = {
@@ -495,7 +495,7 @@ fun MainAppLayout(
                             animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow)
                         ) + fadeOut(spring(stiffness = Spring.StiffnessMediumLow))
                     } else {
-                        fadeOut(spring(stiffness = Spring.StiffnessMediumLow))
+                        getExitTransition(initialState.destination.route, targetState.destination.route)
                     }
                 },
                 popEnterTransition = {
@@ -505,7 +505,7 @@ fun MainAppLayout(
                             animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow)
                         ) + fadeIn(spring(stiffness = Spring.StiffnessMediumLow))
                     } else {
-                        fadeIn(spring(stiffness = Spring.StiffnessMediumLow))
+                        getEnterTransition(initialState.destination.route, targetState.destination.route)
                     }
                 },
                 popExitTransition = {
@@ -515,7 +515,7 @@ fun MainAppLayout(
                             animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow)
                         ) + fadeOut(spring(stiffness = Spring.StiffnessMediumLow))
                     } else {
-                        fadeOut(spring(stiffness = Spring.StiffnessMediumLow))
+                        getExitTransition(initialState.destination.route, targetState.destination.route)
                     }
                 }
             ) { backStackEntry ->
@@ -847,6 +847,57 @@ private fun DockItem(
             color = iconTint,
             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
         )
+    }
+}
+
+
+private fun getTabRouteIndex(route: String?): Int {
+    return when (route) {
+        "photos" -> 0
+        "albums", "album/{bucketName}" -> 1
+        "search" -> 2
+        "settings" -> 3
+        else -> 0
+    }
+}
+
+private fun getEnterTransition(initialRoute: String?, targetRoute: String?): androidx.compose.animation.EnterTransition {
+    val initialIndex = getTabRouteIndex(initialRoute)
+    val targetIndex = getTabRouteIndex(targetRoute)
+    return when {
+        targetIndex > initialIndex -> {
+            androidx.compose.animation.slideInHorizontally(
+                initialOffsetX = { it },
+                animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow)
+            ) + androidx.compose.animation.fadeIn(spring(stiffness = Spring.StiffnessMediumLow))
+        }
+        targetIndex < initialIndex -> {
+            androidx.compose.animation.slideInHorizontally(
+                initialOffsetX = { -it },
+                animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow)
+            ) + androidx.compose.animation.fadeIn(spring(stiffness = Spring.StiffnessMediumLow))
+        }
+        else -> androidx.compose.animation.fadeIn(spring(stiffness = Spring.StiffnessMediumLow))
+    }
+}
+
+private fun getExitTransition(initialRoute: String?, targetRoute: String?): androidx.compose.animation.ExitTransition {
+    val initialIndex = getTabRouteIndex(initialRoute)
+    val targetIndex = getTabRouteIndex(targetRoute)
+    return when {
+        targetIndex > initialIndex -> {
+            androidx.compose.animation.slideOutHorizontally(
+                targetOffsetX = { -it / 3 },
+                animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow)
+            ) + androidx.compose.animation.fadeOut(spring(stiffness = Spring.StiffnessMediumLow))
+        }
+        targetIndex < initialIndex -> {
+            androidx.compose.animation.slideOutHorizontally(
+                targetOffsetX = { it / 3 },
+                animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow)
+            ) + androidx.compose.animation.fadeOut(spring(stiffness = Spring.StiffnessMediumLow))
+        }
+        else -> androidx.compose.animation.fadeOut(spring(stiffness = Spring.StiffnessMediumLow))
     }
 }
 
