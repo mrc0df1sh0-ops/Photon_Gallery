@@ -19,8 +19,11 @@ class GalleryApplication : Application(), SingletonImageLoader.Factory {
     override fun onCreate() {
         super.onCreate()
         // Chain: MediaStore sync → AI embedding indexing
+        // PERF OPT-7: AIIndexWorker runs as expedited work so it is prioritized by WorkManager.
         val syncWorkRequest = OneTimeWorkRequestBuilder<MediaSyncWorker>().build()
-        val aiIndexRequest = OneTimeWorkRequestBuilder<AIIndexWorker>().build()
+        val aiIndexRequest = androidx.work.OneTimeWorkRequestBuilder<AIIndexWorker>()
+            .setExpedited(androidx.work.OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
+            .build()
         WorkManager.getInstance(this)
             .beginWith(syncWorkRequest)
             .then(aiIndexRequest)

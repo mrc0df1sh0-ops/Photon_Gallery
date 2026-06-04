@@ -42,7 +42,8 @@ data class GalleryItem(
     val dateModified: Long,
     val path: String,
     val isVideo: Boolean = false,
-    val durationMs: Long? = null
+    val durationMs: Long? = null,
+    val searchScore: Float? = null
 )
 
 enum class SortOrder {
@@ -448,6 +449,9 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
                         val mediaMap = allEntities.associateBy { it.id }
                         vectors.mapNotNull { vec ->
                             val entity = mediaMap[vec.mediaId] ?: return@mapNotNull null
+                            val imgEmb = vec.clipVector.toFloatArray()
+                            val score = cosineSimilarity(queryEmbedding, imgEmb)
+                            
                             val item = GalleryItem(
                                 id = entity.id.toString(),
                                 uri = Uri.parse(entity.uriString),
@@ -458,12 +462,25 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
                                 dateModified = entity.dateModified,
                                 path = entity.filePath,
                                 isVideo = entity.isVideo,
-                                durationMs = entity.durationMs
+                                durationMs = entity.durationMs,
+                                searchScore = score
                             )
-                            val imgEmb = vec.clipVector.toFloatArray()
-                            val score = cosineSimilarity(queryEmbedding, imgEmb)
                             Pair(item, score)
-                        }.sortedByDescending { it.second }
+                        }.also { allScored ->
+                            // Bug 4 fix: Log score distribution to calibrate threshold after re-indexing.
+                            if (allScored.isNotEmpty()) {
+                                val sorted = allScored.map { it.second }.sorted()
+                                val p50 = sorted[sorted.size / 2]
+                                val p90 = sorted[(sorted.size * 0.9).toInt().coerceAtMost(sorted.size - 1)]
+                                val max = sorted.last()
+                                android.util.Log.d("GallerySearch", "[$query] p50=$p50, p90=$p90, max=$max, total=${sorted.size}")
+                            }
+                        }
+                        // Bug 4 fix: Raised from 0.10f → 0.22f. INT8 quantization noise
+                        // produces random similarity ~0.10–0.20; real matches score ≥ 0.22.
+                        // Re-tune after re-indexing with fixed encoders.
+                        .filter { it.second >= 0.22f }
+                            .sortedByDescending { it.second }
                             .take(50)
                             .map { it.first }
                     } catch (e: Exception) {
@@ -527,6 +544,9 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
                 val scored = withContext(Dispatchers.Default) {
                     vectors.mapNotNull { vec ->
                         val entity = mediaMap[vec.mediaId] ?: return@mapNotNull null
+                        val imgEmb = vec.clipVector.toFloatArray()
+                        val score = cosineSimilarity(queryEmbedding, imgEmb)
+                        
                         val item = GalleryItem(
                             id = entity.id.toString(),
                             uri = Uri.parse(entity.uriString),
@@ -537,12 +557,21 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
                             dateModified = entity.dateModified,
                             path = entity.filePath,
                             isVideo = entity.isVideo,
-                            durationMs = entity.durationMs
+                            durationMs = entity.durationMs,
+                            searchScore = score
                         )
-                        val imgEmb = vec.clipVector.toFloatArray()
-                        val score = cosineSimilarity(queryEmbedding, imgEmb)
                         Pair(item, score)
-                    }.sortedByDescending { it.second }
+                    }.also { allScored ->
+                        if (allScored.isNotEmpty()) {
+                            val sorted = allScored.map { it.second }.sorted()
+                            val p50 = sorted[sorted.size / 2]
+                            val p90 = sorted[(sorted.size * 0.9).toInt().coerceAtMost(sorted.size - 1)]
+                            val max = sorted.last()
+                            android.util.Log.d("GallerySearch", "[$query] p50=$p50, p90=$p90, max=$max, total=${sorted.size}")
+                        }
+                    }
+                    .filter { it.second >= 0.22f }
+                        .sortedByDescending { it.second }
                         .take(50)
                         .map { it.first }
                 }
@@ -622,7 +651,10 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
         .stateIn(viewModelScope, SharingStarted.Lazily, null)
 
     fun startAiIndexing() {
-        val request = OneTimeWorkRequestBuilder<AIIndexWorker>().build()
+        // PERF OPT-7: Expedited request — prioritized by WorkManager.
+        val request = OneTimeWorkRequestBuilder<AIIndexWorker>()
+            .setExpedited(androidx.work.OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
+            .build()
         WorkManager.getInstance(getApplication()).enqueueUniqueWork(
             "AIIndexWorker",
             ExistingWorkPolicy.REPLACE,
@@ -632,6 +664,42 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
 
     fun stopAiIndexing() {
         WorkManager.getInstance(getApplication()).cancelUniqueWork("AIIndexWorker")
+    }
+
+    /**
+     * Wipes all stored CLIP embeddings and resets the indexed flag on every image,
+     * then immediately kicks off a fresh AIIndexWorker pass.
+     *
+     * Call this once after the encoder bug-fixes are deployed so stale embeddings
+     * (generated by the broken tokenizer / attention mask / .array() path) are replaced.
+     */
+    fun clearIndexAndReindex() {
+        viewModelScope.launch(Dispatchers.IO) {
+            // Cancel any running worker first
+            WorkManager.getInstance(getApplication()).cancelUniqueWork("AIIndexWorker")
+
+            // Wipe all stored vectors
+            database.searchDao().clearAllVectors()
+
+            // Reset the clip-indexed flag so every image is picked up by the worker
+            val allIds = database.mediaDao().getAllMediaIds()
+            allIds.chunked(500).forEach { chunk ->
+                chunk.forEach { id -> database.mediaDao().updateClipIndexStatus(id, false) }
+            }
+
+            android.util.Log.d("GallerySearch", "Index cleared. Restarting indexing for ${allIds.size} items.")
+
+            // Kick off a fresh index pass
+            // PERF OPT-7: Expedited request — prioritized by WorkManager.
+            val request = OneTimeWorkRequestBuilder<AIIndexWorker>()
+                .setExpedited(androidx.work.OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
+                .build()
+            WorkManager.getInstance(getApplication()).enqueueUniqueWork(
+                "AIIndexWorker",
+                ExistingWorkPolicy.REPLACE,
+                request
+            )
+        }
     }
 
     sealed class UiEvent {

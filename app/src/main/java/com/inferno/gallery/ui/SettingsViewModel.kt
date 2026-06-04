@@ -19,9 +19,11 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.ExistingWorkPolicy
 import com.inferno.gallery.workers.AIIndexWorker
 import kotlinx.coroutines.flow.Flow
+import com.inferno.gallery.data.db.DatabaseProvider
 
 class SettingsViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = SettingsRepository(application)
+    private val db = DatabaseProvider.getDatabase(application)
 
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
@@ -110,12 +112,27 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    val totalImagesCount: StateFlow<Int> = db.mediaDao().observeTotalImageCount().stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = 0
+    )
+
+    val unindexedImagesCount: StateFlow<Int> = db.mediaDao().observeUnindexedClipImageCount().stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = 0
+    )
+
     val aiIndexWorkInfo: Flow<WorkInfo?> = WorkManager.getInstance(application)
         .getWorkInfosForUniqueWorkFlow("AIIndexWorker")
         .map { it.firstOrNull() }
 
     fun startAiIndexing() {
-        val request = OneTimeWorkRequestBuilder<AIIndexWorker>().build()
+        // PERF OPT-7: Expedited request — prioritized by WorkManager.
+        val request = OneTimeWorkRequestBuilder<AIIndexWorker>()
+            .setExpedited(androidx.work.OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
+            .build()
         WorkManager.getInstance(getApplication()).enqueueUniqueWork(
             "AIIndexWorker",
             ExistingWorkPolicy.KEEP,

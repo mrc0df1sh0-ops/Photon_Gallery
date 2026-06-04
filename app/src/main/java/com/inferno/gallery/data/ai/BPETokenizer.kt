@@ -130,6 +130,9 @@ class BPETokenizer(context: Context) {
                 val unsignedByte = b.toInt() and 0xFF
                 sb.append(byteEncoder[unsignedByte])
             }
+            // CLIP BPE requires </w> at the end of every token word
+            sb.append("</w>")
+            
             val bpeToken = bpe(sb.toString())
             for (bpeWord in bpeToken.split(" ")) {
                 vocab[bpeWord]?.let { bpeTokens.add(it) }

@@ -502,6 +502,25 @@ fun GalleryGridItem(
                 )
             }
         }
+
+        if (item.searchScore != null) {
+            Surface(
+                color = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(4.dp),
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(6.dp)
+            ) {
+                val formattedScore = String.format("%.3f", item.searchScore)
+                Text(
+                    text = "Score: $formattedScore",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                )
+            }
+        }
     }
 }
 

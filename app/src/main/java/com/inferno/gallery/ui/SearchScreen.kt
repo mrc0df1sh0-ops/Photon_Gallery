@@ -115,7 +115,8 @@ fun SearchScreen(
                 isBlank -> EmptySearchState(
                     aiIndexWorkInfo = aiIndexWorkInfo,
                     onStart = { viewModel.startAiIndexing() },
-                    onStop = { viewModel.stopAiIndexing() }
+                    onStop = { viewModel.stopAiIndexing() },
+                    onClearAndReindex = { viewModel.clearIndexAndReindex() }
                 )
                 searching -> SearchingState()
                 !hasResults -> NoResultsState(query)
@@ -135,7 +136,8 @@ fun SearchScreen(
 private fun EmptySearchState(
     aiIndexWorkInfo: WorkInfo?,
     onStart: () -> Unit,
-    onStop: () -> Unit
+    onStop: () -> Unit,
+    onClearAndReindex: () -> Unit = {}
 ) {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(
@@ -177,7 +179,7 @@ private fun EmptySearchState(
 
             // Live Indexing Banner
             Spacer(modifier = Modifier.height(24.dp))
-            LiveIndexingBanner(aiIndexWorkInfo, onStart, onStop)
+            LiveIndexingBanner(aiIndexWorkInfo, onStart, onStop, onClearAndReindex)
         }
     }
 }
@@ -317,7 +319,8 @@ private fun UnifiedSearchResults(
 fun LiveIndexingBanner(
     workInfo: WorkInfo?,
     onStart: () -> Unit,
-    onStop: () -> Unit
+    onStop: () -> Unit,
+    onClearAndReindex: () -> Unit = {}
 ) {
     val state = workInfo?.state
     val isRunning = state == WorkInfo.State.ENQUEUED || state == WorkInfo.State.RUNNING
@@ -406,6 +409,21 @@ fun LiveIndexingBanner(
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            Spacer(Modifier.height(12.dp))
+            // Wipes all stored embeddings and re-indexes from scratch.
+            // Use this once after a model pipeline fix to discard stale vectors.
+            OutlinedButton(
+                onClick = onClearAndReindex,
+                modifier = Modifier.fillMaxWidth(),
+                colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
+                    contentColor = MaterialTheme.colorScheme.error
+                ),
+                border = androidx.compose.foundation.BorderStroke(
+                    1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f)
+                )
+            ) {
+                Text("Clear Index & Re-index All", style = MaterialTheme.typography.labelMedium)
+            }
         }
     }
 }

@@ -34,7 +34,9 @@ interface MediaDao {
     @Query("SELECT * FROM core_media WHERE is_indexed_ocr = 0 OR is_indexed_clip = 0 LIMIT 100")
     suspend fun getUnindexedMedia(): List<CoreMediaEntity>
 
-    @Query("SELECT * FROM core_media WHERE is_indexed_clip = 0 LIMIT 100")
+    // PERF OPT-6: Removed LIMIT 100 — the three-stage pipeline in AIIndexWorker now
+    // processes the entire unindexed set in one run; no retry loop needed.
+    @Query("SELECT * FROM core_media WHERE is_indexed_clip = 0 AND isVideo = 0")
     suspend fun getUnindexedClipMedia(): List<CoreMediaEntity>
 
     @Query("SELECT COUNT(id) FROM core_media WHERE isVideo = 0")
@@ -45,12 +47,22 @@ interface MediaDao {
 
     @Query("SELECT COUNT(id) FROM core_media WHERE isVideo = 0 AND is_indexed_clip = 0")
     suspend fun getUnindexedClipImageCount(): Int
+
+    @Query("SELECT COUNT(id) FROM core_media WHERE isVideo = 0")
+    fun observeTotalImageCount(): Flow<Int>
+
+    @Query("SELECT COUNT(id) FROM core_media WHERE isVideo = 0 AND is_indexed_clip = 0")
+    fun observeUnindexedClipImageCount(): Flow<Int>
 }
 
 @Dao
 interface SearchDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertVector(vector: MediaVectorEntity)
+
+    // PERF OPT-4: Batch insert — avoids per-row transaction overhead for the pipeline.
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertVectors(vectors: List<MediaVectorEntity>)
 
     @Query("SELECT * FROM media_vectors")
     suspend fun getAllVectors(): List<MediaVectorEntity>

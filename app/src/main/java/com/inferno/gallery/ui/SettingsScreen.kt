@@ -108,6 +108,9 @@ fun SettingsScreen(
             val thumbnailCornerRadius by viewModel.thumbnailCornerRadius.collectAsState()
             val gridAutoPlay by galleryViewModel.gridAutoPlay.collectAsState()
             val aiIndexWorkInfo by viewModel.aiIndexWorkInfo.collectAsState(initial = null)
+            val totalImagesCount by viewModel.totalImagesCount.collectAsState()
+            val unindexedImagesCount by viewModel.unindexedImagesCount.collectAsState()
+            
             val isCurrentlyDark = when (themeMode) {
                 ThemeMode.SYSTEM -> isSystemDark
                 ThemeMode.LIGHT -> false
@@ -326,14 +329,12 @@ fun SettingsScreen(
                         Column {
                             Text("Index photos locally for semantic search")
                             
-                            val state = aiIndexWorkInfo?.state
-                            if (state == WorkInfo.State.ENQUEUED || state == WorkInfo.State.RUNNING) {
+                            val indexed = totalImagesCount - unindexedImagesCount
+                            val total = totalImagesCount
+                            
+                            if (total > 0) {
                                 Spacer(Modifier.height(8.dp))
-                                val progress = aiIndexWorkInfo?.progress
-                                val indexed = progress?.getInt("progress", 0) ?: 0
-                                val total = progress?.getInt("total", 0) ?: 0
-                                
-                                val progressFloat = if (total > 0) indexed.toFloat() / total.toFloat() else 0f
+                                val progressFloat = indexed.toFloat() / total.toFloat()
                                 
                                 LinearProgressIndicator(
                                     progress = { progressFloat },
@@ -343,7 +344,7 @@ fun SettingsScreen(
                                 )
                                 Spacer(Modifier.height(4.dp))
                                 Text(
-                                    "Indexed $indexed of $total images", 
+                                    if (indexed == total) "Indexing complete ($total images)" else "Indexed $indexed of $total images", 
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
