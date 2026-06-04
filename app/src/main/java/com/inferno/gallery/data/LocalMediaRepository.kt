@@ -64,7 +64,8 @@ class LocalMediaRepository(
             MediaStore.Images.Media.DATE_MODIFIED,
             MediaStore.Images.Media.DATA,
             MediaStore.Files.FileColumns.MEDIA_TYPE,
-            MediaStore.MediaColumns.DURATION
+            MediaStore.MediaColumns.DURATION,
+            MediaStore.MediaColumns.IS_TRASHED
         )
 
         val baseSelection = "${MediaStore.Files.FileColumns.MEDIA_TYPE} IN (${MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE}, ${MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO})"
@@ -76,12 +77,18 @@ class LocalMediaRepository(
 
         val sortOrder = "${MediaStore.Images.Media.DATE_ADDED} DESC"
 
+        val bundle = android.os.Bundle().apply {
+            putInt(MediaStore.QUERY_ARG_MATCH_TRASHED, 1) // 1 = MATCH_INCLUDE
+            putString(android.content.ContentResolver.QUERY_ARG_SQL_SELECTION, selection)
+            putStringArray(android.content.ContentResolver.QUERY_ARG_SQL_SELECTION_ARGS, selectionArgs)
+            putString(android.content.ContentResolver.QUERY_ARG_SQL_SORT_ORDER, sortOrder)
+        }
+
         contentResolver.query(
             MediaStore.Files.getContentUri("external"),
             projection,
-            selection,
-            selectionArgs,
-            sortOrder
+            bundle,
+            null
         )?.use { cursor ->
             val idColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
             val bucketColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.BUCKET_DISPLAY_NAME)
@@ -92,10 +99,12 @@ class LocalMediaRepository(
             val pathColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATA)
             val mediaTypeColumn = cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns.MEDIA_TYPE)
             val durationColumn = cursor.getColumnIndex(MediaStore.MediaColumns.DURATION)
+            val isTrashedColumn = cursor.getColumnIndex(MediaStore.MediaColumns.IS_TRASHED)
 
             while (cursor.moveToNext()) {
                 val id = cursor.getLong(idColumn)
-                val bucketName = cursor.getString(bucketColumn) ?: "Unknown"
+                val isTrashed = if (isTrashedColumn >= 0) cursor.getInt(isTrashedColumn) == 1 else false
+                val bucketName = if (isTrashed) "Trash" else (cursor.getString(bucketColumn) ?: "Unknown")
                 val dateAdded = cursor.getLong(dateAddedColumn)
                 val size = cursor.getLong(sizeColumn)
                 val name = cursor.getString(nameColumn) ?: "Unknown"
@@ -121,53 +130,8 @@ class LocalMediaRepository(
             }
         }
 
-        if (folderName == null || folderName == "WhatsApp Statuses") {
-            images.addAll(getWhatsAppStatuses())
-        }
-
         images.sortByDescending { it.dateAdded }
 
         images
-    }
-
-
-
-    private fun getWhatsAppStatuses(): List<MediaData> {
-        val statuses = mutableListOf<MediaData>()
-        val paths = listOf(
-            Environment.getExternalStorageDirectory().absolutePath + "/Android/media/com.whatsapp/WhatsApp/Media/.Statuses",
-            Environment.getExternalStorageDirectory().absolutePath + "/Android/media/com.whatsapp.w4b/WhatsApp Business/Media/.Statuses"
-        )
-        
-        val validExtensions = listOf("jpg", "jpeg", "png", "mp4")
-        
-        for (path in paths) {
-            val dir = File(path)
-            if (dir.exists() && dir.isDirectory) {
-                dir.listFiles()?.forEach { file ->
-                    val ext = file.extension.lowercase()
-                    if (ext in validExtensions) {
-                        val uri = Uri.fromFile(file)
-                        val dateAdded = file.lastModified() / 1000
-                        val id = file.absolutePath.hashCode().toLong() // Fallback ID for non-MediaStore files
-                        statuses.add(
-                            MediaData(
-                                id = id,
-                                uri = uri,
-                                bucketName = "WhatsApp Statuses",
-                                dateAdded = dateAdded,
-                                size = file.length(),
-                                name = file.name,
-                                dateModified = file.lastModified() / 1000,
-                                path = file.absolutePath,
-                                isVideo = ext == "mp4",
-                                durationMs = null
-                            )
-                        )
-                    }
-                }
-            }
-        }
-        return statuses
     }
 }
