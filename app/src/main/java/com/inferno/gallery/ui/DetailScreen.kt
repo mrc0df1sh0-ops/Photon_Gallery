@@ -175,6 +175,7 @@ suspend fun PointerInputScope.detectZoomPanGesture(
 fun DetailScreen(
     mediaId: String,
     bucketName: String?,
+    highlightText: String? = null,
     useFullScreenGlobal: Boolean = false,
     sharedTransitionScope: SharedTransitionScope,
     animatedVisibilityScope: AnimatedVisibilityScope,
@@ -204,6 +205,10 @@ fun DetailScreen(
         pageCount = { galleryItems.size }
     )
 
+    var activeHighlight by remember { mutableStateOf(highlightText) }
+    var highlightRects by remember { mutableStateOf<List<android.graphics.Rect>>(emptyList()) }
+    var highlightImageSize by remember { mutableStateOf<androidx.compose.ui.geometry.Size?>(null) }
+
     androidx.compose.runtime.LaunchedEffect(galleryItems, mediaId) {
         if (galleryItems.isNotEmpty()) {
             val targetIndex = galleryItems.indexOfFirst { it.id == mediaId }
@@ -217,7 +222,7 @@ fun DetailScreen(
     val screenWidth = context.resources.displayMetrics.widthPixels.toFloat()
     val screenHeight = context.resources.displayMetrics.heightPixels.toFloat()
 
-    var showUi by remember { mutableStateOf(true) }
+    var showUi by remember { mutableStateOf(false) }
     var showShareSheet by remember { mutableStateOf(false) }
 
     var isUserScrollEnabled by remember { mutableStateOf(true) }
@@ -278,12 +283,12 @@ fun DetailScreen(
             }
         }
     }
-
+    
     if (showDeleteConfirmDialog && pendingDeleteItem != null) {
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { showDeleteConfirmDialog = false },
-            title = { androidx.compose.material3.Text("Move to Trash") },
-            text = { androidx.compose.material3.Text("This item will be moved to trash") },
+            title = { androidx.compose.material3.Text("Move to Recycle Bin") },
+            text = { androidx.compose.material3.Text("This item will be moved to the Recycle Bin.") },
             confirmButton = {
                 androidx.compose.material3.TextButton(
                     onClick = {
@@ -306,7 +311,7 @@ fun DetailScreen(
                         }
                     }
                 ) {
-                    androidx.compose.material3.Text("Move to Trash")
+                    androidx.compose.material3.Text("Move to Bin")
                 }
             },
             dismissButton = {
@@ -331,10 +336,6 @@ fun DetailScreen(
         }
     }
 
-    val listState = rememberLazyListState()
-    androidx.compose.runtime.LaunchedEffect(pagerState.currentPage) {
-        listState.animateScrollToItem(pagerState.currentPage)
-    }
 
     Box(
         modifier = Modifier
@@ -380,6 +381,41 @@ fun DetailScreen(
                         modifier = Modifier.fillMaxSize()
                     )
                 } else {
+                    androidx.compose.runtime.LaunchedEffect(activeHighlight, page, pagerState.currentPage) {
+                        if (activeHighlight != null && page == pagerState.currentPage) {
+                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                try {
+                                    val recognizer = com.google.mlkit.vision.text.TextRecognition.getClient(com.google.mlkit.vision.text.latin.TextRecognizerOptions.DEFAULT_OPTIONS)
+                                    val inputImage = com.google.mlkit.vision.common.InputImage.fromFilePath(context, item.uri)
+                                    val visionText: com.google.mlkit.vision.text.Text? = kotlinx.coroutines.suspendCancellableCoroutine { cont ->
+                                        recognizer.process(inputImage)
+                                            .addOnSuccessListener { cont.resumeWith(kotlin.Result.success(it)) }
+                                            .addOnFailureListener { cont.resumeWith(kotlin.Result.success(null)) }
+                                    }
+                                    if (visionText != null) {
+                                        val rects = mutableListOf<android.graphics.Rect>()
+                                        for (block in visionText.textBlocks) {
+                                            for (line in block.lines) {
+                                                for (element in line.elements) {
+                                                    if (element.text.contains(activeHighlight!!, ignoreCase = true)) {
+                                                        element.boundingBox?.let { rects.add(it) }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        highlightRects = rects
+                                        highlightImageSize = androidx.compose.ui.geometry.Size(inputImage.width.toFloat(), inputImage.height.toFloat())
+                                    }
+                                } catch (e: Exception) {
+                                    android.util.Log.e("DetailScreen", "OCR highlight failed", e)
+                                }
+                            }
+                            // Auto dismiss
+                            kotlinx.coroutines.delay(4000)
+                            activeHighlight = null
+                        }
+                    }
+
                     with(sharedTransitionScope) {
                         AsyncImage(
                             model = request,
@@ -452,6 +488,7 @@ fun DetailScreen(
                                 .pointerInput(Unit) {
                                     detectTapGestures(
                                         onTap = { 
+                                            activeHighlight = null
                                             if (showInfoCard || showUi) {
                                                 showInfoCard = false
                                                 showUi = false
@@ -483,6 +520,51 @@ fun DetailScreen(
                                     )
                                 }
                         )
+                        
+                        if (activeHighlight != null) {
+                            Canvas(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .graphicsLayer {
+                                        scaleX = scale.floatValue * pagerScale
+                                        scaleY = scale.floatValue * pagerScale
+                                        alpha = pagerAlpha
+                                        translationX = offsetX.floatValue
+                                        translationY = offsetY.floatValue
+                                    }
+                            ) {
+                                drawRect(Color.Black.copy(alpha = 0.5f))
+                                val iSize = highlightImageSize
+                                if (iSize != null && highlightRects.isNotEmpty()) {
+                                    val fitScale = kotlin.math.min(size.width / iSize.width, size.height / iSize.height)
+                                    val dWidth = iSize.width * fitScale
+                                    val dHeight = iSize.height * fitScale
+                                    val dx = (size.width - dWidth) / 2f
+                                    val dy = (size.height - dHeight) / 2f
+                                    
+                                    for (rect in highlightRects) {
+                                        val rLeft = dx + rect.left * fitScale
+                                        val rTop = dy + rect.top * fitScale
+                                        val rWidth = (rect.right - rect.left) * fitScale
+                                        val rHeight = (rect.bottom - rect.top) * fitScale
+                                        
+                                        drawRoundRect(
+                                            color = Color.White.copy(alpha = 0.3f),
+                                            topLeft = Offset(rLeft, rTop),
+                                            size = androidx.compose.ui.geometry.Size(rWidth, rHeight),
+                                            cornerRadius = androidx.compose.ui.geometry.CornerRadius(8.dp.toPx())
+                                        )
+                                        drawRoundRect(
+                                            color = Color.White,
+                                            topLeft = Offset(rLeft, rTop),
+                                            size = androidx.compose.ui.geometry.Size(rWidth, rHeight),
+                                            cornerRadius = androidx.compose.ui.geometry.CornerRadius(8.dp.toPx()),
+                                            style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.dp.toPx())
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -548,7 +630,7 @@ fun DetailScreen(
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.Start
             ) {
                 FilledIconButton(
                     onClick = onBack,
@@ -561,38 +643,6 @@ fun DetailScreen(
                         imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
                         contentDescription = "Go back"
                     )
-                }
-
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    val currentItem = galleryItems.getOrNull(pagerState.currentPage)
-                    val isFavorite = currentItem?.id?.let { favoriteIds.contains(it) } ?: false
-                    
-                    FilledIconButton(
-                        onClick = { currentItem?.let { viewModel.toggleFavorite(it.id) } },
-                        colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = MaterialTheme.colorScheme.primaryContainer,
-                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                    ) {
-                        if (isFavorite) {
-                            Icon(Icons.Filled.Favorite, contentDescription = "Favorite", tint = MaterialTheme.colorScheme.error)
-                        } else {
-                            Icon(Icons.Outlined.FavoriteBorder, contentDescription = "Favorite")
-                        }
-                    }
-
-                    FilledIconButton(
-                        onClick = { showInfoCard = !showInfoCard },
-                        colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = MaterialTheme.colorScheme.primaryContainer,
-                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Info,
-                            contentDescription = "Info"
-                        )
-                    }
                 }
             }
         }
@@ -625,38 +675,6 @@ fun DetailScreen(
                 modifier = Modifier.fillMaxWidth().wrapContentHeight(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                val snapFling = rememberSnapFlingBehavior(lazyListState = listState)
-                val density = androidx.compose.ui.platform.LocalDensity.current
-                val screenWidthDp = with(density) { screenWidth.toDp() }
-
-                LazyRow(
-                    state = listState,
-                    flingBehavior = snapFling,
-                    contentPadding = PaddingValues(horizontal = (screenWidthDp / 2) - 19.dp),
-                    horizontalArrangement = Arrangement.spacedBy(2.dp),
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp)
-                ) {
-                    items(galleryItems.size) { index ->
-                        val isSelected = pagerState.currentPage == index
-                        Box(
-                            contentAlignment = Alignment.Center,
-                            modifier = Modifier
-                                .size(38.dp)
-                                .clickable { coroutineScope.launch { pagerState.animateScrollToPage(index) } }
-                        ) {
-                            AsyncImage(
-                                model = ImageRequest.Builder(context).data(galleryItems[index].uri).size(150, 150).build(),
-                                contentDescription = null,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .border(2.dp, if (isSelected) Color.White else Color.Transparent)
-                                    .alpha(if (isSelected) 1f else 0.7f)
-                            )
-                        }
-                    }
-                }
-                
                 var showMoreMenu by remember { mutableStateOf(false) }
                 val currentItem = galleryItems.getOrNull(pagerState.currentPage)
                 
@@ -697,10 +715,35 @@ fun DetailScreen(
                             IconButton(onClick = { showMoreMenu = true }) {
                                 Icon(Icons.Outlined.MoreVert, contentDescription = "More")
                             }
+                            val isFavorite = currentItem?.id?.let { favoriteIds.contains(it) } ?: false
                             androidx.compose.material3.DropdownMenu(
                                 expanded = showMoreMenu,
                                 onDismissRequest = { showMoreMenu = false }
                             ) {
+                                if (currentItem != null) {
+                                    androidx.compose.material3.DropdownMenuItem(
+                                        text = { Text(if (isFavorite) "Remove from Favorites" else "Add to Favorites") },
+                                        leadingIcon = {
+                                            if (isFavorite) {
+                                                Icon(Icons.Filled.Favorite, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                                            } else {
+                                                Icon(Icons.Outlined.FavoriteBorder, contentDescription = null)
+                                            }
+                                        },
+                                        onClick = {
+                                            showMoreMenu = false
+                                            currentItem.let { viewModel.toggleFavorite(it.id) }
+                                        }
+                                    )
+                                    androidx.compose.material3.DropdownMenuItem(
+                                        text = { Text("Info") },
+                                        leadingIcon = { Icon(Icons.Outlined.Info, contentDescription = null) },
+                                        onClick = {
+                                            showMoreMenu = false
+                                            showInfoCard = !showInfoCard
+                                        }
+                                    )
+                                }
                                 if (currentItem != null && !currentItem.isVideo) {
                                     androidx.compose.material3.DropdownMenuItem(
                                         text = { Text("Set as Wallpaper") },
