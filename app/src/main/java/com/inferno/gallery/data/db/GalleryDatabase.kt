@@ -31,13 +31,17 @@ interface MediaDao {
     @Query("UPDATE core_media SET is_indexed_clip = :isIndexed WHERE id = :id")
     suspend fun updateClipIndexStatus(id: Long, isIndexed: Boolean)
 
-    @Query("SELECT * FROM core_media WHERE is_indexed_ocr = 0 OR is_indexed_clip = 0 LIMIT 100")
-    suspend fun getUnindexedMedia(): List<CoreMediaEntity>
+    @Query("UPDATE core_media SET is_indexed_clip = 1 WHERE id IN (:ids)")
+    suspend fun markClipIndexed(ids: List<Long>)
+
+    @Query("UPDATE core_media SET is_indexed_ocr = 1 WHERE id IN (:ids)")
+    suspend fun markOcrIndexed(ids: List<Long>)
+
 
     // PERF OPT-6: Removed LIMIT 100 — the three-stage pipeline in AIIndexWorker now
     // processes the entire unindexed set in one run; no retry loop needed.
-    @Query("SELECT * FROM core_media WHERE is_indexed_clip = 0 AND isVideo = 0")
-    suspend fun getUnindexedClipMedia(): List<CoreMediaEntity>
+    @Query("SELECT * FROM core_media WHERE isVideo = 0 AND (is_indexed_clip = 0 OR is_indexed_ocr = 0)")
+    suspend fun getUnindexedMedia(): List<CoreMediaEntity>
 
     @Query("SELECT COUNT(id) FROM core_media WHERE isVideo = 0")
     suspend fun getTotalImageCount(): Int
@@ -53,6 +57,9 @@ interface MediaDao {
 
     @Query("SELECT COUNT(id) FROM core_media WHERE isVideo = 0 AND is_indexed_clip = 0")
     fun observeUnindexedClipImageCount(): Flow<Int>
+
+    @Query("SELECT COUNT(id) FROM core_media WHERE isVideo = 0 AND (is_indexed_ocr = 0 OR is_indexed_clip = 0)")
+    fun observeUnindexedImageCount(): Flow<Int>
 }
 
 @Dao

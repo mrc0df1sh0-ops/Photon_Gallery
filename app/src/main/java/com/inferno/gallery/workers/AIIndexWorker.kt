@@ -86,17 +86,19 @@ class AIIndexWorker(
 
     // ── Data classes passed through the pipeline channels ──────────────────────
 
-    /** Stage 1 output — raw thumbnail pixels packed into a float buffer. */
+    /** Stage 1 output — holds optional pixels for CLIP and optional unscaled bitmap for OCR. */
     private data class LoadedImage(
         val entity: CoreMediaEntity,
         val uri: Uri,
-        val pixels: IntArray     // already normalised pixel ints; 256×256
+        val pixels: IntArray?,     // 256x256 scaled pixels (null if already clip-indexed)
+        val thumbnail: Bitmap?     // unscaled bitmap (null if already ocr-indexed)
     )
 
-    /** Stage 2 output — the CLIP embedding as a raw byte array ready for Room. */
+    /** Stage 2 output — holds the CLIP embedding byte array and/or OCR extracted text. */
     private data class EmbeddedImage(
         val entity: CoreMediaEntity,
-        val vectorBytes: ByteArray
+        val vectorBytes: ByteArray?,
+        val extractedText: String?
     )
 
     // ────────────────────────────────────────────────────────────────────────────
@@ -112,7 +114,7 @@ class AIIndexWorker(
 
             // PERF OPT-6: No LIMIT — load all unindexed images in one query.
             val unindexed = withContext(Dispatchers.IO) {
-                db.mediaDao().getUnindexedClipMedia() // already filters isVideo = 0
+                db.mediaDao().getUnindexedMedia() // already filters isVideo = 0
             }
 
             if (unindexed.isEmpty()) {
@@ -146,6 +148,8 @@ class AIIndexWorker(
                     for (entity in unindexed) {
                         if (isStopped) break
                         try {
+                            val needsClip = !entity.isIndexedClip
+                            val needsOcr = !entity.isIndexedOcr
                             val uri = Uri.parse(entity.uriString)
 
                             // PERF OPT-1: Use MediaStore thumbnail API instead of
@@ -175,65 +179,103 @@ class AIIndexWorker(
                                 Log.w(TAG, "No thumbnail for ${entity.name}, skipping.")
                                 withContext(Dispatchers.IO) {
                                     db.mediaDao().updateClipIndexStatus(entity.id, true)
+                                    db.mediaDao().updateOcrIndexStatus(entity.id, true)
                                 }
                                 continue
                             }
 
-                            // Scale to 256×256 for the encoder
-                            val targetSize = 256
-                            val scaled = Bitmap.createScaledBitmap(thumbnail, targetSize, targetSize, true)
+                            var pixels: IntArray? = null
+                            if (needsClip) {
+                                // Scale to 256×256 for the ONNX encoder
+                                val targetSize = 256
+                                val scaled = Bitmap.createScaledBitmap(thumbnail, targetSize, targetSize, true)
+                                
+                                pixels = IntArray(targetSize * targetSize)
+                                scaled.getPixels(pixels, 0, targetSize, 0, 0, targetSize, targetSize)
+                                
+                                // PERF OPT-3: Recycle scaled bitmap immediately after pixels are copied.
+                                scaled.recycle()
+                            }
 
-                            // PERF OPT-3: Recycle thumbnail immediately after scaling.
-                            thumbnail.recycle()
+                            // Keep thumbnail alive if we need OCR; otherwise recycle it.
+                            val finalThumbnail = if (needsOcr) {
+                                thumbnail
+                            } else {
+                                thumbnail.recycle()
+                                null
+                            }
 
-                            // Extract pixels, then recycle the scaled bitmap immediately.
-                            val pixels = IntArray(targetSize * targetSize)
-                            scaled.getPixels(pixels, 0, targetSize, 0, 0, targetSize, targetSize)
-
-                            // PERF OPT-3: Recycle scaled bitmap immediately after pixels are copied.
-                            scaled.recycle()
-
-                            loadChannel.send(LoadedImage(entity, uri, pixels))
+                            loadChannel.send(LoadedImage(entity, uri, pixels, finalThumbnail))
 
                         } catch (e: Throwable) {
                             Log.e(TAG, "Stage1 load failed for ${entity.name}: ${e.message}")
-                            runCatching { db.mediaDao().updateClipIndexStatus(entity.id, true) }
+                            runCatching { 
+                                db.mediaDao().updateClipIndexStatus(entity.id, true)
+                                db.mediaDao().updateOcrIndexStatus(entity.id, true)
+                            }
                         }
                     }
                     loadChannel.close()
                 }
 
-                // ── STAGE 2: ONNX inference (Default / CPU) ─────────────────
+                // ── STAGE 2: ONNX inference & ML Kit OCR (Default / CPU) ─────
                 launch(Dispatchers.Default) {
                     val targetSize = 256
                     val pixelCount = targetSize * targetSize
                     val mean = floatArrayOf(0.48145466f, 0.4578275f, 0.40821073f)
                     val std  = floatArrayOf(0.26862954f, 0.26130258f, 0.27577711f)
 
+                    val textRecognizer = com.google.mlkit.vision.text.TextRecognition.getClient(
+                        com.google.mlkit.vision.text.latin.TextRecognizerOptions.DEFAULT_OPTIONS
+                    )
+
                     for (loaded in loadChannel) {
                         if (isStopped) break
                         try {
-                            // Build the float buffer from the pre-extracted pixels
-                            val floatBuffer = java.nio.FloatBuffer.allocate(3 * pixelCount)
-                            for (i in 0 until pixelCount) {
-                                val px = loaded.pixels[i]
-                                floatBuffer.put(i,                r(px, mean[0], std[0]))
-                                floatBuffer.put(i + pixelCount,   g(px, mean[1], std[1]))
-                                floatBuffer.put(i + 2 * pixelCount, b(px, mean[2], std[2]))
+                            var vectorBytes: ByteArray? = null
+                            var extractedText: String? = null
+
+                            // 1. Process CLIP Embedding
+                            if (loaded.pixels != null) {
+                                val floatBuffer = java.nio.FloatBuffer.allocate(3 * pixelCount)
+                                for (i in 0 until pixelCount) {
+                                    val px = loaded.pixels[i]
+                                    floatBuffer.put(i,                r(px, mean[0], std[0]))
+                                    floatBuffer.put(i + pixelCount,   g(px, mean[1], std[1]))
+                                    floatBuffer.put(i + 2 * pixelCount, b(px, mean[2], std[2]))
+                                }
+
+                                val embedding = imageEncoder.encodeFromBuffer(floatBuffer, targetSize)
+
+                                val byteBuffer = ByteBuffer.allocate(embedding.size * 4)
+                                    .order(ByteOrder.LITTLE_ENDIAN)
+                                embedding.forEach { byteBuffer.putFloat(it) }
+                                vectorBytes = byteBuffer.array()
                             }
 
-                            val embedding = imageEncoder.encodeFromBuffer(floatBuffer, targetSize)
+                            // 2. Process ML Kit OCR
+                            if (loaded.thumbnail != null) {
+                                val inputImage = com.google.mlkit.vision.common.InputImage.fromBitmap(loaded.thumbnail, 0)
+                                extractedText = kotlinx.coroutines.suspendCancellableCoroutine { cont ->
+                                    textRecognizer.process(inputImage)
+                                        .addOnSuccessListener { visionText ->
+                                            cont.resumeWith(kotlin.Result.success(visionText.text))
+                                        }
+                                        .addOnFailureListener {
+                                            cont.resumeWith(kotlin.Result.success(null))
+                                        }
+                                }
+                                loaded.thumbnail.recycle()
+                            }
 
-                            // Serialize FloatArray → little-endian ByteArray
-                            val byteBuffer = ByteBuffer.allocate(embedding.size * 4)
-                                .order(ByteOrder.LITTLE_ENDIAN)
-                            embedding.forEach { byteBuffer.putFloat(it) }
-
-                            embedChannel.send(EmbeddedImage(loaded.entity, byteBuffer.array()))
+                            embedChannel.send(EmbeddedImage(loaded.entity, vectorBytes, extractedText))
 
                         } catch (e: Throwable) {
                             Log.e(TAG, "Stage2 inference failed for ${loaded.entity.name}: ${e.message}")
-                            runCatching { db.mediaDao().updateClipIndexStatus(loaded.entity.id, true) }
+                            runCatching { 
+                                db.mediaDao().updateClipIndexStatus(loaded.entity.id, true)
+                                db.mediaDao().updateOcrIndexStatus(loaded.entity.id, true)
+                            }
                         }
                     }
                     embedChannel.close()
@@ -242,33 +284,48 @@ class AIIndexWorker(
                 // ── STAGE 3: Batch write to Room (IO) ───────────────────────
                 launch(Dispatchers.IO) {
                     val vectorBatch   = mutableListOf<MediaVectorEntity>()
-                    val indexedIdBatch = mutableListOf<Long>()
+                    val clipIndexedBatch = mutableListOf<Long>()
+                    val ocrIndexedBatch  = mutableListOf<Long>()
 
                     suspend fun flush() {
-                        if (vectorBatch.isEmpty()) return
-                        // PERF OPT-4: Batch insert — one transaction for WRITE_BATCH_SIZE rows.
-                        db.searchDao().insertVectors(vectorBatch.toList())
-                        indexedIdBatch.forEach { id ->
-                            db.mediaDao().updateClipIndexStatus(id, true)
+                        if (vectorBatch.isNotEmpty()) {
+                            db.searchDao().insertVectors(vectorBatch.toList())
+                        }
+                        if (clipIndexedBatch.isNotEmpty()) {
+                            db.mediaDao().markClipIndexed(clipIndexedBatch.toList())
+                        }
+                        if (ocrIndexedBatch.isNotEmpty()) {
+                            db.mediaDao().markOcrIndexed(ocrIndexedBatch.toList())
                         }
                         vectorBatch.clear()
-                        indexedIdBatch.clear()
+                        clipIndexedBatch.clear()
+                        ocrIndexedBatch.clear()
                     }
 
                     for (embedded in embedChannel) {
                         if (isStopped) break
 
-                        vectorBatch.add(MediaVectorEntity(
-                            mediaId = embedded.entity.id,
-                            clipVector = embedded.vectorBytes
-                        ))
-                        indexedIdBatch.add(embedded.entity.id)
-                        processedCount++
+                        if (embedded.vectorBytes != null) {
+                            vectorBatch.add(MediaVectorEntity(
+                                mediaId = embedded.entity.id,
+                                clipVector = embedded.vectorBytes
+                            ))
+                            clipIndexedBatch.add(embedded.entity.id)
+                        }
 
+                        if (!embedded.extractedText.isNullOrBlank()) {
+                            DatabaseProvider.insertFtsRow(db, embedded.entity.id, embedded.extractedText, "")
+                            ocrIndexedBatch.add(embedded.entity.id)
+                        } else if (embedded.extractedText != null || !embedded.entity.isIndexedOcr) {
+                            // Even if no text is found, we attempted OCR, so mark it done
+                            ocrIndexedBatch.add(embedded.entity.id)
+                        }
+
+                        processedCount++
                         recentUris.addLast(embedded.entity.uriString)
                         if (recentUris.size > 5) recentUris.removeFirst()
 
-                        if (vectorBatch.size >= WRITE_BATCH_SIZE) {
+                        if (clipIndexedBatch.size >= WRITE_BATCH_SIZE || ocrIndexedBatch.size >= WRITE_BATCH_SIZE) {
                             flush()
                         }
 
