@@ -39,10 +39,6 @@ android {
     buildFeatures {
         compose = true
     }
-
-    androidResources {
-        noCompress += listOf("onnx")
-    }
 }
 
 room {
@@ -106,9 +102,6 @@ dependencies {
 
     // ── ML Kit (OCR) ──
     implementation(libs.mlkit.text.recognition)
-
-    // ── ONNX Runtime ──
-    implementation(libs.onnxruntime.android)
 
     // ── HuggingFace Tokenizer (DJL) ──
     // Replaced by custom BPETokenizer since DJL tokenizers fail to load JNI on Android

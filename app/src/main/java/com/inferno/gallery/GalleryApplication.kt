@@ -13,7 +13,6 @@ import coil3.video.VideoFrameDecoder
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import com.inferno.gallery.workers.MediaSyncWorker
-import com.inferno.gallery.workers.ClipIndexWorker
 import com.inferno.gallery.workers.OcrIndexWorker
 
 import com.inferno.gallery.data.SettingsRepository
@@ -30,15 +29,8 @@ class GalleryApplication : Application(), SingletonImageLoader.Factory {
 
         val settingsRepo = SettingsRepository(this)
         kotlinx.coroutines.MainScope().launch {
-            val clipEnabled = settingsRepo.clipIndexingEnabledFlow.first()
             val ocrEnabled = settingsRepo.ocrIndexingEnabledFlow.first()
 
-            if (clipEnabled) {
-                val clipIndexRequest = androidx.work.OneTimeWorkRequestBuilder<ClipIndexWorker>()
-                    .setExpedited(androidx.work.OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
-                    .build()
-                WorkManager.getInstance(this@GalleryApplication).enqueueUniqueWork("ClipIndexWorker", androidx.work.ExistingWorkPolicy.KEEP, clipIndexRequest)
-            }
             if (ocrEnabled) {
                 val ocrIndexRequest = androidx.work.OneTimeWorkRequestBuilder<OcrIndexWorker>()
                     .setExpedited(androidx.work.OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)

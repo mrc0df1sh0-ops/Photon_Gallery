@@ -21,32 +21,19 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.KeyboardArrowRight
-import androidx.compose.material.icons.outlined.ImageSearch
 import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material.icons.outlined.TextFields
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.work.WorkInfo
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.ExperimentalFoundationApi
-import coil3.compose.AsyncImage
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.animation.core.tween
-import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalSharedTransitionApi::class)
 @Composable
@@ -59,22 +46,13 @@ fun SearchScreen(
     contentPadding: PaddingValues = PaddingValues(0.dp)
 ) {
     val query by viewModel.searchQuery.collectAsState()
-    val semanticResults by viewModel.semanticSearchResults.collectAsState()
     val ftsResults by viewModel.ftsSearchResults.collectAsState()
     val isSearching by viewModel.isSearching.collectAsState()
-    val clipIndexWorkInfo by viewModel.clipIndexWorkInfo.collectAsState(initial = null)
     val ocrIndexWorkInfo by viewModel.ocrIndexWorkInfo.collectAsState(initial = null)
-    val unindexedClipCount by viewModel.unindexedClipImagesCount.collectAsState()
     val unindexedOcrCount by viewModel.unindexedOcrImagesCount.collectAsState()
     val totalImagesCount by viewModel.totalImagesCount.collectAsState()
 
-    val hasAnyResults = semanticResults.isNotEmpty() || ftsResults.isNotEmpty()
-
-    var focusedList by rememberSaveable { mutableStateOf<String?>(null) }
-
-    LaunchedEffect(query) {
-        focusedList = null
-    }
+    val hasAnyResults = ftsResults.isNotEmpty()
 
     Column(
         modifier = modifier
@@ -91,7 +69,11 @@ fun SearchScreen(
                     expanded = false,
                     onExpandedChange = {},
                     leadingIcon = {
-                        MagicSearchIcon(modifier = Modifier.size(24.dp))
+                        Icon(
+                            imageVector = Icons.Outlined.Search,
+                            contentDescription = "Search",
+                            modifier = Modifier.size(24.dp)
+                        )
                     },
                     trailingIcon = {
                         if (query.isNotEmpty()) {
@@ -101,7 +83,7 @@ fun SearchScreen(
                         }
                     },
                     placeholder = {
-                        Text("Search photos, scenes, or text…")
+                        Text("Search text in photos…")
                     }
                 )
             },
@@ -125,29 +107,21 @@ fun SearchScreen(
         ) { (isBlank, searching, hasResults) ->
             when {
                 isBlank -> EmptySearchState(
-                    clipIndexWorkInfo = clipIndexWorkInfo,
                     ocrIndexWorkInfo = ocrIndexWorkInfo,
-                    unindexedClipCount = unindexedClipCount,
                     unindexedOcrCount = unindexedOcrCount,
                     totalCount = totalImagesCount,
-                    onStartClip = { viewModel.startClipIndexing() },
-                    onStopClip = { viewModel.stopClipIndexing() },
-                    onClearClip = { viewModel.clearClipIndexAndReindex() },
                     onStartOcr = { viewModel.startOcrIndexing() },
                     onStopOcr = { viewModel.stopOcrIndexing() },
                     onClearOcr = { viewModel.clearOcrIndexAndReindex() }
                 )
                 searching -> SearchingState()
                 !hasResults -> NoResultsState(query)
-                else -> UnifiedSearchResults(
-                    semanticResults = semanticResults,
+                else -> TextSearchResults(
                     ftsResults = ftsResults,
                     sharedTransitionScope = sharedTransitionScope,
                     animatedVisibilityScope = animatedVisibilityScope,
                     onPhotoClick = onPhotoClick,
-                    query = query,
-                    focusedList = focusedList,
-                    onFocusedListChange = { focusedList = it }
+                    query = query
                 )
             }
         }
@@ -156,14 +130,9 @@ fun SearchScreen(
 
 @Composable
 private fun EmptySearchState(
-    clipIndexWorkInfo: WorkInfo?,
     ocrIndexWorkInfo: WorkInfo?,
-    unindexedClipCount: Int,
     unindexedOcrCount: Int,
     totalCount: Int,
-    onStartClip: () -> Unit,
-    onStopClip: () -> Unit,
-    onClearClip: () -> Unit,
     onStartOcr: () -> Unit,
     onStopOcr: () -> Unit,
     onClearOcr: () -> Unit
@@ -172,7 +141,7 @@ private fun EmptySearchState(
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp),
-            modifier = Modifier.padding(bottom = 32.dp)
+            modifier = Modifier.padding(bottom = 32.dp).widthIn(max = 320.dp)
         ) {
             Box(
                 modifier = Modifier
@@ -196,43 +165,28 @@ private fun EmptySearchState(
                 )
             }
             Text(
-                text = "Find anything",
+                text = "Text Search",
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold
             )
             Text(
-                text = "Describe a scene, a feeling,\nor text you remember seeing.",
+                text = "Search for any text contained within your images.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center
             )
 
-            Spacer(modifier = Modifier.height(24.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                IndexingCard(
-                    title = "Visual Search",
-                    workInfo = clipIndexWorkInfo,
-                    unindexedCount = unindexedClipCount,
-                    totalCount = totalCount,
-                    onStart = onStartClip,
-                    onStop = onStopClip,
-                    onClearAndReindex = onClearClip,
-                    modifier = Modifier.weight(1f)
-                )
-                IndexingCard(
-                    title = "Text Search",
-                    workInfo = ocrIndexWorkInfo,
-                    unindexedCount = unindexedOcrCount,
-                    totalCount = totalCount,
-                    onStart = onStartOcr,
-                    onStop = onStopOcr,
-                    onClearAndReindex = onClearOcr,
-                    modifier = Modifier.weight(1f)
-                )
-            }
+            Spacer(modifier = Modifier.height(16.dp))
+            IndexingCard(
+                title = "Text Indexing",
+                workInfo = ocrIndexWorkInfo,
+                unindexedCount = unindexedOcrCount,
+                totalCount = totalCount,
+                onStart = onStartOcr,
+                onStop = onStopOcr,
+                onClearAndReindex = onClearOcr,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
+            )
         }
     }
 }
@@ -289,16 +243,17 @@ private fun NoResultsState(query: String) {
 
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
-private fun UnifiedSearchResults(
-    semanticResults: List<GalleryItem>,
+private fun TextSearchResults(
     ftsResults: List<GalleryItem>,
     sharedTransitionScope: SharedTransitionScope,
     animatedVisibilityScope: AnimatedVisibilityScope,
     onPhotoClick: (String, String?, String?) -> Unit,
-    query: String,
-    focusedList: String?,
-    onFocusedListChange: (String?) -> Unit
+    query: String
 ) {
+    val onFtsClick = remember(onPhotoClick, query) {
+        { item: GalleryItem -> onPhotoClick(item.id, "search_text", query) }
+    }
+
     LazyVerticalGrid(
         columns = GridCells.Fixed(3),
         verticalArrangement = Arrangement.spacedBy(3.dp),
@@ -306,277 +261,34 @@ private fun UnifiedSearchResults(
         contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp),
         modifier = Modifier.fillMaxSize()
     ) {
-        if (focusedList == "text") {
-            // Header for focused text search results
-            item(span = { GridItemSpan(3) }) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(onClick = { onFocusedListChange(null) }) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
-                            contentDescription = "Back"
-                        )
-                    }
-                    Spacer(Modifier.width(8.dp))
-                    Column {
-                        Text(
-                            text = "Images containing text \"$query\"",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = "${ftsResults.size} images",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
-
-            // All items
-            items(
-                items = ftsResults,
-                key = { "fts_focused_${it.id}" }
-            ) { item ->
-                GalleryGridItem(
-                    item = item,
-                    sharedTransitionScope = sharedTransitionScope,
-                    animatedVisibilityScope = animatedVisibilityScope,
-                    onClick = { onPhotoClick(item.id, "search_text", query) }
+        item(span = { GridItemSpan(3) }) {
+            Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp)) {
+                Text(
+                    text = "Text matches for \"$query\"",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+                Text(
+                    text = "${ftsResults.size} images found",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 8.dp)
                 )
             }
-        } else if (focusedList == "visual") {
-            // Header for focused visual search results
-            item(span = { GridItemSpan(3) }) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(onClick = { onFocusedListChange(null) }) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
-                            contentDescription = "Back"
-                        )
-                    }
-                    Spacer(Modifier.width(8.dp))
-                    Column {
-                        Text(
-                            text = "Visual Matches",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = "${semanticResults.size} images",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
+        }
 
-            // All items
-            items(
-                items = semanticResults,
-                key = { "ai_focused_${it.id}" }
-            ) { item ->
-                GalleryGridItem(
-                    item = item,
-                    sharedTransitionScope = sharedTransitionScope,
-                    animatedVisibilityScope = animatedVisibilityScope,
-                    onClick = { onPhotoClick(item.id, "search_visual", query) }
-                )
-            }
-        } else {
-            // ── Text Matches (FTS/OCR) ── horizontal filmstrip at top
-            if (ftsResults.isNotEmpty()) {
-                item(span = { GridItemSpan(3) }) {
-                    Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp)) {
-                        // Header 1: [T] Images containing text "query"      count
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { onFocusedListChange("text") }
-                                .padding(vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Outlined.TextFields,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurface,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                                Spacer(Modifier.width(12.dp))
-                                Text(
-                                    text = "Images containing text \"$query\"",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                            }
-                            Text(
-                                text = "${ftsResults.size}",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-
-                        // Header 2: count images     View all >
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(
-                                text = "${ftsResults.size} images",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.clickable { onFocusedListChange("text") }
-                            ) {
-                                Text(
-                                    text = "View all",
-                                    style = MaterialTheme.typography.labelLarge,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Icon(
-                                    imageVector = Icons.Default.KeyboardArrowRight,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                    }
-                }
-
-                // Grid of images
-                val displayResults = ftsResults.take(6)
-                items(
-                    items = displayResults,
-                    key = { "fts_grid_${it.id}" }
-                ) { item ->
-                    GalleryGridItem(
-                        item = item,
-                        sharedTransitionScope = sharedTransitionScope,
-                        animatedVisibilityScope = animatedVisibilityScope,
-                        onClick = { onPhotoClick(item.id, "search_text", query) }
-                    )
-                }
-
-                // Text recognition bottom card
-                item(span = { GridItemSpan(3) }) {
-                    Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 16.dp)) {
-                        Text(
-                            text = "Text recognition",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(bottom = 12.dp)
-                        )
-
-                        Surface(
-                            modifier = Modifier.fillMaxWidth().clickable { onFocusedListChange("text") },
-                            shape = RoundedCornerShape(16.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(16.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                AsyncImage(
-                                    model = ftsResults.first().uri,
-                                    contentDescription = null,
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier
-                                        .size(56.dp)
-                                        .clip(RoundedCornerShape(8.dp))
-                                )
-                                Spacer(Modifier.width(16.dp))
-                                Text(
-                                    text = query,
-                                    style = MaterialTheme.typography.titleLarge,
-                                    modifier = Modifier.weight(1f),
-                                    fontWeight = FontWeight.Medium
-                                )
-                                Text(
-                                    text = "${ftsResults.size}",
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Spacer(Modifier.width(8.dp))
-                                Icon(
-                                    imageVector = Icons.Default.KeyboardArrowRight,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            // ── Visual Matches (AI Semantic) ── standard grid
-            if (semanticResults.isNotEmpty()) {
-                item(span = { GridItemSpan(3) }) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onFocusedListChange("visual") }
-                            .padding(horizontal = 8.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Outlined.ImageSearch,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(24.dp)
-                            )
-                            Spacer(Modifier.width(12.dp))
-                            Text(
-                                text = "Visual Matches",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = "${semanticResults.size} images",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Icon(
-                                imageVector = Icons.Default.KeyboardArrowRight,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
-                items(
-                    items = semanticResults,
-                    key = { "ai_${it.id}" }
-                ) { item ->
-                    GalleryGridItem(
-                        item = item,
-                        sharedTransitionScope = sharedTransitionScope,
-                        animatedVisibilityScope = animatedVisibilityScope,
-                        onClick = { onPhotoClick(item.id, "search_visual", query) }
-                    )
-                }
-            }
+        items(
+            items = ftsResults,
+            key = { "fts_grid_${it.id}" }
+        ) { item ->
+            GalleryGridItem(
+                item = item,
+                sharedTransitionScope = sharedTransitionScope,
+                animatedVisibilityScope = animatedVisibilityScope,
+                onClick = onFtsClick
+            )
         }
     }
 }

@@ -21,11 +21,18 @@ object DatabaseProvider {
             }
             val dbFile = java.io.File(dbFolder, "gallery_database.db")
 
+            val MIGRATION_4_5 = object : androidx.room.migration.Migration(4, 5) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL("ALTER TABLE telegram_backups ADD COLUMN telegramMessageId INTEGER DEFAULT NULL")
+                }
+            }
+
             val instance = Room.databaseBuilder(
                 context.applicationContext,
                 GalleryDatabase::class.java,
                 dbFile.absolutePath
             )
+            .addMigrations(MIGRATION_4_5)
             .fallbackToDestructiveMigration(dropAllTables = true)
             .addCallback(object : RoomDatabase.Callback() {
                 override fun onCreate(db: SupportSQLiteDatabase) {
@@ -85,26 +92,21 @@ object DatabaseProvider {
         query: String
     ): List<CoreMediaEntity> = withContext(Dispatchers.IO) {
         val rawDb = db.openHelper.readableDatabase
-        val terms = query.trim().split("\\s+".toRegex()).filter { it.isNotBlank() }
+        val terms = query.trim().split("\\s+".toRegex())
+            .map { it.filter { c -> c.isLetterOrDigit() } }
+            .filter { it.isNotBlank() }
         if (terms.isEmpty()) return@withContext emptyList()
 
-        val whereClauses = terms.map {
-            "(fts.extractedText LIKE ? OR fts.generatedTags LIKE ?)"
-        }.joinToString(" AND ")
+        val ftsQuery = terms.map { "$it*" }.joinToString(" AND ")
 
         val sql = """
             SELECT cm.* FROM core_media cm
             INNER JOIN image_fts fts ON CAST(cm.id AS TEXT) = fts.mediaId
-            WHERE $whereClauses
+            WHERE image_fts MATCH ?
             ORDER BY cm.dateAdded DESC
         """.trimIndent()
 
-        val selectionArgs = Array(terms.size * 2) { i ->
-            val term = terms[i / 2]
-            "%$term%"
-        }
-
-        val cursor: Cursor = rawDb.query(sql, selectionArgs)
+        val cursor: Cursor = rawDb.query(sql, arrayOf(ftsQuery))
         val results = mutableListOf<CoreMediaEntity>()
         cursor.use { c ->
             val idIdx            = c.getColumnIndexOrThrow("id")
@@ -118,7 +120,6 @@ object DatabaseProvider {
             val mimeIdx          = c.getColumnIndexOrThrow("mimeType")
             val videoIdx         = c.getColumnIndexOrThrow("isVideo")
             val durIdx           = c.getColumnIndexOrThrow("durationMs")
-            val clipIdx          = c.getColumnIndexOrThrow("is_indexed_clip")
             val ocrIdx           = c.getColumnIndexOrThrow("is_indexed_ocr")
             while (c.moveToNext()) {
                 results += CoreMediaEntity(
@@ -133,7 +134,6 @@ object DatabaseProvider {
                     mimeType        = if (c.isNull(mimeIdx)) null else c.getString(mimeIdx),
                     isVideo         = c.getInt(videoIdx) != 0,
                     durationMs      = if (c.isNull(durIdx)) null else c.getLong(durIdx),
-                    isIndexedClip   = c.getInt(clipIdx) != 0,
                     isIndexedOcr    = c.getInt(ocrIdx) != 0,
                 )
             }
