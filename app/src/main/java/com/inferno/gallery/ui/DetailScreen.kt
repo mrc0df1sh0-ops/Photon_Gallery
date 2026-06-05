@@ -118,6 +118,13 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
 import android.os.Build
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.runtime.produceState
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import com.inferno.gallery.data.db.DatabaseProvider
+import com.inferno.gallery.data.SettingsRepository
+
 
 suspend fun PointerInputScope.detectZoomPanGesture(
     onGesture: (centroid: Offset, pan: Offset, zoom: Float, consume: () -> Unit) -> Unit
@@ -205,6 +212,57 @@ fun DetailScreen(
         pageCount = { galleryItems.size }
     )
 
+    val currentItem = galleryItems.getOrNull(pagerState.currentPage)
+    val resolvedCurrentUri by produceState<Uri?>(initialValue = currentItem?.uri, key1 = currentItem) {
+        val uri = currentItem?.uri
+        if (uri != null) {
+            value = uri
+            val isReadable = withContext(Dispatchers.IO) {
+                try {
+                    context.contentResolver.openInputStream(uri)?.use { true } ?: false
+                } catch (e: Exception) {
+                    false
+                }
+            }
+            if (!isReadable) {
+                val mediaId = currentItem.id.toLongOrNull()
+                if (mediaId != null) {
+                    val db = DatabaseProvider.getDatabase(context)
+                    val backup = withContext(Dispatchers.IO) {
+                        db.telegramBackupDao().getBackupForMedia(mediaId)
+                    }
+                    if (backup != null && backup.backupStatus == "SUCCESS") {
+                        val fileId = backup.telegramFileId
+                        if (fileId != null) {
+                            val settingsRepo = SettingsRepository(context)
+                            val token = withContext(Dispatchers.IO) {
+                                try { settingsRepo.telegramBotTokenFlow.first() } catch (e: Exception) { "" }
+                            }
+                            val chatId = withContext(Dispatchers.IO) {
+                                try { settingsRepo.telegramChatIdFlow.first() } catch (e: Exception) { "" }
+                            }
+                            if (token.isNotEmpty() && chatId.isNotEmpty()) {
+                                val resolved = withContext(Dispatchers.IO) {
+                                    try {
+                                        com.inferno.gallery.data.network.TelegramClient(token, chatId).getFileUrl(fileId)
+                                    } catch (e: Exception) {
+                                        null
+                                    }
+                                }
+                                if (resolved != null) {
+                                    value = Uri.parse(resolved)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            value = null
+        }
+    }
+
+
     var activeHighlight by remember { mutableStateOf(highlightText) }
     var highlightRects by remember { mutableStateOf<List<android.graphics.Rect>>(emptyList()) }
     var highlightImageSize by remember { mutableStateOf<androidx.compose.ui.geometry.Size?>(null) }
@@ -227,6 +285,7 @@ fun DetailScreen(
 
     var isUserScrollEnabled by remember { mutableStateOf(true) }
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
+    var showCloudDeleteConfirmDialog by remember { mutableStateOf(false) }
     var pendingDeleteItem by remember { mutableStateOf<GalleryItem?>(null) }
     var pendingDeletePage by remember { mutableStateOf<Int?>(null) }
     
@@ -284,6 +343,33 @@ fun DetailScreen(
         }
     }
     
+    if (showCloudDeleteConfirmDialog && currentItem != null) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showCloudDeleteConfirmDialog = false },
+            title = { androidx.compose.material3.Text("Delete Cloud Backup") },
+            text = { androidx.compose.material3.Text("This will delete the backed-up file from Telegram and remove it from your Cloud tab. The original photo will remain on your device.") },
+            confirmButton = {
+                androidx.compose.material3.TextButton(
+                    onClick = {
+                        showCloudDeleteConfirmDialog = false
+                        viewModel.deleteCloudBackup(currentItem.id.toLong())
+                        android.widget.Toast.makeText(context, "Cloud backup deleted", android.widget.Toast.LENGTH_SHORT).show()
+                        onBack()
+                    }
+                ) {
+                    androidx.compose.material3.Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(
+                    onClick = { showCloudDeleteConfirmDialog = false }
+                ) {
+                    androidx.compose.material3.Text("Cancel")
+                }
+            }
+        )
+    }
+
     if (showDeleteConfirmDialog && pendingDeleteItem != null) {
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { showDeleteConfirmDialog = false },
@@ -327,11 +413,11 @@ fun DetailScreen(
     var showInfoCard by remember { mutableStateOf(false) }
     var currentExif by remember { mutableStateOf<ExifData?>(null) }
 
-    androidx.compose.runtime.LaunchedEffect(pagerState.currentPage, showInfoCard) {
+    androidx.compose.runtime.LaunchedEffect(resolvedCurrentUri, showInfoCard) {
         if (showInfoCard) {
-            val currentUri = galleryItems.getOrNull(pagerState.currentPage)?.uri
-            if (currentUri != null) {
-                currentExif = extractExif(context, currentUri)
+            val uri = resolvedCurrentUri
+            if (uri != null) {
+                currentExif = extractExif(context, uri)
             }
         }
     }
@@ -350,9 +436,52 @@ fun DetailScreen(
             key = { page -> galleryItems.getOrNull(page)?.uri?.toString() ?: page.toString() }
         ) { page ->
             val item = galleryItems.getOrNull(page) ?: return@HorizontalPager
-            val request: coil3.request.ImageRequest = remember(item.uri) {
+            val resolvedUri by produceState<Uri>(initialValue = item.uri, key1 = item.uri) {
+                val isReadable = withContext(Dispatchers.IO) {
+                    try {
+                        context.contentResolver.openInputStream(item.uri)?.use { true } ?: false
+                    } catch (e: Exception) {
+                        false
+                    }
+                }
+                if (!isReadable) {
+                    val mediaId = item.id.toLongOrNull()
+                    if (mediaId != null) {
+                        val db = DatabaseProvider.getDatabase(context)
+                        val backup = withContext(Dispatchers.IO) {
+                            db.telegramBackupDao().getBackupForMedia(mediaId)
+                        }
+                        if (backup != null && backup.backupStatus == "SUCCESS") {
+                            val fileId = backup.telegramFileId
+                            if (fileId != null) {
+                                val settingsRepo = SettingsRepository(context)
+                                val token = withContext(Dispatchers.IO) {
+                                    try { settingsRepo.telegramBotTokenFlow.first() } catch (e: Exception) { "" }
+                                }
+                                val chatId = withContext(Dispatchers.IO) {
+                                    try { settingsRepo.telegramChatIdFlow.first() } catch (e: Exception) { "" }
+                                }
+                                if (token.isNotEmpty() && chatId.isNotEmpty()) {
+                                    val resolved = withContext(Dispatchers.IO) {
+                                        try {
+                                            com.inferno.gallery.data.network.TelegramClient(token, chatId).getFileUrl(fileId)
+                                        } catch (e: Exception) {
+                                            null
+                                        }
+                                    }
+                                    if (resolved != null) {
+                                        value = Uri.parse(resolved)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            val request: coil3.request.ImageRequest = remember(resolvedUri) {
                 ImageRequest.Builder(context)
-                    .data(item.uri)
+                    .data(resolvedUri)
                     .size(coil3.size.Size.ORIGINAL)
                     .memoryCachePolicy(CachePolicy.ENABLED)
                     .diskCachePolicy(CachePolicy.ENABLED)
@@ -376,17 +505,17 @@ fun DetailScreen(
             Box(modifier = Modifier.fillMaxSize()) {
                 if (item.isVideo) {
                     VideoPlayerItem(
-                        uri = item.uri,
+                        uri = resolvedUri,
                         isCurrentPage = page == pagerState.currentPage,
                         modifier = Modifier.fillMaxSize()
                     )
                 } else {
-                    androidx.compose.runtime.LaunchedEffect(activeHighlight, page, pagerState.currentPage) {
+                    androidx.compose.runtime.LaunchedEffect(activeHighlight, page, pagerState.currentPage, resolvedUri) {
                         if (activeHighlight != null && page == pagerState.currentPage) {
                             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                                 try {
                                     val recognizer = com.google.mlkit.vision.text.TextRecognition.getClient(com.google.mlkit.vision.text.latin.TextRecognizerOptions.DEFAULT_OPTIONS)
-                                    val inputImage = com.google.mlkit.vision.common.InputImage.fromFilePath(context, item.uri)
+                                    val inputImage = com.google.mlkit.vision.common.InputImage.fromFilePath(context, resolvedUri)
                                     val visionText: com.google.mlkit.vision.text.Text? = kotlinx.coroutines.suspendCancellableCoroutine { cont ->
                                         recognizer.process(inputImage)
                                             .addOnSuccessListener { cont.resumeWith(kotlin.Result.success(it)) }
@@ -587,7 +716,7 @@ fun DetailScreen(
                 ) {
                     AsyncImage(
                         model = ImageRequest.Builder(context)
-                            .data(item.uri)
+                            .data(resolvedUri)
                             .size(300, 450)
                             .memoryCachePolicy(CachePolicy.ENABLED)
                             .build(),
@@ -695,7 +824,7 @@ fun DetailScreen(
                             onClick = {
                                 if (currentItem != null) {
                                     val editIntent = Intent(Intent.ACTION_EDIT).apply {
-                                        setDataAndType(currentItem.uri, if (currentItem.isVideo) "video/*" else "image/*")
+                                        setDataAndType(resolvedCurrentUri ?: currentItem.uri, if (currentItem.isVideo) "video/*" else "image/*")
                                         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
                                     }
                                     try {
@@ -710,15 +839,19 @@ fun DetailScreen(
                         }
                         IconButton(
                             onClick = {
-                                if (currentItem != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                                    val isMediaStoreUri = currentItem.uri.toString().startsWith("content://")
-                                    if (!isMediaStoreUri) {
-                                        android.widget.Toast.makeText(context, "Cannot delete this item", android.widget.Toast.LENGTH_SHORT).show()
-                                        return@IconButton
+                                if (currentItem != null) {
+                                    if (bucketName == "telegram_cloud") {
+                                        showCloudDeleteConfirmDialog = true
+                                    } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                                        val isMediaStoreUri = currentItem.uri.toString().startsWith("content://")
+                                        if (!isMediaStoreUri) {
+                                            android.widget.Toast.makeText(context, "Cannot delete this item", android.widget.Toast.LENGTH_SHORT).show()
+                                            return@IconButton
+                                        }
+                                        pendingDeleteItem = currentItem
+                                        pendingDeletePage = pagerState.currentPage
+                                        showDeleteConfirmDialog = true
                                     }
-                                    pendingDeleteItem = currentItem
-                                    pendingDeletePage = pagerState.currentPage
-                                    showDeleteConfirmDialog = true
                                 }
                             }
                         ) { 
@@ -765,7 +898,7 @@ fun DetailScreen(
                                         onClick = {
                                             showMoreMenu = false
                                             val intent = Intent(Intent.ACTION_ATTACH_DATA).apply {
-                                                setDataAndType(currentItem.uri, "image/*")
+                                                setDataAndType(resolvedCurrentUri ?: currentItem.uri, "image/*")
                                                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                                                 putExtra("mimeType", "image/*")
                                             }

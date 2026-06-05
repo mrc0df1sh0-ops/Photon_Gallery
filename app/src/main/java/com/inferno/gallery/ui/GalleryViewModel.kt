@@ -5,11 +5,14 @@ import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.inferno.gallery.data.db.DatabaseProvider
+import com.inferno.gallery.data.db.TelegramBackupEntity
+import com.inferno.gallery.data.db.CloudMediaItem
 import com.inferno.gallery.data.LocalMediaRepository
 import com.inferno.gallery.data.SettingsRepository
 import com.inferno.gallery.data.DockStyle
 import com.inferno.gallery.data.FavoritesManager
-import com.inferno.gallery.data.ai.ONNXTextEncoder
+import android.util.Log
+
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -19,15 +22,14 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.work.WorkManager
 import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
-import com.inferno.gallery.workers.ClipIndexWorker
 import com.inferno.gallery.workers.OcrIndexWorker
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -80,7 +82,7 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
     private val settingsRepository = SettingsRepository(application)
     private val favoritesManager = FavoritesManager(application)
     private val database = DatabaseProvider.getDatabase(application)
-    private val textEncoder = ONNXTextEncoder(application)
+
 
     val favoriteIds: StateFlow<Set<String>> = favoritesManager.favoritesFlow.stateIn(
         scope = viewModelScope,
@@ -123,11 +125,47 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
                 durationMs = entity.durationMs
             )
         }
-    }.stateIn(
+    }.flowOn(Dispatchers.Default).stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
         initialValue = emptyList()
     )
+
+    val cloudMedia: StateFlow<List<CloudMediaItem>> = database.telegramBackupDao().observeCloudMedia()
+        .flowOn(Dispatchers.Default)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
+    val cloudMediaIds: StateFlow<Set<String>> = database.telegramBackupDao().observeCloudMedia().map { list ->
+        list.map { it.id.toString() }.toSet()
+    }.flowOn(Dispatchers.Default).stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.Eagerly,
+        initialValue = emptySet()
+    )
+
+    val pendingBackupsCount: StateFlow<Int> = database.telegramBackupDao().observePendingBackupsCount()
+        .flowOn(Dispatchers.Default)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = 0
+        )
+
+    suspend fun getTelegramFileUrl(fileId: String): String? {
+        if (fileId.isBlank()) return null
+        val token = settingsRepository.telegramBotTokenFlow.first()
+        val chatId = settingsRepository.telegramChatIdFlow.first()
+        if (token.isBlank() || chatId.isBlank()) return null
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                com.inferno.gallery.data.network.TelegramClient(token, chatId).getFileUrl(fileId)
+            }.getOrNull()
+        }
+    }
 
     val sortOrder: StateFlow<SortOrder> = settingsRepository.sortOrderFlow.map {
         try {
@@ -214,10 +252,6 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
             ftsSearchResults.value.filter { searchItem ->
                 raw.any { it.id == searchItem.id && it.bucketName != "Trash" }
             }
-        } else if (bucket == "search_visual") {
-            semanticSearchResults.value.filter { searchItem ->
-                raw.any { it.id == searchItem.id && it.bucketName != "Trash" }
-            }
         } else {
             val folderName = when (filterIndex) {
                 1 -> "Camera"
@@ -226,6 +260,8 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
             }
             val filtered = if (bucket == "All") {
                 raw.filter { it.bucketName != "Trash" }
+            } else if (bucket == "telegram_cloud") {
+                raw.filter { cloudMediaIds.value.contains(it.id) }
             } else if (bucket == "Videos") {
                 raw.filter { it.isVideo && it.bucketName != "Trash" }
             } else if (bucket != null) {
@@ -244,7 +280,7 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
                 SortOrder.NameAsc -> filtered.sortedBy { it.name }
             }
         }
-    }.stateIn(
+    }.flowOn(Dispatchers.Default).stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
         initialValue = emptyList()
@@ -263,7 +299,7 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
                 fullFormat.format(Date(timeMs))
             }
         }
-    }.stateIn(
+    }.flowOn(Dispatchers.Default).stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
         initialValue = emptyMap()
@@ -343,7 +379,7 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
         }
         
         sortedBuckets
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val pinnedAlbums: StateFlow<List<AlbumBucket>> = allMedia.map { mediaList ->
         val allBucket = AlbumBucket(
@@ -392,7 +428,7 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
 
         listOf(allBucket, cameraBucket, videosBucket, screenshotsBucket, screenrecordingsBucket)
             .filter { it.itemCount > 0 }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
@@ -409,7 +445,7 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
                 it.uri.toString().contains(query, ignoreCase = true)
             }
         }
-    }.stateIn(
+    }.flowOn(Dispatchers.Default).stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
         initialValue = emptyList()
@@ -420,13 +456,12 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
     fun updateSearchQuery(query: String) {
         _searchQuery.value = query
         if (query.isBlank()) {
-            _semanticSearchResults.value = emptyList()
             _ftsSearchResults.value = emptyList()
             _isSearching.value = false
             searchJob?.cancel()
             return
         }
-        // Debounce: wait 500ms after user stops typing, then fire both searches
+        // Debounce: wait 500ms after user stops typing, then fire searches
         searchJob?.cancel()
         searchJob = viewModelScope.launch {
             kotlinx.coroutines.delay(500)
@@ -434,116 +469,16 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    private val _semanticSearchResults = MutableStateFlow<List<GalleryItem>>(emptyList())
-    val semanticSearchResults: StateFlow<List<GalleryItem>> = _semanticSearchResults.asStateFlow()
-
     private val _ftsSearchResults = MutableStateFlow<List<GalleryItem>>(emptyList())
     val ftsSearchResults: StateFlow<List<GalleryItem>> = _ftsSearchResults.asStateFlow()
 
     private val _isSearching = MutableStateFlow(false)
     val isSearching: StateFlow<Boolean> = _isSearching.asStateFlow()
 
-    /**
-     * Runs both FTS (text-in-image) and Semantic (AI visual) searches
-     * concurrently. Called automatically after a 500ms debounce.
-     */
-    private suspend fun runSemanticSearch(query: String): List<GalleryItem> = withContext(Dispatchers.Default) {
-        try {
-            val cleanQuery = query.trim().lowercase()
-            if (cleanQuery.isEmpty()) return@withContext emptyList()
-
-            // 1. Dual-prompt templates: Evaluate raw query and "a photo of $query" to boost signal contrast
-            val textEmbeddings = mutableListOf<FloatArray>()
-            textEmbeddings.add(textEncoder.encodeText(cleanQuery))
-            val standardPrefixes = listOf("a photo of", "an image of", "a picture of", "screenshot of", "a screenshot of")
-            if (standardPrefixes.none { cleanQuery.startsWith(it) }) {
-                textEmbeddings.add(textEncoder.encodeText("a photo of $cleanQuery"))
-            }
-
-            val vectors = withContext(Dispatchers.IO) {
-                database.searchDao().getAllVectors()
-            }
-            val allEntities = withContext(Dispatchers.IO) {
-                database.mediaDao().getAllMedia()
-            }
-            val mediaMap = allEntities.associateBy { it.id }
-
-            // 2. Score images
-            val scored = vectors.mapNotNull { vec ->
-                val entity = mediaMap[vec.mediaId] ?: return@mapNotNull null
-                val imgEmb = vec.clipVector.toFloatArray()
-                val score = textEmbeddings.maxOf { queryEmb ->
-                    cosineSimilarity(queryEmb, imgEmb)
-                }
-                
-                val item = GalleryItem(
-                    id = entity.id.toString(),
-                    uri = Uri.parse(entity.uriString),
-                    bucketName = entity.bucketName,
-                    dateAdded = entity.dateAdded,
-                    size = entity.size,
-                    name = entity.name,
-                    dateModified = entity.dateModified,
-                    path = entity.filePath,
-                    isVideo = entity.isVideo,
-                    durationMs = entity.durationMs,
-                    searchScore = score
-                )
-                Pair(item, score)
-            }
-
-            if (scored.isEmpty()) return@withContext emptyList()
-
-            // 3. Compute Mean and Standard Deviation of scores for dynamic thresholding
-            val count = scored.size
-            val mean = scored.map { it.second }.sum() / count
-            val variance = if (count > 1) {
-                scored.map { (it.second - mean) * (it.second - mean) }.sum() / (count - 1)
-            } else 0f
-            val std = sqrt(variance)
-
-            // Log distribution to assist calibration
-            val sortedScores = scored.map { it.second }.sorted()
-            val p50 = sortedScores[count / 2]
-            val p90 = sortedScores[(count * 0.9).toInt().coerceAtMost(count - 1)]
-            val max = sortedScores.last()
-            android.util.Log.d("GallerySearch", "[$query] p50=$p50, p90=$p90, max=$max, mean=$mean, std=$std, total=$count")
-
-            // 4. Z-Score + raw threshold filter
-            // Requiring Z >= 1.2 ensures the image stands out from random background noise,
-            // while raw >= 0.035f ensures there is some positive similarity.
-            val zScoreThreshold = 1.2f
-            val rawFallbackThreshold = 0.035f
-
-            scored.filter { pair ->
-                val score = pair.second
-                if (std > 0.001f) {
-                    val z = (score - mean) / std
-                    z >= zScoreThreshold && score >= rawFallbackThreshold
-                } else {
-                    score >= rawFallbackThreshold
-                }
-            }
-            .sortedByDescending { it.second }
-            .take(50)
-            .map { it.first }
-        } catch (e: Exception) {
-            android.util.Log.e("GalleryViewModel", "Semantic search helper failed: ${e.message}", e)
-            emptyList()
-        }
-    }
-
-    /**
-     * Runs both FTS (text-in-image) and Semantic (AI visual) searches
-     * concurrently. Called automatically after a 500ms debounce.
-     */
     private fun performUnifiedSearch(query: String) {
         viewModelScope.launch {
             _isSearching.value = true
             try {
-                // Run semantic search
-                val semanticResults = runSemanticSearch(query)
-
                 // Run FTS text-in-image search
                 val ftsResults = withContext(Dispatchers.IO) {
                     try {
@@ -572,7 +507,6 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
                     }
                 }
 
-                _semanticSearchResults.value = semanticResults
                 _ftsSearchResults.value = ftsResults
             } finally {
                 _isSearching.value = false
@@ -580,44 +514,7 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    // Keep legacy function for backward compat (e.g. Settings)
-    fun performSemanticSearch(query: String) {
-        if (query.isBlank()) {
-            _semanticSearchResults.value = emptyList()
-            return
-        }
-        viewModelScope.launch {
-            _isSearching.value = true
-            try {
-                val scored = runSemanticSearch(query)
-                _semanticSearchResults.value = scored
-            } catch (e: Exception) {
-                android.util.Log.e("GalleryViewModel", "Semantic search failed: ${e.message}")
-                _semanticSearchResults.value = emptyList()
-            } finally {
-                _isSearching.value = false
-            }
-        }
-    }
 
-    private fun ByteArray.toFloatArray(): FloatArray {
-        val buf = ByteBuffer.wrap(this).order(ByteOrder.LITTLE_ENDIAN)
-        return FloatArray(this.size / 4) { buf.getFloat() }
-    }
-
-    private fun cosineSimilarity(a: FloatArray, b: FloatArray): Float {
-        if (a.size != b.size) return 0f
-        var dot = 0f
-        var normA = 0f
-        var normB = 0f
-        for (i in a.indices) {
-            dot += a[i] * b[i]
-            normA += a[i] * a[i]
-            normB += b[i] * b[i]
-        }
-        val denom = sqrt(normA) * sqrt(normB)
-        return if (denom == 0f) 0f else dot / denom
-    }
 
     fun setSortOrder(order: SortOrder) {
         viewModelScope.launch {
@@ -662,58 +559,24 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    val clipIndexWorkInfo = WorkManager.getInstance(application)
-        .getWorkInfosForUniqueWorkFlow("ClipIndexWorker")
-        .map { it.firstOrNull() }
-        .stateIn(viewModelScope, SharingStarted.Lazily, null)
-
     val ocrIndexWorkInfo = WorkManager.getInstance(application)
         .getWorkInfosForUniqueWorkFlow("OcrIndexWorker")
         .map { it.firstOrNull() }
         .stateIn(viewModelScope, SharingStarted.Lazily, null)
 
-    val unindexedClipImagesCount: kotlinx.coroutines.flow.StateFlow<Int> = database.mediaDao().observeUnindexedClipImageCount()
-        .stateIn(viewModelScope, SharingStarted.Lazily, 0)
-        
     val unindexedOcrImagesCount: kotlinx.coroutines.flow.StateFlow<Int> = database.mediaDao().observeUnindexedOcrImageCount()
         .stateIn(viewModelScope, SharingStarted.Lazily, 0)
 
     val totalImagesCount: kotlinx.coroutines.flow.StateFlow<Int> = database.mediaDao().observeTotalImageCount()
         .stateIn(viewModelScope, SharingStarted.Lazily, 0)
 
-
-    fun startClipIndexing() {
-        viewModelScope.launch {
-            settingsRepository.updateClipIndexingEnabled(true)
-            val request = OneTimeWorkRequestBuilder<com.inferno.gallery.workers.ClipIndexWorker>()
-                .setExpedited(androidx.work.OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
-                .build()
-            WorkManager.getInstance(getApplication()).enqueueUniqueWork("ClipIndexWorker", ExistingWorkPolicy.KEEP, request)
-        }
-    }
-
-    fun stopClipIndexing() {
-        viewModelScope.launch {
-            settingsRepository.updateClipIndexingEnabled(false)
-            WorkManager.getInstance(getApplication()).cancelUniqueWork("ClipIndexWorker")
-        }
-    }
-
-    fun clearClipIndexAndReindex() {
-        viewModelScope.launch(Dispatchers.IO) {
-            settingsRepository.updateClipIndexingEnabled(true)
-            WorkManager.getInstance(getApplication()).cancelUniqueWork("ClipIndexWorker")
-            database.searchDao().clearAllVectors()
-            val allIds = database.mediaDao().getAllMediaIds()
-            allIds.chunked(500).forEach { chunk ->
-                chunk.forEach { id -> database.mediaDao().updateClipIndexStatus(id, false) }
-            }
-            val request = OneTimeWorkRequestBuilder<com.inferno.gallery.workers.ClipIndexWorker>()
-                .setExpedited(androidx.work.OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
-                .build()
-            WorkManager.getInstance(getApplication()).enqueueUniqueWork("ClipIndexWorker", ExistingWorkPolicy.KEEP, request)
-        }
-    }
+    val backupStatuses: StateFlow<Map<Long, String>> = database.telegramBackupDao().observeAllBackups().map { backups ->
+        backups.associate { it.mediaId to it.backupStatus }
+    }.flowOn(Dispatchers.Default).stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = emptyMap()
+    )
 
     fun startOcrIndexing() {
         viewModelScope.launch {
@@ -745,6 +608,208 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
                 .setExpedited(androidx.work.OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
                 .build()
             WorkManager.getInstance(getApplication()).enqueueUniqueWork("OcrIndexWorker", ExistingWorkPolicy.KEEP, request)
+        }
+    }
+
+    private val _isCloudRefreshing = MutableStateFlow(false)
+    val isCloudRefreshing: StateFlow<Boolean> = _isCloudRefreshing.asStateFlow()
+
+    fun refreshCloudBackups() {
+        if (_isCloudRefreshing.value) return
+        _isCloudRefreshing.value = true
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val backupDao = database.telegramBackupDao()
+                var backups = backupDao.observeAllBackups().first()
+                var successBackups = backups.filter { it.backupStatus == "SUCCESS" }
+                
+                val botTokens = settingsRepository.telegramBotTokensFlow.first()
+                var currentChatId = settingsRepository.telegramChatIdFlow.first()
+                
+                if (botTokens.isNotEmpty() && currentChatId.isNotBlank()) {
+                    val activeToken = botTokens.first()
+                    
+                    // If no successful backups exist locally, try restoring from Telegram manifest
+                    if (successBackups.isEmpty()) {
+                        Log.d("GalleryViewModel", "Local backup list is empty. Attempting manifest recovery from Telegram.")
+                        val restored = com.inferno.gallery.data.SyncManifestManager.restoreFromManifest(
+                            getApplication(),
+                            activeToken,
+                            currentChatId
+                        )
+                        if (restored) {
+                            backups = backupDao.observeAllBackups().first()
+                            successBackups = backups.filter { it.backupStatus == "SUCCESS" }
+                        }
+                    }
+                    
+                    if (successBackups.isNotEmpty()) {
+                        var client = com.inferno.gallery.data.network.TelegramClient(activeToken, currentChatId)
+                        var changesMade = false
+                        
+                        for (backup in successBackups) {
+                            val messageId = backup.telegramMessageId
+                            val fileId = backup.telegramFileId
+                            
+                            try {
+                                if (messageId != null) {
+                                    val exists = client.checkMessageExists(messageId)
+                                    if (!exists) {
+                                        Log.d("GalleryViewModel", "Backup message $messageId was deleted from Telegram. Wiping association.")
+                                        backupDao.deleteBackup(backup.mediaId)
+                                        changesMade = true
+                                    }
+                                } else if (fileId != null) {
+                                    // Fallback for legacy backups
+                                    client.getFileUrl(fileId)
+                                }
+                                // Sleep 250ms to prevent rate limits during verification
+                                kotlinx.coroutines.delay(250)
+                            } catch (e: Exception) {
+                                if (e is com.inferno.gallery.data.network.TelegramMigrationException) {
+                                    Log.i("GalleryViewModel", "Group chat migrated during verification! Updating chat ID to ${e.newChatId}")
+                                    settingsRepository.updateTelegramChatId(e.newChatId.toString())
+                                    currentChatId = e.newChatId.toString()
+                                    client = com.inferno.gallery.data.network.TelegramClient(activeToken, currentChatId)
+                                    // Retry checking the current item once with new chat ID
+                                    try {
+                                        if (messageId != null) {
+                                            val exists = client.checkMessageExists(messageId)
+                                            if (!exists) {
+                                                backupDao.deleteBackup(backup.mediaId)
+                                                changesMade = true
+                                            }
+                                        } else if (fileId != null) {
+                                            client.getFileUrl(fileId)
+                                        }
+                                    } catch (retryEx: Exception) {
+                                        if (retryEx is com.inferno.gallery.data.network.TelegramApiException) {
+                                            if (retryEx.description.contains("file_id is invalid", ignoreCase = true) || 
+                                                retryEx.description.contains("file not found", ignoreCase = true)) {
+                                                Log.d("GalleryViewModel", "Backup file $fileId was deleted from Telegram. Wiping association.")
+                                                backupDao.deleteBackup(backup.mediaId)
+                                                changesMade = true
+                                            }
+                                        }
+                                    }
+                                } else if (e is com.inferno.gallery.data.network.TelegramApiException) {
+                                    // Delete legacy backups only if we get explicit file not found error
+                                    if (messageId == null && fileId != null) {
+                                        if (e.description.contains("file_id is invalid", ignoreCase = true) || 
+                                            e.description.contains("file not found", ignoreCase = true)) {
+                                            Log.d("GalleryViewModel", "Backup file $fileId was deleted from Telegram. Wiping association.")
+                                            backupDao.deleteBackup(backup.mediaId)
+                                            changesMade = true
+                                        } else {
+                                            Log.w("GalleryViewModel", "API error checking legacy file $fileId: ${e.message}")
+                                        }
+                                    } else {
+                                        Log.w("GalleryViewModel", "API error checking message $messageId: ${e.message}")
+                                    }
+                                } else if (e is com.inferno.gallery.data.network.RateLimitException) {
+                                    // Wait longer if we hit rate limits during check
+                                    val waitTime = e.retryAfterSeconds + 2
+                                    Log.w("GalleryViewModel", "Rate limit hit during cloud refresh verification. Waiting $waitTime seconds.")
+                                    kotlinx.coroutines.delay(waitTime * 1000L)
+                                } else {
+                                    // Generic network or socket exceptions - DO NOT delete backup
+                                    Log.w("GalleryViewModel", "Transient error checking cloud backup: ${e.message}")
+                                }
+                            }
+                        }
+                        
+                        // If any records were deleted, update the pinned sync manifest
+                        if (changesMade) {
+                            com.inferno.gallery.data.SyncManifestManager.updateManifest(
+                                getApplication(),
+                                activeToken,
+                                currentChatId
+                            )
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("GalleryViewModel", "Error verifying cloud backups: ${e.message}", e)
+            } finally {
+                _isCloudRefreshing.value = false
+            }
+        }
+    }
+
+    fun deleteCloudBackup(mediaId: Long) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val backupDao = database.telegramBackupDao()
+                val backup = backupDao.getBackupForMedia(mediaId)
+                if (backup != null) {
+                    val messageId = backup.telegramMessageId
+                    val botTokens = settingsRepository.telegramBotTokensFlow.first()
+                    val chatId = settingsRepository.telegramChatIdFlow.first()
+                    
+                    if (botTokens.isNotEmpty() && chatId.isNotBlank()) {
+                        val token = botTokens.first()
+                        
+                        // 1. Delete from Telegram chat if messageId is available
+                        if (messageId != null) {
+                            try {
+                                com.inferno.gallery.data.network.TelegramClient(token, chatId).deleteMessage(messageId)
+                                Log.d("GalleryViewModel", "Deleted message $messageId from Telegram.")
+                            } catch (e: Exception) {
+                                Log.e("GalleryViewModel", "Failed to delete message $messageId from Telegram: ${e.message}")
+                            }
+                        }
+                        
+                        // 2. Delete local database association
+                        backupDao.deleteBackup(mediaId)
+                        
+                        // 3. Update pinned manifest
+                        com.inferno.gallery.data.SyncManifestManager.updateManifest(
+                            getApplication(),
+                            token,
+                            chatId
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("GalleryViewModel", "Error deleting cloud backup $mediaId: ${e.message}", e)
+            }
+        }
+    }
+
+    fun backupSelectedMedia() {
+        val selected = _selectedUris.value.toList()
+        if (selected.isEmpty()) return
+        
+        viewModelScope.launch(Dispatchers.IO) {
+            val allMediaList = database.mediaDao().getAllMedia()
+            val backupDao = database.telegramBackupDao()
+            
+            selected.forEach { uriStr ->
+                val mediaItem = allMediaList.firstOrNull { it.uriString == uriStr }
+                if (mediaItem != null) {
+                    backupDao.insertOrUpdate(
+                        TelegramBackupEntity(
+                            mediaId = mediaItem.id,
+                            telegramFileId = null,
+                            telegramThumbFileId = null,
+                            backupStatus = "PENDING",
+                            backupTimestamp = System.currentTimeMillis()
+                        )
+                    )
+                }
+            }
+            
+            withContext(Dispatchers.Main) {
+                clearSelection()
+            }
+            
+            val request = OneTimeWorkRequestBuilder<com.inferno.gallery.workers.TelegramBackupWorker>()
+                .build()
+            WorkManager.getInstance(getApplication()).enqueueUniqueWork(
+                "TelegramBackupWorker",
+                ExistingWorkPolicy.KEEP,
+                request
+            )
         }
     }
 

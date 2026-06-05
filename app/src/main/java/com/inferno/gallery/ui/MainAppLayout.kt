@@ -36,6 +36,7 @@ import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.Sort
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.CloudUpload
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.ArrowDropDown
 import androidx.compose.material.icons.automirrored.outlined.DriveFileMove
@@ -225,6 +226,7 @@ fun MainAppLayout(
                                     "photos" -> "Photos"
                                     "albums" -> "Albums"
                                     "search" -> "Search"
+                                    "cloud" -> "Cloud"
                                     else -> "Photon Gallery"
                                 }
                                 Text(
@@ -319,7 +321,7 @@ fun MainAppLayout(
                     ) {
                         HorizontalFloatingToolbar(
                             expanded = true,
-                            modifier = Modifier.fillMaxWidth(0.85f)
+                            modifier = Modifier.fillMaxWidth(0.9f)
                         ) {
                             Row(
                                 modifier = Modifier
@@ -353,6 +355,16 @@ fun MainAppLayout(
                                     label = "Search",
                                     isSelected = currentRoute == "search",
                                     onClick = { nestedNavController.navigate("search") {
+                                        popUpTo("photos") { saveState = true }
+                                        launchSingleTop = true
+                                        restoreState = true
+                                    } }
+                                )
+                                DockItem(
+                                    icon = { Icon(Icons.Outlined.CloudUpload, contentDescription = "Cloud", modifier = Modifier.size(19.dp)) },
+                                    label = "Cloud",
+                                    isSelected = currentRoute == "cloud",
+                                    onClick = { nestedNavController.navigate("cloud") {
                                         popUpTo("photos") { saveState = true }
                                         launchSingleTop = true
                                         restoreState = true
@@ -395,6 +407,16 @@ fun MainAppLayout(
                                 label = { Text("Search") },
                                 selected = currentRoute == "search",
                                 onClick = { nestedNavController.navigate("search") {
+                                    popUpTo("photos") { saveState = true }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                } }
+                            )
+                            NavigationBarItem(
+                                icon = { Icon(Icons.Outlined.CloudUpload, contentDescription = "Cloud") },
+                                label = { Text("Cloud") },
+                                selected = currentRoute == "cloud",
+                                onClick = { nestedNavController.navigate("cloud") {
                                     popUpTo("photos") { saveState = true }
                                     launchSingleTop = true
                                     restoreState = true
@@ -545,6 +567,15 @@ fun MainAppLayout(
                     onBackClick = { nestedNavController.popBackStack() }
                 )
             }
+            composable("cloud") {
+                CloudScreen(
+                    sharedTransitionScope = sharedTransitionScope,
+                    animatedVisibilityScope = animatedVisibilityScope,
+                    onPhotoClick = onPhotoClick,
+                    viewModel = viewModel,
+                    contentPadding = innerPadding
+                )
+            }
         }
         
         // Selection Mode SplitButton Overlay
@@ -588,6 +619,14 @@ fun MainAppLayout(
                         onClick = { 
                             expanded = false
                             // TODO: Move
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Backup to Cloud") },
+                        leadingIcon = { Icon(Icons.Outlined.CloudUpload, contentDescription = null) },
+                        onClick = { 
+                            expanded = false
+                            viewModel.backupSelectedMedia()
                         }
                     )
                 }
