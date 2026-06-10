@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.size
@@ -673,11 +674,10 @@ fun MainAppLayout(
                 exit = slideOutVertically(targetOffsetY = { it })
             ) {
                 if (dockStyle == DockStyle.PILL) {
-                    val systemNavBarInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(bottom = systemNavBarInset + 4.dp),
+                            .navigationBarsPadding(),
                         contentAlignment = Alignment.BottomCenter
                     ) {
                         HorizontalFloatingToolbar(
@@ -735,9 +735,10 @@ fun MainAppLayout(
                         }
                     }
                 } else {
-                    val systemNavBarInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
                     androidx.compose.foundation.layout.Column(
-                        modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainer)
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(MaterialTheme.colorScheme.surfaceContainer)
                     ) {
                         NavigationBar(
                             containerColor = Color.Transparent,
@@ -784,7 +785,6 @@ fun MainAppLayout(
                                 } }
                             )
                         }
-                        Spacer(modifier = Modifier.height(systemNavBarInset))
                     }
                 }
             }

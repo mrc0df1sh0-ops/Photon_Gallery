@@ -49,7 +49,9 @@ data class GalleryItem(
     val path: String,
     val isVideo: Boolean = false,
     val durationMs: Long? = null,
-    val searchScore: Float? = null
+    val searchScore: Float? = null,
+    val telegramFileId: String? = null,
+    val telegramThumbFileId: String? = null
 )
 
 enum class SortOrder {
@@ -122,8 +124,13 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    val allMedia: StateFlow<List<GalleryItem>> = database.mediaDao().observeAllMedia().map { entities ->
+    val allMedia: StateFlow<List<GalleryItem>> = combine(
+        database.mediaDao().observeAllMedia(),
+        database.telegramBackupDao().observeCloudMedia()
+    ) { entities, cloudItems ->
+        val cloudMap = cloudItems.associateBy { it.id }
         entities.map { entity ->
+            val cloudItem = cloudMap[entity.id]
             GalleryItem(
                 id = entity.id.toString(),
                 uri = Uri.parse(entity.uriString),
@@ -134,7 +141,9 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
                 dateModified = entity.dateModified,
                 path = entity.filePath,
                 isVideo = entity.isVideo,
-                durationMs = entity.durationMs
+                durationMs = entity.durationMs,
+                telegramFileId = cloudItem?.telegramFileId,
+                telegramThumbFileId = cloudItem?.telegramThumbFileId
             )
         }
     }.flowOn(Dispatchers.Default).stateIn(
@@ -169,13 +178,69 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
 
     suspend fun getTelegramFileUrl(fileId: String): String? {
         if (fileId.isBlank()) return null
-        val token = settingsRepository.telegramBotTokenFlow.first()
+        val token = settingsRepository.telegramBotTokensFlow.first().firstOrNull() ?: return null
         val chatId = settingsRepository.telegramChatIdFlow.first()
         if (token.isBlank() || chatId.isBlank()) return null
         return withContext(Dispatchers.IO) {
             runCatching {
                 com.inferno.gallery.data.network.TelegramClient(token, chatId).getFileUrl(fileId)
             }.getOrNull()
+        }
+    }
+
+    fun downloadCloudMedia(context: android.content.Context, item: GalleryItem) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val fileId = item.telegramFileId ?: return@launch
+                val fileUrl = getTelegramFileUrl(fileId) ?: throw Exception("Failed to resolve URL")
+                
+                val collection = if (item.isVideo) {
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                        android.provider.MediaStore.Video.Media.getContentUri(android.provider.MediaStore.VOLUME_EXTERNAL_PRIMARY)
+                    } else {
+                        android.provider.MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+                    }
+                } else {
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                        android.provider.MediaStore.Images.Media.getContentUri(android.provider.MediaStore.VOLUME_EXTERNAL_PRIMARY)
+                    } else {
+                        android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+                    }
+                }
+
+                val values = android.content.ContentValues().apply {
+                    put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, item.name)
+                    val mimeType = if (item.isVideo) "video/mp4" else "image/jpeg"
+                    put(android.provider.MediaStore.MediaColumns.MIME_TYPE, mimeType)
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                        put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, android.os.Environment.DIRECTORY_PICTURES + "/PhotonGallery")
+                        put(android.provider.MediaStore.MediaColumns.IS_PENDING, 1)
+                    }
+                }
+
+                val resolver = context.contentResolver
+                val uri = resolver.insert(collection, values) ?: throw Exception("Failed to create MediaStore entry")
+
+                resolver.openOutputStream(uri)?.use { outputStream ->
+                    val token = settingsRepository.telegramBotTokensFlow.first().first()
+                    val client = com.inferno.gallery.data.network.TelegramClient(token, "")
+                    client.downloadFileStream(fileUrl, outputStream)
+                }
+
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                    values.clear()
+                    values.put(android.provider.MediaStore.MediaColumns.IS_PENDING, 0)
+                    resolver.update(uri, values, null, null)
+                }
+
+                withContext(Dispatchers.Main) {
+                    android.widget.Toast.makeText(context, "Download complete", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    android.widget.Toast.makeText(context, "Download failed: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+                }
+            }
         }
     }
 

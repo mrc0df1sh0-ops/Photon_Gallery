@@ -4,6 +4,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.SystemBarStyle
 import com.inferno.gallery.ui.NavigationGraph
 import com.inferno.gallery.ui.theme.PhotonGalleryTheme
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -38,24 +39,28 @@ class MainActivity : ComponentActivity() {
             
             val useFullScreen by settingsViewModel.useFullScreen.collectAsState()
 
-            LaunchedEffect(useFullScreen) {
+            val themeMode by settingsViewModel.themeMode.collectAsState()
+            val useMaterialYou by settingsViewModel.useMaterialYou.collectAsState()
+            val useAmoledBlack by settingsViewModel.useAmoledBlack.collectAsState()
+            
+            val isSystemDark = isSystemInDarkTheme()
+            val isDark = when (themeMode) {
+                ThemeMode.SYSTEM -> isSystemDark
+                ThemeMode.LIGHT -> false
+                ThemeMode.DARK -> true
+            }
+
+            LaunchedEffect(isDark, useFullScreen) {
                 val insetsController = WindowCompat.getInsetsController(window, window.decorView)
+                insetsController.isAppearanceLightStatusBars = !isDark
+                insetsController.isAppearanceLightNavigationBars = !isDark
+
                 if (useFullScreen) {
                     insetsController.hide(WindowInsetsCompat.Type.systemBars())
                     insetsController.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
                 } else {
                     insetsController.show(WindowInsetsCompat.Type.systemBars())
                 }
-            }
-
-            val themeMode by settingsViewModel.themeMode.collectAsState()
-            val useMaterialYou by settingsViewModel.useMaterialYou.collectAsState()
-            val useAmoledBlack by settingsViewModel.useAmoledBlack.collectAsState()
-            val isSystemDark = isSystemInDarkTheme()
-            val isDark = when (themeMode) {
-                ThemeMode.SYSTEM -> isSystemDark
-                ThemeMode.LIGHT -> false
-                ThemeMode.DARK -> true
             }
 
             PhotonGalleryTheme(

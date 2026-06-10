@@ -17,6 +17,7 @@ import com.inferno.gallery.workers.OcrIndexWorker
 
 import com.inferno.gallery.data.SettingsRepository
 import com.inferno.gallery.data.MediaStoreThumbnailFetcher
+import com.inferno.gallery.data.network.TelegramCoilFetcher
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import okio.Path.Companion.toPath
@@ -46,6 +47,8 @@ class GalleryApplication : Application(), SingletonImageLoader.Factory {
             .components {
                 // Support high-performance system thumbnails for local MediaStore items
                 add(MediaStoreThumbnailFetcher.Factory(context))
+                // Support streaming directly from Telegram Cloud
+                add(TelegramCoilFetcher.Factory(SettingsRepository(context)))
                 // Support GIFs, Animated WebP, and Animated HEIF
                 if (SDK_INT >= 28) {
                     add(AnimatedImageDecoder.Factory())

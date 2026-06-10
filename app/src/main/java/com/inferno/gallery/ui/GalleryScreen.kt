@@ -141,7 +141,7 @@ import java.util.Locale
 
 
 
-private val resolvedUriCache = java.util.concurrent.ConcurrentHashMap<Uri, Uri>()
+// Removed resolvedUriCache
 
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
@@ -183,14 +183,6 @@ fun GalleryScreen(
         viewModel.clearSelection()
     }
 
-    var clickedItemId by remember { mutableStateOf<String?>(null) }
-
-    LaunchedEffect(isScrollInProgress) {
-        if (isScrollInProgress) {
-            clickedItemId = null
-        }
-    }
-
     val coroutineScope = rememberCoroutineScope()
     var boxHeight by remember { mutableStateOf(0f) }
 
@@ -199,7 +191,6 @@ fun GalleryScreen(
             if (viewModel.isSelectionMode.value) {
                 viewModel.toggleSelection(item.uri.toString())
             } else {
-                clickedItemId = item.id
                 onPhotoClick(item.id, bucketName, null)
             }
         }
@@ -284,8 +275,7 @@ fun GalleryScreen(
                     gridCellsCount = gridCellsCount,
                     thumbnailCornerRadius = thumbnailCornerRadius,
                     backupStatus = backupStatuses[item.id.toLongOrNull() ?: -1L],
-                    isScrollInProgress = isScrollInProgress,
-                    isTransitionActive = clickedItemId == item.id
+                    isScrollInProgress = isScrollInProgress
                 )
             }
         } else {
@@ -313,8 +303,7 @@ fun GalleryScreen(
                         gridCellsCount = gridCellsCount,
                         thumbnailCornerRadius = thumbnailCornerRadius,
                         backupStatus = backupStatuses[item.id.toLongOrNull() ?: -1L],
-                        isScrollInProgress = isScrollInProgress,
-                        isTransitionActive = clickedItemId == item.id
+                        isScrollInProgress = isScrollInProgress
                     )
                 }
             }
@@ -349,11 +338,18 @@ fun GalleryGridItem(
     gridCellsCount: Int = 3,
     thumbnailCornerRadius: Float = 0f,
     backupStatus: String? = null,
-    isScrollInProgress: Boolean = false,
-    isTransitionActive: Boolean = false
+    isScrollInProgress: Boolean = false
 ) {
     val context = LocalContext.current
-    var resolvedUri by remember(item.uri) { mutableStateOf(resolvedUriCache[item.uri] ?: item.uri) }
+    val resolvedUri = remember(item) {
+        if (item.telegramThumbFileId != null && !java.io.File(item.path).exists()) {
+            Uri.parse("telegram://${item.telegramThumbFileId}")
+        } else if (item.telegramFileId != null && !java.io.File(item.path).exists()) {
+            Uri.parse("telegram://${item.telegramFileId}")
+        } else {
+            item.uri
+        }
+    }
 
     val request = remember<ImageRequest>(resolvedUri, gridAutoPlay) {
         ImageRequest.Builder(context)
@@ -408,41 +404,6 @@ fun GalleryGridItem(
                     drawable.stop()
                 }
             }
-        } else if (state is AsyncImagePainter.State.Error && resolvedUri == item.uri) {
-            if (resolvedUriCache[item.uri] == item.uri) {
-                return@LaunchedEffect
-            }
-            val mediaId = item.id.toLongOrNull()
-            if (mediaId != null) {
-                withContext(Dispatchers.IO) {
-                    val db = DatabaseProvider.getDatabase(context)
-                    val backup = db.telegramBackupDao().getBackupForMedia(mediaId)
-                    if (backup != null && backup.backupStatus == "SUCCESS") {
-                        val fileId = backup.telegramThumbFileId ?: backup.telegramFileId
-                        if (fileId != null) {
-                            val settingsRepo = SettingsRepository(context)
-                            val token = try { settingsRepo.telegramBotTokenFlow.first() } catch (e: Exception) { "" }
-                            val chatId = try { settingsRepo.telegramChatIdFlow.first() } catch (e: Exception) { "" }
-                            if (token.isNotEmpty() && chatId.isNotEmpty()) {
-                                val resolved = try {
-                                    com.inferno.gallery.data.network.TelegramClient(token, chatId).getFileUrl(fileId)
-                                } catch (e: Exception) {
-                                    null
-                                }
-                                if (resolved != null) {
-                                    val targetUri = Uri.parse(resolved)
-                                    resolvedUriCache[item.uri] = targetUri
-                                    withContext(Dispatchers.Main) {
-                                        resolvedUri = targetUri
-                                    }
-                                    return@withContext
-                                }
-                            }
-                        }
-                    }
-                    resolvedUriCache[item.uri] = item.uri
-                }
-            }
         }
     }
 
@@ -457,20 +418,19 @@ fun GalleryGridItem(
                 .background(skeletonColor)
                 .clickable { onClick(item) }
 
-            val finalModifier = if (isTransitionActive) {
-                imageModifier.sharedElement(
-                    sharedContentState = rememberSharedContentState(key = sharedKey),
-                    animatedVisibilityScope = animatedVisibilityScope,
-                    boundsTransform = { _, _ ->
-                        spring(
-                            dampingRatio = Spring.DampingRatioNoBouncy,
-                            stiffness = Spring.StiffnessMediumLow
-                        )
-                    }
-                )
-            } else {
-                imageModifier
-            }
+            val finalModifier = imageModifier.sharedBounds(
+                sharedContentState = rememberSharedContentState(key = sharedKey),
+                animatedVisibilityScope = animatedVisibilityScope,
+                enter = fadeIn(),
+                exit = fadeOut(),
+
+                boundsTransform = { _, _ ->
+                    spring(
+                        dampingRatio = Spring.DampingRatioNoBouncy,
+                        stiffness = Spring.StiffnessMediumLow
+                    )
+                }
+            )
 
             Image(
                 painter = painter,

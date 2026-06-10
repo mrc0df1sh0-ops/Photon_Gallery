@@ -58,6 +58,7 @@ import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.outlined.Cloud
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
@@ -387,46 +388,11 @@ fun DetailScreen(
             key = { page -> galleryItems.getOrNull(page)?.uri?.toString() ?: page.toString() }
         ) { page ->
             val item = galleryItems.getOrNull(page) ?: return@HorizontalPager
-            val resolvedUri by produceState<Uri>(initialValue = item.uri, key1 = item.uri) {
-                val isReadable = withContext(Dispatchers.IO) {
-                    try {
-                        context.contentResolver.openInputStream(item.uri)?.use { true } ?: false
-                    } catch (e: Exception) {
-                        false
-                    }
-                }
-                if (!isReadable) {
-                    val mediaId = item.id.toLongOrNull()
-                    if (mediaId != null) {
-                        val db = DatabaseProvider.getDatabase(context)
-                        val backup = withContext(Dispatchers.IO) {
-                            db.telegramBackupDao().getBackupForMedia(mediaId)
-                        }
-                        if (backup != null && backup.backupStatus == "SUCCESS") {
-                            val fileId = backup.telegramFileId
-                            if (fileId != null) {
-                                val settingsRepo = SettingsRepository(context)
-                                val token = withContext(Dispatchers.IO) {
-                                    try { settingsRepo.telegramBotTokenFlow.first() } catch (e: Exception) { "" }
-                                }
-                                val chatId = withContext(Dispatchers.IO) {
-                                    try { settingsRepo.telegramChatIdFlow.first() } catch (e: Exception) { "" }
-                                }
-                                if (token.isNotEmpty() && chatId.isNotEmpty()) {
-                                    val resolved = withContext(Dispatchers.IO) {
-                                        try {
-                                            com.inferno.gallery.data.network.TelegramClient(token, chatId).getFileUrl(fileId)
-                                        } catch (e: Exception) {
-                                            null
-                                        }
-                                    }
-                                    if (resolved != null) {
-                                        value = Uri.parse(resolved)
-                                    }
-                                }
-                            }
-                        }
-                    }
+            val resolvedUri = remember(item) {
+                if (item.telegramFileId != null && !java.io.File(item.path).exists()) {
+                    Uri.parse("telegram://${item.telegramFileId}")
+                } else {
+                    item.uri
                 }
             }
 
@@ -503,13 +469,16 @@ fun DetailScreen(
                             contentScale = ContentScale.Fit,
                             modifier = Modifier
                                 .fillMaxSize()
-                                .sharedElement(
+                                .sharedBounds(
                                     sharedContentState = rememberSharedContentState(key = "photo_${item.uri}"),
                                     animatedVisibilityScope = animatedVisibilityScope,
+                                    enter = fadeIn(),
+                                    exit = fadeOut(),
+
                                     boundsTransform = { _, _ ->
                                         spring(
                                             dampingRatio = Spring.DampingRatioNoBouncy,
-                                            stiffness = Spring.StiffnessLow
+                                            stiffness = Spring.StiffnessMediumLow
                                         )
                                     }
                                 )
@@ -967,6 +936,18 @@ fun DetailScreen(
                                             showInfoCard = !showInfoCard
                                         }
                                     )
+                                    val isLocalFileMissing = !java.io.File(currentItem.path).exists()
+                                    if (isLocalFileMissing && currentItem.telegramFileId != null) {
+                                        androidx.compose.material3.DropdownMenuItem(
+                                            text = { Text("Download to Device") },
+                                            leadingIcon = { Icon(Icons.Outlined.Cloud, contentDescription = null) },
+                                            onClick = {
+                                                showMoreMenu = false
+                                                android.widget.Toast.makeText(context, "Downloading...", android.widget.Toast.LENGTH_SHORT).show()
+                                                viewModel.downloadCloudMedia(context, currentItem)
+                                            }
+                                        )
+                                    }
                                 }
                                 if (currentItem != null && !currentItem.isVideo) {
                                     androidx.compose.material3.DropdownMenuItem(
