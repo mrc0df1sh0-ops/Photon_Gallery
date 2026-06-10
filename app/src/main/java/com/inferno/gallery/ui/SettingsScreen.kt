@@ -1,5 +1,6 @@
 package com.inferno.gallery.ui
-
+import androidx.compose.material.icons.outlined.Cloud
+import com.inferno.gallery.ui.ConnectionTestResult
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -569,6 +570,21 @@ fun SettingsScreen(
                             }
                         }
                     }
+
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+
+                    val localContext = androidx.compose.ui.platform.LocalContext.current
+                    ListItem(
+                        leadingContent = { Icon(Icons.Outlined.Cloud, contentDescription = null) },
+                        headlineContent = { Text("Restore from Cloud") },
+                        supportingContent = { Text("Fetch sync manifest and restore database entries") },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                viewModel.restoreFromManifest(localContext)
+                            },
+                        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                    )
 
                     HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
 

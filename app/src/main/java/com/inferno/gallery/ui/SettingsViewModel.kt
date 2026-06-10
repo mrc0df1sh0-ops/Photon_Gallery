@@ -21,6 +21,7 @@ import com.inferno.gallery.workers.OcrIndexWorker
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import com.inferno.gallery.data.db.DatabaseProvider
+import kotlinx.coroutines.withContext
 
 class SettingsViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = SettingsRepository(application)
@@ -400,6 +401,36 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
     fun clearConnectionTestResult() {
         _connectionTestState.value = null
+    }
+
+    fun restoreFromManifest(context: android.content.Context) {
+        viewModelScope.launch {
+            try {
+                val token = repository.telegramBotTokensFlow.first().firstOrNull()
+                val chatId = repository.telegramChatIdFlow.first()
+                if (token.isNullOrBlank() || chatId.isBlank()) {
+                    withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        android.widget.Toast.makeText(context, "Please configure credentials first.", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                    return@launch
+                }
+                withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    android.widget.Toast.makeText(context, "Restoring from cloud...", android.widget.Toast.LENGTH_SHORT).show()
+                }
+                val success = com.inferno.gallery.data.SyncManifestManager.restoreFromManifest(context, token, chatId)
+                withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    if (success) {
+                        android.widget.Toast.makeText(context, "Restore successful!", android.widget.Toast.LENGTH_LONG).show()
+                    } else {
+                        android.widget.Toast.makeText(context, "No manifest found or restore failed.", android.widget.Toast.LENGTH_LONG).show()
+                    }
+                }
+            } catch (e: Exception) {
+                withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    android.widget.Toast.makeText(context, "Restore error: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+                }
+            }
+        }
     }
 }
 
