@@ -57,6 +57,8 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.automirrored.outlined.Sort
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
+import android.net.Uri
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.geometry.Offset
@@ -74,15 +76,12 @@ fun AlbumsScreen(
     val albums by viewModel.allAlbums.collectAsState()
     val pinnedAlbums by viewModel.pinnedAlbums.collectAsState()
     val albumSortOrder by viewModel.albumSortOrder.collectAsState()
-    val allMedia by viewModel.images.collectAsState()
-    val favoriteIds by viewModel.favoriteIds.collectAsState()
+    val favoriteItems by viewModel.favoriteMedia.collectAsState()
     val gridAutoPlay by viewModel.gridAutoPlay.collectAsState()
     
     var showSortMenu by remember { mutableStateOf(false) }
     
-    val favoriteItems = remember(allMedia, favoriteIds) {
-        allMedia.filter { favoriteIds.contains(it.id) }
-    }
+    
 
 
 
@@ -153,10 +152,15 @@ fun AlbumsScreen(
                 items = pinnedAlbums,
                 key = { "pinned_${it.bucketName}" }
             ) { bucket ->
+                // Map screen recordings bucket name for UI display
+                val displayBucketName = when (bucket.bucketName) {
+                    "Screenrecordings", "Screenrecords", "ScreenRecord" -> "Screen recordings"
+                    else -> bucket.bucketName
+                }
                 AlbumCard(
-                    bucket = bucket, 
+                    bucket = bucket.copy(bucketName = displayBucketName), 
                     gridAutoPlay = gridAutoPlay,
-                    onClick = { onAlbumClick(bucket.bucketName) }
+                    onClick = { onAlbumClick(bucket.bucketName) } // Pass original bucketName for click querying
                 )
             }
         }
@@ -167,26 +171,26 @@ fun AlbumsScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 8.dp)
-                        .padding(top = 16.dp, bottom = 8.dp),
+                        .padding(top = 24.dp, bottom = 8.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Device Folders",
-                        style = MaterialTheme.typography.titleLarge
+                        text = "More albums",
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontWeight = FontWeight.Bold
+                        )
                     )
                     Box {
                         androidx.compose.material3.IconButton(
                             onClick = { showSortMenu = true },
-                            modifier = Modifier
-                                .size(38.dp)
-                                .background(MaterialTheme.colorScheme.surfaceContainerHighest, androidx.compose.foundation.shape.CircleShape)
+                            modifier = Modifier.size(38.dp)
                         ) {
                             androidx.compose.material3.Icon(
                                 imageVector = Icons.AutoMirrored.Outlined.Sort,
                                 contentDescription = "Sort",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(19.dp)
+                                tint = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.size(24.dp)
                             )
                         }
                         androidx.compose.material3.DropdownMenu(
@@ -317,6 +321,77 @@ fun Modifier.expressiveClick(onClick: () -> Unit): Modifier {
 }
 
 @Composable
+fun CollageCover(
+    uris: List<Uri>,
+    modifier: Modifier = Modifier,
+    gridAutoPlay: Boolean = true
+) {
+    val context = LocalContext.current
+    val requests = remember(uris, gridAutoPlay) {
+        uris.map { uri ->
+            ImageRequest.Builder(context)
+                .data(uri)
+                .size(150, 150)
+                .precision(Precision.INEXACT)
+                .crossfade(150)
+                .memoryCachePolicy(CachePolicy.ENABLED)
+                .diskCachePolicy(CachePolicy.ENABLED)
+                .apply {
+                    if (!gridAutoPlay) {
+                        repeatCount(0)
+                        videoFrameMillis(0)
+                    }
+                }
+                .build()
+        }
+    }
+
+    Box(modifier = modifier) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                    AsyncImage(
+                        model = requests.getOrNull(0),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+                Spacer(modifier = Modifier.width(2.dp))
+                Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                    AsyncImage(
+                        model = requests.getOrNull(1),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(2.dp))
+            Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                    AsyncImage(
+                        model = requests.getOrNull(2),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+                Spacer(modifier = Modifier.width(2.dp))
+                Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                    AsyncImage(
+                        model = requests.getOrNull(3),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 fun AlbumCard(
     bucket: AlbumBucket,
     modifier: Modifier = Modifier,
@@ -347,49 +422,56 @@ fun AlbumCard(
         contentAlignment = Alignment.Center
     ) {
         Column(
-            modifier = Modifier.fillMaxWidth(0.85f),
+            modifier = Modifier.fillMaxWidth(0.95f),
             horizontalAlignment = Alignment.Start
         ) {
             Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(1f)
-                .clip(MaterialTheme.shapes.extraLarge)
-                .expressiveClick(onClick),
-            contentAlignment = Alignment.Center
-        ) {
-            AsyncImage(
-                model = request,
-                contentDescription = bucket.bucketName,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(1f)
+                    .clip(MaterialTheme.shapes.extraLarge)
+                    .expressiveClick(onClick),
+                contentAlignment = Alignment.Center
+            ) {
+                if (bucket.coverUris.size == 4) {
+                    CollageCover(
+                        uris = bucket.coverUris,
+                        modifier = Modifier.fillMaxSize(),
+                        gridAutoPlay = gridAutoPlay
+                    )
+                } else {
+                    AsyncImage(
+                        model = request,
+                        contentDescription = bucket.bucketName,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(12.dp))
+            
+            Text(
+                text = bucket.bucketName,
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontWeight = FontWeight.Bold
+                ),
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                modifier = Modifier.padding(horizontal = 4.dp)
+            )
+            
+            Spacer(modifier = Modifier.height(4.dp))
+            
+            Text(
+                text = java.text.NumberFormat.getInstance(java.util.Locale.US).format(bucket.itemCount),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                modifier = Modifier.padding(horizontal = 4.dp)
             )
         }
-        
-        Spacer(modifier = Modifier.height(12.dp))
-        
-        Text(
-            text = bucket.bucketName,
-            style = MaterialTheme.typography.titleMedium.copy(
-                fontWeight = FontWeight.Bold
-            ),
-            maxLines = 1,
-            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-            modifier = Modifier.padding(horizontal = 4.dp)
-        )
-        
-        Spacer(modifier = Modifier.height(4.dp))
-        
-        val formattedSize = android.text.format.Formatter.formatShortFileSize(context, bucket.totalSizeBytes)
-        Text(
-            text = "${bucket.itemCount} items • $formattedSize",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-            modifier = Modifier.padding(horizontal = 4.dp)
-        )
-    }
     }
 }
 

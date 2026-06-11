@@ -24,8 +24,17 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.flatMapLatest
+import androidx.paging.PagingData
+import androidx.paging.Pager
+import androidx.paging.PagingConfig
+import androidx.paging.cachedIn
+import androidx.paging.map
+import androidx.paging.insertSeparators
 import androidx.work.WorkManager
 import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
@@ -54,6 +63,11 @@ data class GalleryItem(
     val telegramThumbFileId: String? = null
 )
 
+sealed class GalleryListItem {
+    data class Item(val galleryItem: GalleryItem) : GalleryListItem()
+    data class Header(val title: String) : GalleryListItem()
+}
+
 enum class SortOrder {
     NewToOld,
     OldToNew,
@@ -73,7 +87,8 @@ data class AlbumBucket(
     val coverUri: Uri,
     val itemCount: Int,
     val totalSizeBytes: Long = 0L,
-    val maxDate: Long = 0L
+    val maxDate: Long = 0L,
+    val coverUris: List<Uri> = emptyList()
 )
 
 enum class SearchMode { SMART, FTS }
@@ -124,10 +139,20 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    val allMedia: StateFlow<List<GalleryItem>> = combine(
-        database.mediaDao().observeAllMedia(),
-        database.telegramBackupDao().observeCloudMedia()
-    ) { entities, cloudItems ->
+
+
+    val cloudMedia: StateFlow<List<CloudMediaItem>> = database.telegramBackupDao().observeCloudMedia()
+        .flowOn(Dispatchers.Default)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
+    val favoriteMedia: StateFlow<List<GalleryItem>> = favoritesManager.favoritesFlow.flatMapLatest { favs ->
+        if (favs.isEmpty()) kotlinx.coroutines.flow.flowOf(emptyList())
+        else database.mediaDao().observeMediaByIds(favs.mapNotNull { it.toLongOrNull() })
+    }.combine(database.telegramBackupDao().observeCloudMedia()) { entities, cloudItems ->
         val cloudMap = cloudItems.associateBy { it.id }
         entities.map { entity ->
             val cloudItem = cloudMap[entity.id]
@@ -146,19 +171,33 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
                 telegramThumbFileId = cloudItem?.telegramThumbFileId
             )
         }
-    }.flowOn(Dispatchers.Default).stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5000),
-        initialValue = emptyList()
-    )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val cloudMedia: StateFlow<List<CloudMediaItem>> = database.telegramBackupDao().observeCloudMedia()
-        .flowOn(Dispatchers.Default)
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = emptyList()
-        )
+    private val _detailMedia = MutableStateFlow<List<GalleryItem>>(emptyList())
+    val detailMedia: StateFlow<List<GalleryItem>> = _detailMedia.asStateFlow()
+
+    fun setDetailItem(mediaId: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val id = mediaId.toLongOrNull() ?: return@launch
+            val entity = database.mediaDao().getMediaById(id) ?: return@launch
+            val cloudItem = database.telegramBackupDao().getBackupForMedia(id)
+            val item = GalleryItem(
+                id = entity.id.toString(),
+                uri = Uri.parse(entity.uriString),
+                bucketName = entity.bucketName,
+                dateAdded = entity.dateAdded,
+                size = entity.size,
+                name = entity.name,
+                dateModified = entity.dateModified,
+                path = entity.filePath,
+                isVideo = entity.isVideo,
+                durationMs = entity.durationMs,
+                telegramFileId = cloudItem?.telegramFileId,
+                telegramThumbFileId = cloudItem?.telegramThumbFileId
+            )
+            _detailMedia.value = listOf(item)
+        }
+    }
 
     val cloudMediaIds: StateFlow<Set<String>> = database.telegramBackupDao().observeCloudMedia().map { list ->
         list.map { it.id.toString() }.toSet()
@@ -327,65 +366,117 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    val images: StateFlow<List<GalleryItem>> = combine(
-        allMedia, sortOrder, _currentBucket, selectedFilterIndex
-    ) { raw, order, bucket, filterIndex ->
+    val pagedMediaRaw: Flow<PagingData<GalleryItem>> = combine(
+        _currentBucket, selectedFilterIndex, sortOrder, cloudMediaIds
+    ) { bucket, filterIndex, order, cloudIds ->
+        var queryString = "SELECT * FROM core_media "
+        val args = mutableListOf<Any>()
+        val conditions = mutableListOf<String>()
+
+        val folderName = when (filterIndex) {
+            1 -> "Camera"
+            2 -> "Screenshots"
+            else -> null
+        }
         if (bucket == "search_text") {
-            ftsSearchResults.value.filter { searchItem ->
-                raw.any { it.id == searchItem.id && it.bucketName != "Trash" }
+            val ids = ftsSearchResults.value.map { it.id }
+            if (ids.isEmpty()) {
+                conditions.add("1 = 0")
+            } else {
+                conditions.add("id IN (${ids.joinToString(",")})")
+                conditions.add("bucketName != 'Trash'")
             }
         } else {
-            val folderName = when (filterIndex) {
-                1 -> "Camera"
-                2 -> "Screenshots"
-                else -> null
-            }
-            val filtered = if (bucket == "All") {
-                raw.filter { it.bucketName != "Trash" }
+            if (bucket == "All") {
+                conditions.add("bucketName != 'Trash'")
             } else if (bucket == "telegram_cloud") {
-                raw.filter { cloudMediaIds.value.contains(it.id) }
+                val ids = cloudIds
+                if (ids.isEmpty()) {
+                    conditions.add("1 = 0")
+                } else {
+                    conditions.add("id IN (${ids.joinToString(",")})")
+                }
             } else if (bucket == "Videos") {
-                raw.filter { it.isVideo && it.bucketName != "Trash" }
+                conditions.add("isVideo = 1")
+                conditions.add("bucketName != 'Trash'")
             } else if (bucket != null) {
-                raw.filter { it.bucketName == bucket }
+                conditions.add("bucketName = ?")
+                args.add(bucket)
             } else if (folderName != null) {
-                raw.filter { it.bucketName == folderName }
+                conditions.add("bucketName = ?")
+                args.add(folderName)
             } else {
-                raw.filter { it.bucketName != "Trash" }
-            }
-
-            when (order) {
-                SortOrder.NewToOld -> filtered.sortedByDescending { it.dateAdded }
-                SortOrder.OldToNew -> filtered.sortedBy { it.dateAdded }
-                SortOrder.SmallToBig -> filtered.sortedBy { it.size }
-                SortOrder.BigToSmall -> filtered.sortedByDescending { it.size }
-                SortOrder.NameAsc -> filtered.sortedBy { it.name }
+                conditions.add("bucketName != 'Trash'")
             }
         }
-    }.flowOn(Dispatchers.Default).stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5000),
-        initialValue = emptyList()
-    )
 
-    val groupedImages: StateFlow<Map<String, List<GalleryItem>>> = images.map { sortedList ->
-        val fullFormat = SimpleDateFormat("EEEE, dd-MM-yyyy", Locale.getDefault())
-        val dateFormat = SimpleDateFormat("dd-MM-yyyy", Locale.getDefault())
-        val oneWeekAgo = System.currentTimeMillis() - 7L * 24 * 60 * 60 * 1000
-        
-        sortedList.groupBy { item ->
-            val timeMs = item.dateAdded * 1000L
-            if (timeMs < oneWeekAgo) {
-                dateFormat.format(Date(timeMs))
-            } else {
-                fullFormat.format(Date(timeMs))
-            }
+        if (conditions.isNotEmpty()) {
+            queryString += "WHERE " + conditions.joinToString(" AND ") + " "
         }
-    }.flowOn(Dispatchers.Default).stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5000),
-        initialValue = emptyMap()
-    )
+
+        when (order) {
+            SortOrder.NewToOld -> queryString += "ORDER BY dateAdded DESC"
+            SortOrder.OldToNew -> queryString += "ORDER BY dateAdded ASC"
+            SortOrder.SmallToBig -> queryString += "ORDER BY size ASC"
+            SortOrder.BigToSmall -> queryString += "ORDER BY size DESC"
+            SortOrder.NameAsc -> queryString += "ORDER BY name ASC"
+        }
+
+        androidx.sqlite.db.SimpleSQLiteQuery(queryString, args.toTypedArray())
+    }.flatMapLatest { query ->
+        Pager(
+            config = PagingConfig(pageSize = 60, enablePlaceholders = true)
+        ) {
+            database.mediaDao().observeMediaPagingRaw(query)
+        }.flow
+    }.combine(database.telegramBackupDao().observeCloudMedia()) { pagingData, cloudItems ->
+        val cloudMap = cloudItems.associateBy { it.id }
+        pagingData.map { entity ->
+            val cloudItem = cloudMap[entity.id]
+            GalleryItem(
+                id = entity.id.toString(),
+                uri = Uri.parse(entity.uriString),
+                bucketName = entity.bucketName,
+                dateAdded = entity.dateAdded,
+                size = entity.size,
+                name = entity.name,
+                dateModified = entity.dateModified,
+                path = entity.filePath,
+                isVideo = entity.isVideo,
+                durationMs = entity.durationMs,
+                telegramFileId = cloudItem?.telegramFileId,
+                telegramThumbFileId = cloudItem?.telegramThumbFileId
+            )
+        }
+    }.cachedIn(viewModelScope)
+
+    val pagedMedia: Flow<PagingData<GalleryListItem>> = pagedMediaRaw.map { pagingData ->
+        pagingData.insertSeparators { before: GalleryItem?, after: GalleryItem? ->
+            if (after == null) return@insertSeparators null
+            
+            val fullFormat = SimpleDateFormat("EEEE, dd-MM-yyyy", Locale.getDefault())
+            val dateFormat = SimpleDateFormat("dd-MM-yyyy", Locale.getDefault())
+            val oneWeekAgo = System.currentTimeMillis() - 7L * 24 * 60 * 60 * 1000
+            
+            val afterTimeMs = after.dateAdded * 1000L
+            val afterTitle = if (afterTimeMs < oneWeekAgo) dateFormat.format(Date(afterTimeMs)) else fullFormat.format(Date(afterTimeMs))
+            
+            if (before == null) {
+                return@insertSeparators GalleryListItem.Header(afterTitle)
+            }
+            
+            val beforeTimeMs = before.dateAdded * 1000L
+            val beforeTitle = if (beforeTimeMs < oneWeekAgo) dateFormat.format(Date(beforeTimeMs)) else fullFormat.format(Date(beforeTimeMs))
+            
+            if (beforeTitle != afterTitle) {
+                return@insertSeparators GalleryListItem.Header(afterTitle)
+            } else {
+                return@insertSeparators null
+            }
+        }.map { item ->
+            if (item is GalleryItem) GalleryListItem.Item(item) else item as GalleryListItem.Header
+        }
+    }.cachedIn(viewModelScope)
 
     private val _selectedUris = MutableStateFlow<Set<String>>(emptySet())
     val selectedUris: StateFlow<Set<String>> = _selectedUris.asStateFlow()
@@ -418,120 +509,101 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun selectAll() {
-        _selectedUris.value = images.value.map { it.uri.toString() }.toSet()
+        // Not supported in Paging3 without a direct DB query.
     }
 
     fun selectRange(startUri: String, endUri: String) {
-        val list = images.value
-        val startIndex = list.indexOfFirst { it.uri.toString() == startUri }
-        val endIndex = list.indexOfFirst { it.uri.toString() == endUri }
-        if (startIndex != -1 && endIndex != -1) {
-            val min = minOf(startIndex, endIndex)
-            val max = maxOf(startIndex, endIndex)
-            val range = list.subList(min, max + 1).map { it.uri.toString() }
-            val current = _selectedUris.value.toMutableSet()
-            current.addAll(range)
-            _selectedUris.value = current
-        }
+        // Not supported in Paging3 without memory indexing.
     }
 
-    val allAlbums: StateFlow<List<AlbumBucket>> = combine(allMedia, albumSortOrder) { mediaList, order ->
-        val excludedBuckets = setOf("Camera", "Screenshots")
+    val allAlbums: StateFlow<List<AlbumBucket>> = combine(database.mediaDao().observeBuckets(), albumSortOrder) { buckets, order ->
+        val excludedKeywords = setOf("Camera", "Screenshots", "Trash", "All", "Videos")
         
-        val buckets = mediaList.groupBy { it.bucketName }
-            .filterKeys { !excludedBuckets.contains(it) && !it.contains("Screenrecordings", ignoreCase = true) }
-            .map { (bucketName, items) ->
-            val totalSize = items.sumOf { it.size }
-            val maxDate = items.maxOfOrNull { it.dateAdded } ?: 0L
+        val filtered = buckets.filter { bucket ->
+            !excludedKeywords.contains(bucket.bucketName) && 
+            !bucket.bucketName.contains("Screenrecordings", ignoreCase = true) &&
+            !bucket.bucketName.contains("Screen records", ignoreCase = true) &&
+            !bucket.bucketName.contains("Screenrecords", ignoreCase = true) &&
+            !bucket.bucketName.contains("ScreenRecord", ignoreCase = true) &&
+            !bucket.bucketName.contains("Screenshot", ignoreCase = true)
+        }.map { b ->
             AlbumBucket(
-                bucketName = bucketName,
-                coverUri = items.first().uri,
-                itemCount = items.size,
-                totalSizeBytes = totalSize,
-                maxDate = maxDate
+                bucketName = b.bucketName,
+                coverUri = if (b.coverUriString != null) Uri.parse(b.coverUriString) else Uri.EMPTY,
+                itemCount = b.itemCount,
+                totalSizeBytes = b.totalSizeBytes,
+                maxDate = b.maxDate
             )
         }
         
         val sortedBuckets = when (order) {
-            SortOrder.NewToOld -> buckets.sortedByDescending { it.maxDate }
-            SortOrder.OldToNew -> buckets.sortedBy { it.maxDate }
-            SortOrder.SmallToBig -> buckets.sortedBy { it.totalSizeBytes }
-            SortOrder.BigToSmall -> buckets.sortedByDescending { it.totalSizeBytes }
-            SortOrder.NameAsc -> buckets.sortedBy { it.bucketName }
+            SortOrder.NewToOld -> filtered.sortedByDescending { it.maxDate }
+            SortOrder.OldToNew -> filtered.sortedBy { it.maxDate }
+            SortOrder.SmallToBig -> filtered.sortedBy { it.totalSizeBytes }
+            SortOrder.BigToSmall -> filtered.sortedByDescending { it.totalSizeBytes }
+            SortOrder.NameAsc -> filtered.sortedBy { it.bucketName }
         }
         
         sortedBuckets
     }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val pinnedAlbums: StateFlow<List<AlbumBucket>> = allMedia.map { mediaList ->
+    val pinnedAlbums: StateFlow<List<AlbumBucket>> = combine(
+        database.mediaDao().observeBuckets(),
+        database.mediaDao().observeAllMedia()
+    ) { buckets, allMedia ->
+        val validMedia = allMedia.filter { it.bucketName != "Trash" }
+        
         val allBucket = AlbumBucket(
             bucketName = "All",
-            coverUri = mediaList.firstOrNull()?.uri ?: Uri.EMPTY,
-            itemCount = mediaList.size,
-            totalSizeBytes = mediaList.sumOf { it.size },
-            maxDate = mediaList.maxOfOrNull { it.dateAdded } ?: 0L
+            coverUri = validMedia.firstOrNull()?.uriString?.let { Uri.parse(it) } ?: Uri.EMPTY,
+            itemCount = validMedia.size,
+            totalSizeBytes = validMedia.sumOf { it.size },
+            maxDate = validMedia.maxOfOrNull { it.dateAdded } ?: 0L,
+            coverUris = validMedia.take(4).map { Uri.parse(it.uriString) }
+        )
+
+        val cameraItems = buckets.filter { it.bucketName.equals("Camera", ignoreCase = true) }
+        val cameraBucket = AlbumBucket(
+            bucketName = cameraItems.firstOrNull()?.bucketName ?: "Camera",
+            coverUri = cameraItems.maxByOrNull { it.maxDate }?.coverUriString?.let { Uri.parse(it) } ?: Uri.EMPTY,
+            itemCount = cameraItems.sumOf { it.itemCount },
+            totalSizeBytes = cameraItems.sumOf { it.totalSizeBytes },
+            maxDate = cameraItems.maxOfOrNull { it.maxDate } ?: 0L
         )
         
-        val videos = mediaList.filter { it.isVideo }
+        val videos = validMedia.filter { it.isVideo }
         val videosBucket = AlbumBucket(
             bucketName = "Videos",
-            coverUri = videos.firstOrNull()?.uri ?: Uri.EMPTY,
+            coverUri = videos.firstOrNull()?.uriString?.let { Uri.parse(it) } ?: Uri.EMPTY,
             itemCount = videos.size,
             totalSizeBytes = videos.sumOf { it.size },
             maxDate = videos.maxOfOrNull { it.dateAdded } ?: 0L
         )
 
-        val cameraItems = mediaList.filter { it.bucketName == "Camera" }
-        val cameraBucket = AlbumBucket(
-            bucketName = "Camera",
-            coverUri = cameraItems.firstOrNull()?.uri ?: Uri.EMPTY,
-            itemCount = cameraItems.size,
-            totalSizeBytes = cameraItems.sumOf { it.size },
-            maxDate = cameraItems.maxOfOrNull { it.dateAdded } ?: 0L
-        )
-
-        val screenshotsItems = mediaList.filter { it.bucketName == "Screenshots" }
+        val screenshotsItems = buckets.filter { it.bucketName.contains("Screenshots", ignoreCase = true) || it.bucketName.contains("Screenshot", ignoreCase = true) }
         val screenshotsBucket = AlbumBucket(
-            bucketName = "Screenshots",
-            coverUri = screenshotsItems.firstOrNull()?.uri ?: Uri.EMPTY,
-            itemCount = screenshotsItems.size,
-            totalSizeBytes = screenshotsItems.sumOf { it.size },
-            maxDate = screenshotsItems.maxOfOrNull { it.dateAdded } ?: 0L
+            bucketName = screenshotsItems.firstOrNull()?.bucketName ?: "Screenshots",
+            coverUri = screenshotsItems.maxByOrNull { it.maxDate }?.coverUriString?.let { Uri.parse(it) } ?: Uri.EMPTY,
+            itemCount = screenshotsItems.sumOf { it.itemCount },
+            totalSizeBytes = screenshotsItems.sumOf { it.totalSizeBytes },
+            maxDate = screenshotsItems.maxOfOrNull { it.maxDate } ?: 0L
         )
 
-        val screenrecordingsItems = mediaList.filter { it.bucketName.contains("Screenrecordings", ignoreCase = true) }
+        val screenrecordingsItems = buckets.filter { it.bucketName.contains("Screenrecordings", ignoreCase = true) || it.bucketName.contains("Screen records", ignoreCase = true) || it.bucketName.contains("Screenrecords", ignoreCase = true) || it.bucketName.contains("ScreenRecord", ignoreCase = true) }
         val screenrecordingsBucket = AlbumBucket(
-            bucketName = "Screenrecordings",
-            coverUri = screenrecordingsItems.firstOrNull()?.uri ?: Uri.EMPTY,
-            itemCount = screenrecordingsItems.size,
-            totalSizeBytes = screenrecordingsItems.sumOf { it.size },
-            maxDate = screenrecordingsItems.maxOfOrNull { it.dateAdded } ?: 0L
+            bucketName = screenrecordingsItems.firstOrNull()?.bucketName ?: "Screenrecordings",
+            coverUri = screenrecordingsItems.maxByOrNull { it.maxDate }?.coverUriString?.let { Uri.parse(it) } ?: Uri.EMPTY,
+            itemCount = screenrecordingsItems.sumOf { it.itemCount },
+            totalSizeBytes = screenrecordingsItems.sumOf { it.totalSizeBytes },
+            maxDate = screenrecordingsItems.maxOfOrNull { it.maxDate } ?: 0L
         )
-
-        listOf(allBucket, cameraBucket, videosBucket, screenshotsBucket, screenrecordingsBucket)
-            .filter { it.itemCount > 0 }
+        
+        listOf(allBucket, cameraBucket, videosBucket, screenshotsBucket, screenrecordingsBucket).filter { it.itemCount > 0 }
     }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
 
-    // Old FTS results (filename/bucket matching) kept for backward compat
-    val searchResults: StateFlow<List<GalleryItem>> = combine(
-        images, _searchQuery
-    ) { items, query ->
-        if (query.isBlank()) {
-            emptyList()
-        } else {
-            items.filter {
-                it.bucketName.contains(query, ignoreCase = true) ||
-                it.uri.toString().contains(query, ignoreCase = true)
-            }
-        }
-    }.flowOn(Dispatchers.Default).stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5000),
-        initialValue = emptyList()
-    )
 
     private var searchJob: kotlinx.coroutines.Job? = null
 
@@ -641,6 +713,43 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
             // Instantly move to Trash bin so the UI updates
             database.mediaDao().updateBucketByUri(uriString, "Trash")
             _uiEvents.send(UiEvent.DeleteSuccess)
+        }
+    }
+
+    fun moveSelectedMedia(targetBucket: String) {
+        val selected = _selectedUris.value.toList()
+        if (selected.isEmpty()) return
+
+        viewModelScope.launch {
+            try {
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                    val resolver = getApplication<android.app.Application>().contentResolver
+                    for (uriString in selected) {
+                        val uri = Uri.parse(uriString)
+                        if (uriString.startsWith("content://")) {
+                            val values = android.content.ContentValues().apply {
+                                put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, android.os.Environment.DIRECTORY_PICTURES + "/" + targetBucket)
+                            }
+                            try {
+                                resolver.update(uri, values, null, null)
+                                database.mediaDao().updateBucketByUri(uriString, targetBucket)
+                            } catch (e: Exception) {
+                                android.util.Log.e("GalleryViewModel", "Failed to move media: ${e.message}")
+                            }
+                        }
+                    }
+                    clearSelection()
+                    withContext(Dispatchers.Main) {
+                        android.widget.Toast.makeText(getApplication(), "Moved to $targetBucket", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                } else {
+                    withContext(Dispatchers.Main) {
+                        android.widget.Toast.makeText(getApplication(), "Move not supported on this Android version", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("GalleryViewModel", "Error moving media: ${e.message}", e)
+            }
         }
     }
 
@@ -861,6 +970,50 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    fun deleteCloudBackups(mediaIds: List<Long>) {
+        if (mediaIds.isEmpty()) return
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val backupDao = database.telegramBackupDao()
+                val botTokens = settingsRepository.telegramBotTokensFlow.first()
+                val chatId = settingsRepository.telegramChatIdFlow.first()
+                
+                if (botTokens.isNotEmpty() && chatId.isNotBlank()) {
+                    val token = botTokens.first()
+                    val client = com.inferno.gallery.data.network.TelegramClient(token, chatId)
+                    
+                    var changesMade = false
+                    for (mediaId in mediaIds) {
+                        val backup = backupDao.getBackupForMedia(mediaId)
+                        if (backup != null) {
+                            val messageId = backup.telegramMessageId
+                            if (messageId != null) {
+                                try {
+                                    client.deleteMessage(messageId)
+                                    Log.d("GalleryViewModel", "Deleted message $messageId from Telegram.")
+                                } catch (e: Exception) {
+                                    Log.e("GalleryViewModel", "Failed to delete message $messageId from Telegram: ${e.message}")
+                                }
+                            }
+                            backupDao.deleteBackup(mediaId)
+                            changesMade = true
+                        }
+                    }
+                    
+                    if (changesMade) {
+                        com.inferno.gallery.data.SyncManifestManager.updateManifest(
+                            getApplication(),
+                            token,
+                            chatId
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("GalleryViewModel", "Error deleting cloud backups: ${e.message}", e)
+            }
+        }
+    }
+
     fun backupSelectedMedia() {
         val selected = _selectedUris.value.toList()
         if (selected.isEmpty()) return
@@ -900,6 +1053,16 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
 
     sealed class UiEvent {
         object DeleteSuccess : UiEvent()
+    }
+
+    fun deleteCloudBackupsByUris(uris: Set<String>) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val dbMedia = database.mediaDao().getAllMedia()
+            val mediaIds = uris.mapNotNull { uri ->
+                dbMedia.find { it.uriString == uri }?.id
+            }
+            deleteCloudBackups(mediaIds)
+        }
     }
 
 }
