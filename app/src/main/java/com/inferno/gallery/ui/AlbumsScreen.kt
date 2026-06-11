@@ -58,6 +58,7 @@ import androidx.compose.material.icons.automirrored.outlined.Sort
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.shape.CircleShape
 import android.net.Uri
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.graphics.Color
@@ -87,7 +88,7 @@ fun AlbumsScreen(
 
 
     LazyVerticalGrid(
-        columns = GridCells.Fixed(3),
+        columns = GridCells.Fixed(12),
         contentPadding = contentPadding,
         verticalArrangement = Arrangement.spacedBy(8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -150,7 +151,8 @@ fun AlbumsScreen(
         if (pinnedAlbums.isNotEmpty()) {
             items(
                 items = pinnedAlbums,
-                key = { "pinned_${it.bucketName}" }
+                key = { "pinned_${it.bucketName}" },
+                span = { GridItemSpan(4) }
             ) { bucket ->
                 // Map screen recordings bucket name for UI display
                 val displayBucketName = when (bucket.bucketName) {
@@ -256,7 +258,8 @@ fun AlbumsScreen(
             
             items(
                 items = albums,
-                key = { "folder_${it.bucketName}" }
+                key = { "folder_${it.bucketName}" },
+                span = { GridItemSpan(3) }
             ) { bucket ->
                 AlbumCard(
                     bucket = bucket, 
@@ -346,46 +349,60 @@ fun CollageCover(
         }
     }
 
-    Box(modifier = modifier) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
-                    AsyncImage(
-                        model = requests.getOrNull(0),
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
-                Spacer(modifier = Modifier.width(2.dp))
-                Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
-                    AsyncImage(
-                        model = requests.getOrNull(1),
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(Color.Transparent)
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Row(
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                AsyncImage(
+                    model = requests.getOrNull(0),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .clip(CircleShape)
+                )
+                AsyncImage(
+                    model = requests.getOrNull(1),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .clip(CircleShape)
+                )
             }
-            Spacer(modifier = Modifier.height(2.dp))
-            Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
-                    AsyncImage(
-                        model = requests.getOrNull(2),
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
-                Spacer(modifier = Modifier.width(2.dp))
-                Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
-                    AsyncImage(
-                        model = requests.getOrNull(3),
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
+            Row(
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                AsyncImage(
+                    model = requests.getOrNull(2),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .clip(CircleShape)
+                )
+                AsyncImage(
+                    model = requests.getOrNull(3),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .clip(CircleShape)
+                )
             }
         }
     }
