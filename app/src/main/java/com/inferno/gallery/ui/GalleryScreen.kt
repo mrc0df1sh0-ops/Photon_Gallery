@@ -223,7 +223,7 @@ fun GalleryScreen(
                         }
                         item?.let {
                             val uri = it.key as? String
-                            if (uri != null) {
+                            if (uri != null && !uri.startsWith("header_")) {
                                 viewModel.toggleSelection(uri)
                                 initialItemUri = uri
                             }
@@ -246,7 +246,7 @@ fun GalleryScreen(
                             }
                             item?.let {
                                 val uri = it.key as? String
-                                if (uri != null && uri != initialItemUri) {
+                                if (uri != null && !uri.startsWith("header_") && uri != initialItemUri) {
                                     viewModel.addSelection(uri) 
                                 }
                             }
@@ -258,6 +258,12 @@ fun GalleryScreen(
         if (viewMode == ViewMode.Immersive) {
             items(
                 count = pagedMedia.itemCount,
+                key = pagedMedia.itemKey { item ->
+                    when (item) {
+                        is GalleryListItem.Header -> "header_${item.title}"
+                        is GalleryListItem.Item -> item.galleryItem.uri.toString()
+                    }
+                },
                 contentType = pagedMedia.itemContentType { item: GalleryListItem ->
                     if (item is GalleryListItem.Item) "media" else "header"
                 }
@@ -283,6 +289,12 @@ fun GalleryScreen(
         } else {
             items(
                 count = pagedMedia.itemCount,
+                key = pagedMedia.itemKey { item ->
+                    when (item) {
+                        is GalleryListItem.Header -> "header_${item.title}"
+                        is GalleryListItem.Item -> item.galleryItem.uri.toString()
+                    }
+                },
                 contentType = pagedMedia.itemContentType { item: GalleryListItem ->
                     if (item is GalleryListItem.Item) "media" else "header"
                 },
