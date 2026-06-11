@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.inferno.gallery.data.db.DatabaseProvider
 import com.inferno.gallery.data.db.TelegramBackupEntity
 import com.inferno.gallery.data.db.CloudMediaItem
+import com.inferno.gallery.data.db.MediaWithBackup
 import com.inferno.gallery.data.LocalMediaRepository
 import com.inferno.gallery.data.SettingsRepository
 import com.inferno.gallery.data.DockStyle
@@ -367,9 +368,9 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
     }
 
     val pagedMediaRaw: Flow<PagingData<GalleryItem>> = combine(
-        _currentBucket, selectedFilterIndex, sortOrder, cloudMediaIds
-    ) { bucket, filterIndex, order, cloudIds ->
-        var queryString = "SELECT * FROM core_media "
+        _currentBucket, selectedFilterIndex, sortOrder
+    ) { bucket, filterIndex, order ->
+        var queryString = "SELECT cm.*, tb.telegramFileId, tb.telegramThumbFileId, tb.backupStatus FROM core_media cm LEFT JOIN telegram_backups tb ON cm.id = tb.mediaId "
         val args = mutableListOf<Any>()
         val conditions = mutableListOf<String>()
 
@@ -381,32 +382,27 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
         if (bucket == "search_text") {
             val ids = ftsSearchResults.value.map { it.id }
             if (ids.isEmpty()) {
-                conditions.add("1 = 0")
+                conditions.add("cm.id IN (0)")
             } else {
-                conditions.add("id IN (${ids.joinToString(",")})")
-                conditions.add("bucketName != 'Trash'")
+                conditions.add("cm.id IN (${ids.joinToString(",")})")
+                conditions.add("cm.bucketName != 'Trash'")
             }
         } else {
             if (bucket == "All") {
-                conditions.add("bucketName != 'Trash'")
+                conditions.add("cm.bucketName != 'Trash'")
             } else if (bucket == "telegram_cloud") {
-                val ids = cloudIds
-                if (ids.isEmpty()) {
-                    conditions.add("1 = 0")
-                } else {
-                    conditions.add("id IN (${ids.joinToString(",")})")
-                }
+                conditions.add("tb.backupStatus = 'SUCCESS'")
             } else if (bucket == "Videos") {
-                conditions.add("isVideo = 1")
-                conditions.add("bucketName != 'Trash'")
+                conditions.add("cm.isVideo = 1")
+                conditions.add("cm.bucketName != 'Trash'")
             } else if (bucket != null) {
-                conditions.add("bucketName = ?")
+                conditions.add("cm.bucketName = ?")
                 args.add(bucket)
             } else if (folderName != null) {
-                conditions.add("bucketName = ?")
+                conditions.add("cm.bucketName = ?")
                 args.add(folderName)
             } else {
-                conditions.add("bucketName != 'Trash'")
+                conditions.add("cm.bucketName != 'Trash'")
             }
         }
 
@@ -415,11 +411,11 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
         }
 
         when (order) {
-            SortOrder.NewToOld -> queryString += "ORDER BY dateAdded DESC"
-            SortOrder.OldToNew -> queryString += "ORDER BY dateAdded ASC"
-            SortOrder.SmallToBig -> queryString += "ORDER BY size ASC"
-            SortOrder.BigToSmall -> queryString += "ORDER BY size DESC"
-            SortOrder.NameAsc -> queryString += "ORDER BY name ASC"
+            SortOrder.NewToOld -> queryString += "ORDER BY cm.dateAdded DESC"
+            SortOrder.OldToNew -> queryString += "ORDER BY cm.dateAdded ASC"
+            SortOrder.SmallToBig -> queryString += "ORDER BY cm.size ASC"
+            SortOrder.BigToSmall -> queryString += "ORDER BY cm.size DESC"
+            SortOrder.NameAsc -> queryString += "ORDER BY cm.name ASC"
         }
 
         androidx.sqlite.db.SimpleSQLiteQuery(queryString, args.toTypedArray())
@@ -429,10 +425,8 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
         ) {
             database.mediaDao().observeMediaPagingRaw(query)
         }.flow
-    }.combine(database.telegramBackupDao().observeCloudMedia()) { pagingData, cloudItems ->
-        val cloudMap = cloudItems.associateBy { it.id }
+    }.map { pagingData ->
         pagingData.map { entity ->
-            val cloudItem = cloudMap[entity.id]
             GalleryItem(
                 id = entity.id.toString(),
                 uri = Uri.parse(entity.uriString),
@@ -444,8 +438,8 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
                 path = entity.filePath,
                 isVideo = entity.isVideo,
                 durationMs = entity.durationMs,
-                telegramFileId = cloudItem?.telegramFileId,
-                telegramThumbFileId = cloudItem?.telegramThumbFileId
+                telegramFileId = entity.telegramFileId,
+                telegramThumbFileId = entity.telegramThumbFileId
             )
         }
     }.cachedIn(viewModelScope)
