@@ -509,7 +509,8 @@ fun MainAppLayout(
         )
     }
 
-    if (!onboardingCompleted) {
+    val hasRequiredPermissions = photosGranted && videosGranted
+    if (!onboardingCompleted && !hasRequiredPermissions) {
         PermissionOnboardingScreen(
             photosGranted = photosGranted,
             videosGranted = videosGranted,
