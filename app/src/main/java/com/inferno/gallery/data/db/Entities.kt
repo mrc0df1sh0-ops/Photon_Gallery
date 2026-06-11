@@ -20,6 +20,24 @@ data class CoreMediaEntity(
     @ColumnInfo(name = "is_indexed_ocr") val isIndexedOcr: Boolean = false
 )
 
+data class MediaWithBackup(
+    val id: Long,
+    val uriString: String,
+    val filePath: String,
+    val bucketName: String,
+    val dateAdded: Long,
+    val dateModified: Long,
+    val size: Long,
+    val name: String,
+    val mimeType: String?,
+    val isVideo: Boolean,
+    val durationMs: Long?,
+    val isIndexedOcr: Boolean = false,
+    val telegramFileId: String?,
+    val telegramThumbFileId: String?,
+    val backupStatus: String?
+)
+
 
 
 // NOTE: ImageFtsEntity / @Fts5 are intentionally absent.
