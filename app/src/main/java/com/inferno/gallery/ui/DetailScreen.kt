@@ -60,6 +60,8 @@ import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.outlined.Cloud
 import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -150,7 +152,7 @@ fun DetailScreen(
     val window = activity?.window
     val insetsController = window?.let { androidx.core.view.WindowCompat.getInsetsController(it, it.decorView) }
     
-    val galleryItems by viewModel.images.collectAsState()
+    val galleryItems by viewModel.detailMedia.collectAsState()
     val favoriteIds by viewModel.favoriteIds.collectAsState()
 
 
@@ -264,6 +266,34 @@ fun DetailScreen(
                 }
             }
             // Don't call onBack() - let user stay in viewer
+        }
+        pendingDeletePage = null
+    }
+
+    val restoreLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            val deletedPage = pendingDeletePage
+            val currentList = galleryItems
+            
+            // Re-syncing logic: wait for MediaStore ContentObserver to re-add the item
+            // For immediate UI update, we can navigate away from the current item
+            
+            if (deletedPage != null && currentList.isNotEmpty()) {
+                val newTargetIndex = when {
+                    deletedPage < currentList.size - 1 -> deletedPage
+                    deletedPage > 0 -> deletedPage - 1
+                    else -> 0
+                }
+                if (newTargetIndex < galleryItems.size) {
+                    coroutineScope.launch {
+                        pagerState.animateScrollToPage(newTargetIndex)
+                    }
+                } else {
+                    onBack()
+                }
+            }
         }
         pendingDeletePage = null
     }
@@ -575,8 +605,9 @@ fun DetailScreen(
                                                 // For pure pan (zoomDelta=1) this reduces to offset + pan. ✓
                                                 val focalX = centroid.x - composableW / 2f
                                                 val focalY = centroid.y - composableH / 2f
-                                                var newOffsetX = (offsetX.floatValue - focalX) * zoomChange + focalX + panChange.x
-                                                var newOffsetY = (offsetY.floatValue - focalY) * zoomChange + focalY + panChange.y
+                                                val effectiveZoom = newScale / scale.floatValue
+                                                var newOffsetX = (offsetX.floatValue - focalX) * effectiveZoom + focalX + panChange.x
+                                                var newOffsetY = (offsetY.floatValue - focalY) * effectiveZoom + focalY + panChange.y
 
                                                 newOffsetX = newOffsetX.coerceIn(-maxX, maxX)
                                                 newOffsetY = newOffsetY.coerceIn(-maxY, maxY)
@@ -608,7 +639,7 @@ fun DetailScreen(
                                             val currentMaxX = (composableW * (scale.floatValue - 1)) / 2f
                                             val currentMaxY = (composableH * (scale.floatValue - 1)) / 2f
                                             // Project where the image would coast to with natural deceleration.
-                                            val flingFactor = 0.18f
+                                            val flingFactor = 0.4f
                                             val targetFlingX = (offsetX.floatValue + velocity.x * flingFactor)
                                                 .coerceIn(-currentMaxX, currentMaxX)
                                             val targetFlingY = (offsetY.floatValue + velocity.y * flingFactor)
@@ -883,25 +914,58 @@ fun DetailScreen(
                         ) { 
                             Icon(Icons.Outlined.Edit, contentDescription = "Edit") 
                         }
-                        IconButton(
-                            onClick = {
-                                if (currentItem != null) {
-                                    if (bucketName == "telegram_cloud") {
-                                        showCloudDeleteConfirmDialog = true
-                                    } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        if (bucketName == "Trash") {
+                            IconButton(
+                                onClick = {
+                                    if (currentItem != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                                         val isMediaStoreUri = currentItem.uri.toString().startsWith("content://")
-                                        if (!isMediaStoreUri) {
-                                            android.widget.Toast.makeText(context, "Cannot delete this item", android.widget.Toast.LENGTH_SHORT).show()
-                                            return@IconButton
+                                        if (isMediaStoreUri) {
+                                            pendingDeleteItem = currentItem
+                                            pendingDeletePage = pagerState.currentPage
+                                            val restoreIntent = MediaStore.createTrashRequest(context.contentResolver, listOf(currentItem.uri), false)
+                                            restoreLauncher.launch(androidx.activity.result.IntentSenderRequest.Builder(restoreIntent.intentSender).build())
                                         }
-                                        pendingDeleteItem = currentItem
-                                        pendingDeletePage = pagerState.currentPage
-                                        showDeleteConfirmDialog = true
                                     }
                                 }
+                            ) { 
+                                Icon(Icons.Outlined.Refresh, contentDescription = "Restore") 
                             }
-                        ) { 
-                            Icon(Icons.Outlined.Delete, contentDescription = "Delete") 
+                            IconButton(
+                                onClick = {
+                                    if (currentItem != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                                        val isMediaStoreUri = currentItem.uri.toString().startsWith("content://")
+                                        if (isMediaStoreUri) {
+                                            pendingDeleteItem = currentItem
+                                            pendingDeletePage = pagerState.currentPage
+                                            val deleteIntent = MediaStore.createDeleteRequest(context.contentResolver, listOf(currentItem.uri))
+                                            launcher.launch(androidx.activity.result.IntentSenderRequest.Builder(deleteIntent.intentSender).build())
+                                        }
+                                    }
+                                }
+                            ) { 
+                                Icon(Icons.Outlined.Delete, contentDescription = "Permanently Delete", tint = MaterialTheme.colorScheme.error) 
+                            }
+                        } else {
+                            IconButton(
+                                onClick = {
+                                    if (currentItem != null) {
+                                        if (bucketName == "telegram_cloud") {
+                                            showCloudDeleteConfirmDialog = true
+                                        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                                            val isMediaStoreUri = currentItem.uri.toString().startsWith("content://")
+                                            if (!isMediaStoreUri) {
+                                                android.widget.Toast.makeText(context, "Cannot delete this item", android.widget.Toast.LENGTH_SHORT).show()
+                                                return@IconButton
+                                            }
+                                            pendingDeleteItem = currentItem
+                                            pendingDeletePage = pagerState.currentPage
+                                            showDeleteConfirmDialog = true
+                                        }
+                                    }
+                                }
+                            ) { 
+                                Icon(Icons.Outlined.Delete, contentDescription = "Delete") 
+                            }
                         }
                         
                         Box {

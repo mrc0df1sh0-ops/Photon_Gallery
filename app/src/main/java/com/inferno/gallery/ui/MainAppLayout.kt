@@ -43,6 +43,7 @@ import androidx.compose.material.icons.outlined.CloudUpload
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.ArrowDropDown
 import androidx.compose.material.icons.automirrored.outlined.DriveFileMove
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
@@ -677,7 +678,8 @@ fun MainAppLayout(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .navigationBarsPadding(),
+                            .navigationBarsPadding()
+                            .padding(bottom = 4.dp),
                         contentAlignment = Alignment.BottomCenter
                     ) {
                         HorizontalFloatingToolbar(
@@ -687,7 +689,7 @@ fun MainAppLayout(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 13.dp, vertical = 3.dp),
+                                    .padding(horizontal = 13.dp, vertical = 0.dp),
                                 horizontalArrangement = Arrangement.SpaceEvenly,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
@@ -739,10 +741,13 @@ fun MainAppLayout(
                         modifier = Modifier
                             .fillMaxWidth()
                             .background(MaterialTheme.colorScheme.surfaceContainer)
+                            .navigationBarsPadding()
                     ) {
                         NavigationBar(
+                            modifier = Modifier.height(60.dp),
                             containerColor = Color.Transparent,
-                            tonalElevation = 0.dp
+                            tonalElevation = 0.dp,
+                            windowInsets = androidx.compose.foundation.layout.WindowInsets(0.dp)
                         ) {
                             NavigationBarItem(
                                 icon = { Icon(Icons.Outlined.Image, contentDescription = "Photos") },
@@ -949,6 +954,42 @@ fun MainAppLayout(
                     .padding(bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 16.dp)
             ) {
             var expanded by remember { mutableStateOf(false) }
+            var showMoveSheet by remember { mutableStateOf(false) }
+            
+            if (showMoveSheet) {
+                androidx.compose.material3.ModalBottomSheet(
+                    onDismissRequest = { showMoveSheet = false },
+                ) {
+                    val albums by viewModel.allAlbums.collectAsState()
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp)
+                    ) {
+                        Text("Move to Album", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(bottom = 16.dp))
+                        androidx.compose.foundation.lazy.LazyColumn {
+                            items(albums.size) { index ->
+                                val album = albums[index]
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            showMoveSheet = false
+                                            viewModel.moveSelectedMedia(album.bucketName)
+                                        }
+                                        .padding(vertical = 12.dp, horizontal = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(Icons.Outlined.PhotoAlbum, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                                    Spacer(modifier = Modifier.width(16.dp))
+                                    Text(album.bucketName, style = MaterialTheme.typography.bodyLarge)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
             Box {
                 CustomSplitButton(
                     leadingIcon = { Icon(Icons.Outlined.Share, contentDescription = null) },
@@ -979,7 +1020,7 @@ fun MainAppLayout(
                         leadingIcon = { Icon(Icons.AutoMirrored.Outlined.DriveFileMove, contentDescription = null) },
                         onClick = { 
                             expanded = false
-                            // TODO: Move
+                            showMoveSheet = true
                         }
                     )
                     DropdownMenuItem(
@@ -988,6 +1029,15 @@ fun MainAppLayout(
                         onClick = { 
                             expanded = false
                             viewModel.backupSelectedMedia()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Delete from Cloud") },
+                        leadingIcon = { Icon(Icons.Outlined.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+                        onClick = {
+                            expanded = false
+                            viewModel.deleteCloudBackupsByUris(selectedUris)
+                            viewModel.clearSelection()
                         }
                     )
                 }
@@ -1233,7 +1283,7 @@ private fun DockItem(
         modifier = Modifier
             .clip(CircleShape)
             .clickable(onClick = onClick)
-            .padding(horizontal = 6.dp, vertical = 6.dp)
+            .padding(horizontal = 4.dp, vertical = 4.dp)
     ) {
         Box(
             modifier = Modifier

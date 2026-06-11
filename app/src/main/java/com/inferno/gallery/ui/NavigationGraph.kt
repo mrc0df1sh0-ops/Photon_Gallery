@@ -79,6 +79,11 @@ fun NavigationGraph(
                 val mediaId = backStackEntry.arguments?.getString("mediaId") ?: return@composable
                 val bucketName = backStackEntry.arguments?.getString("bucketName")
                 val highlightText = backStackEntry.arguments?.getString("highlightText")
+                
+                androidx.compose.runtime.LaunchedEffect(mediaId) {
+                    galleryViewModel.setDetailItem(mediaId)
+                }
+                
                 val useFullScreen by settingsViewModel.useFullScreen.collectAsState()
                 DetailScreen(
                     mediaId = mediaId,

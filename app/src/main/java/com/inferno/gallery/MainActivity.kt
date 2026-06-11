@@ -51,10 +51,14 @@ class MainActivity : ComponentActivity() {
             }
 
             LaunchedEffect(isDark, useFullScreen) {
-                val insetsController = WindowCompat.getInsetsController(window, window.decorView)
-                insetsController.isAppearanceLightStatusBars = !isDark
-                insetsController.isAppearanceLightNavigationBars = !isDark
+                val style = if (isDark) {
+                    SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
+                } else {
+                    SystemBarStyle.light(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT)
+                }
+                enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
 
+                val insetsController = WindowCompat.getInsetsController(window, window.decorView)
                 if (useFullScreen) {
                     insetsController.hide(WindowInsetsCompat.Type.systemBars())
                     insetsController.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
@@ -69,9 +73,6 @@ class MainActivity : ComponentActivity() {
                 useAmoledBlack = useAmoledBlack
             ) {
                 val backgroundColor = MaterialTheme.colorScheme.background
-                LaunchedEffect(backgroundColor) {
-                    window.decorView.setBackgroundColor(backgroundColor.toArgb())
-                }
 
                 Surface(
                     modifier = Modifier.fillMaxSize(),

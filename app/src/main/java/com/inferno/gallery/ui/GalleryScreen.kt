@@ -138,6 +138,10 @@ import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import androidx.paging.compose.collectAsLazyPagingItems
+import androidx.paging.compose.itemKey
+import androidx.paging.compose.itemContentType
+import com.inferno.gallery.ui.GalleryListItem
 
 
 
@@ -159,8 +163,7 @@ fun GalleryScreen(
         viewModel.setBucket(bucketName)
     }
 
-    val images by viewModel.images.collectAsState()
-    val groupedImages by viewModel.groupedImages.collectAsState()
+    val pagedMedia = viewModel.pagedMedia.collectAsLazyPagingItems()
     val viewMode by viewModel.viewMode.collectAsState()
     val isSelectionMode by viewModel.isSelectionMode.collectAsState()
     val selectedUris by viewModel.selectedUris.collectAsState()
@@ -169,13 +172,7 @@ fun GalleryScreen(
     val thumbnailCornerRadius by viewModel.thumbnailCornerRadius.collectAsState()
     val backupStatuses by viewModel.backupStatuses.collectAsState()
     val lazyGridState = rememberLazyGridState()
-    val totalItems = remember(images, groupedImages, viewMode) {
-        if (viewMode == ViewMode.Immersive) {
-            images.size
-        } else {
-            groupedImages.size + images.size
-        }
-    }
+    val totalItems = pagedMedia.itemCount
     val isScrollInProgress = lazyGridState.isScrollInProgress
     val context = LocalContext.current
 
@@ -260,38 +257,49 @@ fun GalleryScreen(
     ) {
         if (viewMode == ViewMode.Immersive) {
             items(
-                items = images,
-                key = { it.id },
-                contentType = { "media" }
-            ) { item ->
-                GalleryGridItem(
-                    item = item,
-                    sharedTransitionScope = sharedTransitionScope,
-                    animatedVisibilityScope = animatedVisibilityScope,
-                    onClick = onMediaClick,
-                    modifier = Modifier,
-                    isSelected = selectedUris.contains(item.uri.toString()),
-                    gridAutoPlay = gridAutoPlay,
-                    gridCellsCount = gridCellsCount,
-                    thumbnailCornerRadius = thumbnailCornerRadius,
-                    backupStatus = backupStatuses[item.id.toLongOrNull() ?: -1L],
-                    isScrollInProgress = isScrollInProgress
-                )
+                count = pagedMedia.itemCount,
+                contentType = pagedMedia.itemContentType { item: GalleryListItem ->
+                    if (item is GalleryListItem.Item) "media" else "header"
+                }
+            ) { index ->
+                val listItem = pagedMedia[index]
+                if (listItem is GalleryListItem.Item) {
+                    val item = listItem.galleryItem
+                    GalleryGridItem(
+                        item = item,
+                        sharedTransitionScope = sharedTransitionScope,
+                        animatedVisibilityScope = animatedVisibilityScope,
+                        onClick = onMediaClick,
+                        modifier = Modifier,
+                        isSelected = selectedUris.contains(item.uri.toString()),
+                        gridAutoPlay = gridAutoPlay,
+                        gridCellsCount = gridCellsCount,
+                        thumbnailCornerRadius = thumbnailCornerRadius,
+                        backupStatus = backupStatuses[item.id.toLongOrNull() ?: -1L],
+                        isScrollInProgress = isScrollInProgress
+                    )
+                }
             }
         } else {
-            groupedImages.forEach { (date, groupItems) ->
-                item(span = { GridItemSpan(maxLineSpan) }) {
+            items(
+                count = pagedMedia.itemCount,
+                contentType = pagedMedia.itemContentType { item: GalleryListItem ->
+                    if (item is GalleryListItem.Item) "media" else "header"
+                },
+                span = { index ->
+                    val listItem = pagedMedia[index]
+                    if (listItem is GalleryListItem.Header) GridItemSpan(maxLineSpan) else GridItemSpan(1)
+                }
+            ) { index ->
+                val listItem = pagedMedia[index]
+                if (listItem is GalleryListItem.Header) {
                     Text(
-                        text = date,
+                        text = listItem.title,
                         style = MaterialTheme.typography.titleMedium,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 16.dp)
                     )
-                }
-                items(
-                    items = groupItems,
-                    key = { it.id },
-                    contentType = { "media" }
-                ) { item ->
+                } else if (listItem is GalleryListItem.Item) {
+                    val item = listItem.galleryItem
                     GalleryGridItem(
                         item = item,
                         sharedTransitionScope = sharedTransitionScope,
@@ -310,11 +318,10 @@ fun GalleryScreen(
         }
     }
 
-
         FastScroller(
             lazyGridState = lazyGridState,
             totalItems = totalItems,
-            images = images,
+            images = emptyList(), // TODO: FastScroller needs update for Paging3
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .padding(
