@@ -85,6 +85,7 @@ import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.material.icons.outlined.PrivacyTip
 
 @Composable
 fun SettingsScreen(
@@ -135,6 +136,7 @@ fun SettingsScreen(
             val ocrIndexWorkInfo by viewModel.ocrIndexWorkInfo.collectAsState(initial = null)
             val totalImagesCount by viewModel.totalImagesCount.collectAsState()
             val unindexedOcrImagesCount by viewModel.unindexedOcrImagesCount.collectAsState()
+            val stripMetadataOnShare by viewModel.stripMetadataOnShare.collectAsState()
             
             val isCurrentlyDark = when (themeMode) {
                 ThemeMode.SYSTEM -> isSystemDark
@@ -345,6 +347,28 @@ fun SettingsScreen(
                             thumbContent = {
                                 Icon(
                                     imageVector = if (gridAutoPlay) Icons.Outlined.Check else Icons.Outlined.Close,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(SwitchDefaults.IconSize)
+                                )
+                            }
+                        )
+                    },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                )
+
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+
+                ListItem(
+                    leadingContent = { Icon(Icons.Outlined.PrivacyTip, contentDescription = null) },
+                    headlineContent = { Text("Strip Metadata Before Sharing") },
+                    supportingContent = { Text("Remove GPS, camera info, and timestamps from images when sharing") },
+                    trailingContent = {
+                        Switch(
+                            checked = stripMetadataOnShare,
+                            onCheckedChange = { viewModel.setStripMetadataOnShare(it) },
+                            thumbContent = {
+                                Icon(
+                                    imageVector = if (stripMetadataOnShare) Icons.Outlined.Check else Icons.Outlined.Close,
                                     contentDescription = null,
                                     modifier = Modifier.size(SwitchDefaults.IconSize)
                                 )
