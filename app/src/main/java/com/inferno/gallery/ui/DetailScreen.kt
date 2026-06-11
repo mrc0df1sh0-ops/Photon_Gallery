@@ -128,6 +128,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import com.inferno.gallery.data.db.DatabaseProvider
 import com.inferno.gallery.data.SettingsRepository
+import androidx.core.content.FileProvider
+import kotlinx.coroutines.launch
+import java.io.File
 
 
 
@@ -1051,18 +1054,26 @@ fun CustomShareSheet(items: List<GalleryItem>, initialIndex: Int, onDismiss: () 
     val context = LocalContext.current
     val pm = context.packageManager
     val selectedUris = remember { mutableStateListOf(items.getOrNull(initialIndex)?.uri).apply { removeAll { it == null } } }
-    
+    val coroutineScope = rememberCoroutineScope()
+
+    // Read the strip-metadata preference asynchronously via produceState (Compose-idiomatic)
+    val stripMetadata by produceState(initialValue = false) {
+        value = withContext(Dispatchers.IO) {
+            SettingsRepository(context).stripMetadataOnShareFlow.first()
+        }
+    }
+
     // Query apps that handle image sharing
     val shareTargets = remember {
         val intent = Intent(Intent.ACTION_SEND).setType("image/*")
         pm.queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY)
     }
-    
+
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = MaterialTheme.colorScheme.surfaceContainerHigh) {
         Column(modifier = Modifier.fillMaxWidth().padding(bottom = 32.dp)) {
             // Header
             Text("${selectedUris.size} selected", style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold), modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp))
-            
+
             // Image Multi-Select Carousel
             LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 items(items) { item ->
@@ -1089,35 +1100,94 @@ fun CustomShareSheet(items: List<GalleryItem>, initialIndex: Int, onDismiss: () 
                     }
                 }
             }
-            
+
             Spacer(modifier = Modifier.height(24.dp))
-            
+
             val sortedShareTargets = remember(shareTargets) {
                 val priorityApps = listOf("com.instagram.android", "com.whatsapp", "com.facebook.katana", "com.google.android.gm")
                 shareTargets.sortedByDescending { target ->
                     priorityApps.contains(target.activityInfo.packageName)
                 }
             }
-            
+
             // App Targets Grid
             LazyVerticalGrid(
                 columns = GridCells.Fixed(5),
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.heightIn(max = 240.dp) // Limits height to 2 rows to allow for a 'peek' effect
+                modifier = Modifier.heightIn(max = 240.dp)
             ) {
                 items(sortedShareTargets) { target ->
                     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.clickable {
                         if (selectedUris.isEmpty()) return@clickable
-                        val intent = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
-                            type = "image/*"
-                            putParcelableArrayListExtra(Intent.EXTRA_STREAM, ArrayList(selectedUris))
-                            setClassName(target.activityInfo.packageName, target.activityInfo.name)
-                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        coroutineScope.launch {
+                            val urisToShare: List<Uri> = if (stripMetadata) {
+                                // Strip PII EXIF and share via FileProvider URI
+                                withContext(Dispatchers.IO) {
+                                    val shareDir = File(context.cacheDir, "shared_images").also { it.mkdirs() }
+                                    selectedUris.filterNotNull().mapIndexed { idx, uri ->
+                                        try {
+                                            val extension = context.contentResolver.getType(uri)?.substringAfter("/") ?: "jpg"
+                                            val tempFile = File(shareDir, "share_${System.currentTimeMillis()}_$idx.$extension")
+                                            context.contentResolver.openInputStream(uri)?.use { input ->
+                                                tempFile.outputStream().use { output -> input.copyTo(output) }
+                                            }
+                                            // Strip PII EXIF tags
+                                            val exif = androidx.exifinterface.media.ExifInterface(tempFile.absolutePath)
+                                            val piiTags = listOf(
+                                                androidx.exifinterface.media.ExifInterface.TAG_GPS_LATITUDE,
+                                                androidx.exifinterface.media.ExifInterface.TAG_GPS_LATITUDE_REF,
+                                                androidx.exifinterface.media.ExifInterface.TAG_GPS_LONGITUDE,
+                                                androidx.exifinterface.media.ExifInterface.TAG_GPS_LONGITUDE_REF,
+                                                androidx.exifinterface.media.ExifInterface.TAG_GPS_ALTITUDE,
+                                                androidx.exifinterface.media.ExifInterface.TAG_GPS_ALTITUDE_REF,
+                                                androidx.exifinterface.media.ExifInterface.TAG_GPS_TIMESTAMP,
+                                                androidx.exifinterface.media.ExifInterface.TAG_GPS_DATESTAMP,
+                                                androidx.exifinterface.media.ExifInterface.TAG_GPS_PROCESSING_METHOD,
+                                                androidx.exifinterface.media.ExifInterface.TAG_GPS_DEST_BEARING,
+                                                androidx.exifinterface.media.ExifInterface.TAG_GPS_DEST_DISTANCE,
+                                                androidx.exifinterface.media.ExifInterface.TAG_GPS_SPEED,
+                                                androidx.exifinterface.media.ExifInterface.TAG_GPS_TRACK,
+                                                androidx.exifinterface.media.ExifInterface.TAG_GPS_IMG_DIRECTION,
+                                                androidx.exifinterface.media.ExifInterface.TAG_MAKE,
+                                                androidx.exifinterface.media.ExifInterface.TAG_MODEL,
+                                                androidx.exifinterface.media.ExifInterface.TAG_SOFTWARE,
+                                                androidx.exifinterface.media.ExifInterface.TAG_ARTIST,
+                                                androidx.exifinterface.media.ExifInterface.TAG_COPYRIGHT,
+                                                androidx.exifinterface.media.ExifInterface.TAG_USER_COMMENT,
+                                                androidx.exifinterface.media.ExifInterface.TAG_DATETIME,
+                                                androidx.exifinterface.media.ExifInterface.TAG_DATETIME_ORIGINAL,
+                                                androidx.exifinterface.media.ExifInterface.TAG_DATETIME_DIGITIZED,
+                                                androidx.exifinterface.media.ExifInterface.TAG_OFFSET_TIME,
+                                                androidx.exifinterface.media.ExifInterface.TAG_OFFSET_TIME_ORIGINAL
+                                            )
+                                            piiTags.forEach { tag -> exif.setAttribute(tag, null) }
+                                            exif.saveAttributes()
+                                            FileProvider.getUriForFile(
+                                                context,
+                                                "${context.packageName}.fileprovider",
+                                                tempFile
+                                            )
+                                        } catch (e: Exception) {
+                                            android.util.Log.e("CustomShareSheet", "Failed to strip metadata for $uri", e)
+                                            uri  // Fallback to original URI on error
+                                        }
+                                    }
+                                }
+                            } else {
+                                selectedUris.filterNotNull()
+                            }
+
+                            val intent = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+                                type = "image/*"
+                                putParcelableArrayListExtra(Intent.EXTRA_STREAM, ArrayList(urisToShare))
+                                setClassName(target.activityInfo.packageName, target.activityInfo.name)
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            }
+                            context.startActivity(intent)
+                            onDismiss()
                         }
-                        context.startActivity(intent)
-                        onDismiss()
                     }) {
                         // Coil handles native Android Drawables automatically
                         AsyncImage(model = target.loadIcon(pm), contentDescription = null, modifier = Modifier.size(60.dp).clip(CircleShape))
