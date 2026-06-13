@@ -33,6 +33,7 @@ import androidx.compose.foundation.gestures.calculateCentroid
 import androidx.compose.foundation.gestures.calculateCentroidSize
 import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.foundation.gestures.detectTapGestures
 
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.layout.Arrangement
@@ -151,12 +152,40 @@ fun DetailScreen(
     }
 
     val context = LocalContext.current
+    val settingsRepo = remember { SettingsRepository(context) }
+    val confirmDeleteEnabled by settingsRepo.confirmDeleteEnabledFlow.collectAsState(initial = true)
     val activity = context as? android.app.Activity
     val window = activity?.window
     val insetsController = window?.let { androidx.core.view.WindowCompat.getInsetsController(it, it.decorView) }
     
     val galleryItems by viewModel.detailMedia.collectAsState()
     val favoriteIds by viewModel.favoriteIds.collectAsState()
+
+    val maxBrightnessEnabled by settingsRepo.maxBrightnessEnabledFlow.collectAsState(initial = false)
+
+    // Overrides screen brightness to maximum in fullscreen and restores it when leaving
+    androidx.compose.runtime.DisposableEffect(maxBrightnessEnabled) {
+        if (maxBrightnessEnabled) {
+            val layoutParams = window?.attributes
+            if (layoutParams != null) {
+                val originalBrightness = layoutParams.screenBrightness
+                layoutParams.screenBrightness = android.view.WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_FULL
+                window.attributes = layoutParams
+
+                onDispose {
+                    val currentParams = window.attributes
+                    if (currentParams != null) {
+                        currentParams.screenBrightness = originalBrightness
+                        window.attributes = currentParams
+                    }
+                }
+            } else {
+                onDispose {}
+            }
+        } else {
+            onDispose {}
+        }
+    }
 
 
     // Ensure we don't crash if items is empty
@@ -191,7 +220,6 @@ fun DetailScreen(
                     if (backup != null && backup.backupStatus == "SUCCESS") {
                         val fileId = backup.telegramFileId
                         if (fileId != null) {
-                            val settingsRepo = SettingsRepository(context)
                             val token = withContext(Dispatchers.IO) {
                                 try { settingsRepo.telegramBotTokenFlow.first() } catch (e: Exception) { "" }
                             }
@@ -240,7 +268,7 @@ fun DetailScreen(
     var showUi by remember { mutableStateOf(false) }
     var showShareSheet by remember { mutableStateOf(false) }
 
-    var isUserScrollEnabled by remember { mutableStateOf(true) }
+    var currentScale by remember { mutableStateOf(1f) }
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
     var showCloudDeleteConfirmDialog by remember { mutableStateOf(false) }
     var pendingDeleteItem by remember { mutableStateOf<GalleryItem?>(null) }
@@ -299,6 +327,24 @@ fun DetailScreen(
             }
         }
         pendingDeletePage = null
+    }
+
+    var showRenameDialog by remember { mutableStateOf(false) }
+    var pendingRenameItem by remember { mutableStateOf<GalleryItem?>(null) }
+    var pendingRenameNewName by remember { mutableStateOf("") }
+
+    val renameLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            val item = pendingRenameItem
+            val name = pendingRenameNewName
+            if (item != null && name.isNotBlank()) {
+                viewModel.renameMedia(context, item, name) {
+                    // Fallback
+                }
+            }
+        }
     }
 
     androidx.compose.runtime.DisposableEffect(useFullScreenGlobal) {
@@ -395,6 +441,57 @@ fun DetailScreen(
         )
     }
 
+    if (showRenameDialog && currentItem != null) {
+        var renameText by remember(currentItem) { mutableStateOf(currentItem.name) }
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showRenameDialog = false },
+            title = { androidx.compose.material3.Text("Rename File") },
+            text = {
+                androidx.compose.foundation.layout.Column {
+                    androidx.compose.material3.OutlinedTextField(
+                        value = renameText,
+                        onValueChange = { renameText = it },
+                        label = { androidx.compose.material3.Text("File Name") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(
+                    onClick = {
+                        val trimmed = renameText.trim()
+                        if (trimmed.isNotEmpty() && trimmed != currentItem.name) {
+                            val oldExt = currentItem.name.substringAfterLast('.', "")
+                            val finalNewName = if (oldExt.isNotEmpty() && !trimmed.endsWith(".$oldExt", ignoreCase = true)) {
+                                if (trimmed.contains('.')) trimmed else "$trimmed.$oldExt"
+                            } else {
+                                trimmed
+                            }
+                            viewModel.renameMedia(context, currentItem, finalNewName) { pendingIntent ->
+                                pendingRenameItem = currentItem
+                                pendingRenameNewName = finalNewName
+                                renameLauncher.launch(
+                                    androidx.activity.result.IntentSenderRequest.Builder(pendingIntent).build()
+                                )
+                            }
+                        }
+                        showRenameDialog = false
+                    }
+                ) {
+                    androidx.compose.material3.Text("Save")
+                }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(
+                    onClick = { showRenameDialog = false }
+                ) {
+                    androidx.compose.material3.Text("Cancel")
+                }
+            }
+        )
+    }
+
     var showInfoCard by remember { mutableStateOf(false) }
     var currentExif by remember { mutableStateOf<ExifData?>(null) }
 
@@ -416,7 +513,7 @@ fun DetailScreen(
     ) {
         HorizontalPager(
             state = pagerState,
-            userScrollEnabled = isUserScrollEnabled,
+            userScrollEnabled = currentScale <= 1.05f,
             modifier = Modifier.fillMaxSize(),
             key = { page -> galleryItems.getOrNull(page)?.uri?.toString() ?: page.toString() }
         ) { page ->
@@ -440,19 +537,30 @@ fun DetailScreen(
             
 
             
+            var imageAspectRatio by remember(item) { mutableStateOf(1f) }
             val scale = remember { androidx.compose.runtime.mutableFloatStateOf(1f) }
             val offsetX = remember { androidx.compose.runtime.mutableFloatStateOf(0f) }
             val offsetY = remember { androidx.compose.runtime.mutableFloatStateOf(0f) }
             val animJob = remember { androidx.compose.runtime.mutableStateOf<kotlinx.coroutines.Job?>(null) }
-            
-            // Removed LaunchedEffect for isUserScrollEnabled to prevent race condition
+
+            androidx.compose.runtime.LaunchedEffect(pagerState.currentPage) {
+                if (pagerState.currentPage != page) {
+                    scale.floatValue = 1f
+                    offsetX.floatValue = 0f
+                    offsetY.floatValue = 0f
+                } else {
+                    currentScale = scale.floatValue
+                }
+            }
             
             val pageOffset = (pagerState.currentPage - page) + pagerState.currentPageOffsetFraction
             val absoluteOffset = kotlin.math.abs(pageOffset)
             val pagerScale = 1f - (absoluteOffset.coerceIn(0f, 1f) * 0.05f)
             val pagerAlpha = 1f - (absoluteOffset.coerceIn(0f, 1f) * 0.5f)
 
-            Box(modifier = Modifier.fillMaxSize()) {
+            androidx.compose.foundation.layout.BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                val parentWidth = constraints.maxWidth.toFloat()
+                val parentHeight = constraints.maxHeight.toFloat()
                 if (item.isVideo) {
                     VideoPlayerItem(
                         uri = resolvedUri,
@@ -500,6 +608,12 @@ fun DetailScreen(
                             model = request,
                             contentDescription = "Full-screen photo",
                             contentScale = ContentScale.Fit,
+                            onSuccess = { state ->
+                                val size = state.painter.intrinsicSize
+                                if (size.width > 0f && size.height > 0f && size.width.isFinite() && size.height.isFinite()) {
+                                    imageAspectRatio = size.width / size.height
+                                }
+                            },
                             modifier = Modifier
                                 .fillMaxSize()
                                 .sharedBounds(
@@ -507,11 +621,11 @@ fun DetailScreen(
                                     animatedVisibilityScope = animatedVisibilityScope,
                                     enter = fadeIn(),
                                     exit = fadeOut(),
-
+                                    resizeMode = SharedTransitionScope.ResizeMode.scaleToBounds(),
                                     boundsTransform = { _, _ ->
                                         spring(
                                             dampingRatio = Spring.DampingRatioNoBouncy,
-                                            stiffness = Spring.StiffnessMediumLow
+                                            stiffness = Spring.StiffnessMedium
                                         )
                                     }
                                 )
@@ -523,198 +637,176 @@ fun DetailScreen(
                                 // pan to be 5x slower than the finger. With pointerInput first
                                 // (outer), events arrive in screen/layout space — 1:1 with finger.
                                 .pointerInput(Unit) {
-                                    // Unified gesture handler: tap, double-tap, pinch-zoom, pan
-                                    // Uses a single awaitEachGesture loop to eliminate gesture conflicts
-                                    // caused by two stacked pointerInput blocks competing for events.
-                                    var lastTapTime = 0L
-                                    var lastTapPosition = Offset.Zero
+                                    detectTapGestures(
+                                        onTap = {
+                                            activeHighlight = null
+                                            if (showInfoCard || showUi) {
+                                                showInfoCard = false
+                                                showUi = false
+                                            } else {
+                                                showUi = true
+                                            }
+                                        },
+                                        onDoubleTap = { centroid ->
+                                            animJob.value?.cancel()
+                                            animJob.value = coroutineScope.launch {
+                                                val composableW = size.width.toFloat()
+                                                val composableH = size.height.toFloat()
+                                                if (scale.floatValue > 1f) {
+                                                    // Zoom out to fit
+                                                    currentScale = 1f
+                                                    launch { androidx.compose.animation.core.animate(scale.floatValue, 1f, animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessLow)) { v, _ -> scale.floatValue = v } }
+                                                    launch { androidx.compose.animation.core.animate(offsetX.floatValue, 0f, animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessLow)) { v, _ -> offsetX.floatValue = v } }
+                                                    launch { androidx.compose.animation.core.animate(offsetY.floatValue, 0f, animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessLow)) { v, _ -> offsetY.floatValue = v } }
+                                                } else {
+                                                    // Zoom in to tapped point
+                                                    val targetScale = 3.5f
+                                                    currentScale = targetScale
+                                                    val targetX = -(centroid.x - composableW / 2f) * (targetScale - 1)
+                                                    val targetY = -(centroid.y - composableH / 2f) * (targetScale - 1)
+                                                    val maxX = (composableW * (targetScale - 1)) / 2f
+                                                    val maxY = (composableH * (targetScale - 1)) / 2f
+                                                    launch { androidx.compose.animation.core.animate(scale.floatValue, targetScale, animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessLow)) { v, _ -> scale.floatValue = v } }
+                                                    launch { androidx.compose.animation.core.animate(offsetX.floatValue, targetX.coerceIn(-maxX, maxX), animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessLow)) { v, _ -> offsetX.floatValue = v } }
+                                                    launch { androidx.compose.animation.core.animate(offsetY.floatValue, targetY.coerceIn(-maxY, maxY), animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessLow)) { v, _ -> offsetY.floatValue = v } }
+                                                }
+                                            }
+                                        }
+                                    )
+                                }
+                                .pointerInput(Unit) {
+                                    // Unified gesture handler: pinch-zoom, pan
                                     awaitEachGesture {
-                                        // requireUnconsumed=false: prevent missing gestures if a parent
-                                        // or sibling already consumed the DOWN event.
                                         val firstDown = awaitFirstDown(requireUnconsumed = false)
                                         val downTime = System.currentTimeMillis()
                                         val downPosition = firstDown.position
-
-                                        val isDoubleTap = (downTime - lastTapTime) < 300L &&
-                                            (downPosition - lastTapPosition).getDistance() < 100f
-
-                                        var accumulatedZoom = 1f
-                                        var accumulatedPan = Offset.Zero
-                                        var pastTouchSlop = false
-                                        val touchSlop = viewConfiguration.touchSlop
-                                        val composableW = size.width.toFloat()
-                                        val composableH = size.height.toFloat()
-                                        val velocityTracker = VelocityTracker()
-                                        // Track the peak pointer count so we can distinguish a pure
-                                        // single-finger pan from a pinch that ended on one finger.
-                                        // Fling must NOT fire after pinch — mixing two-finger positions
-                                        // into the VelocityTracker produces garbage velocity that shoots
-                                        // the image to random corners on finger lift.
-                                        var maxPointerCount = 0
-
-                                        while (true) {
-                                            val event = awaitPointerEvent()
-                                            if (event.changes.any { it.isConsumed }) break
-
-                                            val pressedCount = event.changes.count { it.pressed }
-                                            maxPointerCount = maxOf(maxPointerCount, pressedCount)
-
-                                            // Only feed the single active pointer into the tracker.
-                                            // If we add both fingers of a pinch, the interleaved
-                                            // positions produce a random velocity on lift.
-                                            if (pressedCount == 1) {
-                                                event.changes.firstOrNull { it.pressed }
-                                                    ?.let { velocityTracker.addPointerInputChange(it) }
-                                            }
-
-                                            val zoomChange = event.calculateZoom()
-                                            val panChange = event.calculatePan()
-
-                                            if (!pastTouchSlop) {
-                                                accumulatedZoom *= zoomChange
-                                                accumulatedPan += panChange
-                                                val centroidSize = event.calculateCentroidSize(useCurrent = false)
-                                                val zoomMotion = kotlin.math.abs(1 - accumulatedZoom) * centroidSize
-                                                val panMotion = accumulatedPan.getDistance()
-                                                if (zoomMotion > touchSlop || panMotion > touchSlop) {
-                                                    pastTouchSlop = true
-                                                    lastTapTime = 0L
+                                        
+                                        var shouldStartZoomPan = scale.floatValue > 1f
+                                        if (!shouldStartZoomPan) {
+                                            // Wait to see if a second finger is placed down (pinch-to-zoom)
+                                            while (true) {
+                                                val event = awaitPointerEvent()
+                                                if (event.changes.any { it.isConsumed }) break
+                                                if (event.changes.size > 1) {
+                                                    shouldStartZoomPan = true
+                                                    break
                                                 }
+                                                if (!event.changes.any { it.pressed }) break
                                             }
+                                        }
+                                        
+                                        if (shouldStartZoomPan) {
+                                            var accumulatedZoom = 1f
+                                            var accumulatedPan = Offset.Zero
+                                            var pastTouchSlop = false
+                                            val touchSlop = viewConfiguration.touchSlop
+                                            val composableW = size.width.toFloat()
+                                            val composableH = size.height.toFloat()
+                                            val velocityTracker = VelocityTracker()
+                                            var maxPointerCount = 0
 
-                                            if (pastTouchSlop && (zoomChange != 1f || panChange != Offset.Zero)) {
-                                                val centroid = event.calculateCentroid(useCurrent = false)
-                                                animJob.value?.cancel()
-                                                val newScale = (scale.floatValue * zoomChange).coerceIn(1f, 20f)
+                                            while (true) {
+                                                val event = awaitPointerEvent()
+                                                if (event.changes.any { it.isConsumed }) break
 
-                                                if (newScale > 1.02f) showUi = false
-                                                if (newScale > 1.05f && isUserScrollEnabled) {
-                                                    isUserScrollEnabled = false
-                                                } else if (newScale <= 1.05f && !isUserScrollEnabled) {
-                                                    isUserScrollEnabled = true
+                                                val pressedCount = event.changes.count { it.pressed }
+                                                maxPointerCount = maxOf(maxPointerCount, pressedCount)
+
+                                                if (pressedCount == 1) {
+                                                    event.changes.firstOrNull { it.pressed }
+                                                        ?.let { velocityTracker.addPointerInputChange(it) }
                                                 }
 
-                                                val maxX = (composableW * (newScale - 1)) / 2f
-                                                val maxY = (composableH * (newScale - 1)) / 2f
+                                                val zoomChange = event.calculateZoom()
+                                                val panChange = event.calculatePan()
 
-                                                // BUG FIX: Unified zoom+pan formula.
-                                                // Old code: applied pan first, then wrapped the entire
-                                                // (offset+pan) inside the focal zoom — this multiplied
-                                                // panChange by zoomDelta every frame, amplifying it and
-                                                // causing the image to fly to corners at deep zoom.
-                                                //
-                                                // Correct formula: (offset − focal) × zoomDelta + focal + pan
-                                                // → zoom around focal point, THEN translate by pan.
-                                                // For pure pan (zoomDelta=1) this reduces to offset + pan. ✓
-                                                val focalX = centroid.x - composableW / 2f
-                                                val focalY = centroid.y - composableH / 2f
-                                                val effectiveZoom = newScale / scale.floatValue
-                                                var newOffsetX = (offsetX.floatValue - focalX) * effectiveZoom + focalX + panChange.x
-                                                var newOffsetY = (offsetY.floatValue - focalY) * effectiveZoom + focalY + panChange.y
-
-                                                newOffsetX = newOffsetX.coerceIn(-maxX, maxX)
-                                                newOffsetY = newOffsetY.coerceIn(-maxY, maxY)
-
-                                                scale.floatValue = newScale
-                                                offsetX.floatValue = newOffsetX
-                                                offsetY.floatValue = newOffsetY
-
-                                                if (newScale > 1f) {
-                                                    val hittingLeft = newOffsetX >= maxX && panChange.x > 0
-                                                    val hittingRight = newOffsetX <= -maxX && panChange.x < 0
-                                                    if (!hittingLeft && !hittingRight) {
-                                                        event.changes.forEach { if (it.positionChanged()) it.consume() }
+                                                if (!pastTouchSlop) {
+                                                    accumulatedZoom *= zoomChange
+                                                    accumulatedPan += panChange
+                                                    val centroidSize = event.calculateCentroidSize(useCurrent = false)
+                                                    val zoomMotion = kotlin.math.abs(1 - accumulatedZoom) * centroidSize
+                                                    val panMotion = accumulatedPan.getDistance()
+                                                    if (zoomMotion > touchSlop || panMotion > touchSlop) {
+                                                        pastTouchSlop = true
                                                     }
                                                 }
+
+                                                if (pastTouchSlop && scale.floatValue <= 1.05f && maxPointerCount == 1) {
+                                                    break
+                                                }
+
+                                                if (pastTouchSlop && (zoomChange != 1f || panChange != Offset.Zero)) {
+                                                    val centroid = event.calculateCentroid(useCurrent = false)
+                                                    animJob.value?.cancel()
+                                                    val newScale = (scale.floatValue * zoomChange).coerceIn(1f, 20f)
+
+                                                    if (newScale > 1.02f) showUi = false
+                                                    if (newScale > 1.05f && currentScale <= 1.05f) {
+                                                        currentScale = newScale
+                                                    } else if (newScale <= 1.05f && currentScale > 1.05f) {
+                                                        currentScale = newScale
+                                                    }
+
+                                                    val maxX = (composableW * (newScale - 1)) / 2f
+                                                    val maxY = (composableH * (newScale - 1)) / 2f
+
+                                                    val focalX = centroid.x - composableW / 2f
+                                                    val focalY = centroid.y - composableH / 2f
+                                                    val effectiveZoom = newScale / scale.floatValue
+                                                    var newOffsetX = (offsetX.floatValue - focalX) * effectiveZoom + focalX + panChange.x
+                                                    var newOffsetY = (offsetY.floatValue - focalY) * effectiveZoom + focalY + panChange.y
+
+                                                    newOffsetX = newOffsetX.coerceIn(-maxX, maxX)
+                                                    newOffsetY = newOffsetY.coerceIn(-maxY, maxY)
+
+                                                    scale.floatValue = newScale
+                                                    offsetX.floatValue = newOffsetX
+                                                    offsetY.floatValue = newOffsetY
+
+                                                    if (newScale > 1f) {
+                                                        val hittingLeft = newOffsetX >= maxX && panChange.x > 0
+                                                        val hittingRight = newOffsetX <= -maxX && panChange.x < 0
+                                                        if (!hittingLeft && !hittingRight) {
+                                                            event.changes.forEach { if (it.positionChanged()) it.consume() }
+                                                        }
+                                                    }
+                                                }
+
+                                                if (!event.changes.any { it.pressed }) break
                                             }
 
-                                            if (!event.changes.any { it.pressed }) break
-                                        }
-
-                                        // Fling: only for PURE single-finger pan on a zoomed image.
-                                        // Pinch gestures (maxPointerCount > 1) are excluded because
-                                        // the velocity tracker has no pinch data (we stopped feeding it
-                                        // during multi-finger events), so it would produce zero or stale
-                                        // velocity. More importantly, pinch already correctly placed the
-                                        // image — no extra fling is wanted.
-                                        if (pastTouchSlop && scale.floatValue > 1.05f && maxPointerCount == 1) {
-                                            val velocity = velocityTracker.calculateVelocity()
-                                            val currentMaxX = (composableW * (scale.floatValue - 1)) / 2f
-                                            val currentMaxY = (composableH * (scale.floatValue - 1)) / 2f
-                                            // Project where the image would coast to with natural deceleration.
-                                            val flingFactor = 0.4f
-                                            val targetFlingX = (offsetX.floatValue + velocity.x * flingFactor)
-                                                .coerceIn(-currentMaxX, currentMaxX)
-                                            val targetFlingY = (offsetY.floatValue + velocity.y * flingFactor)
-                                                .coerceIn(-currentMaxY, currentMaxY)
-                                            animJob.value?.cancel()
-                                            animJob.value = coroutineScope.launch {
-                                                launch {
-                                                    androidx.compose.animation.core.animate(
-                                                        initialValue = offsetX.floatValue,
-                                                        targetValue = targetFlingX,
-                                                        initialVelocity = velocity.x,
-                                                        animationSpec = spring(
-                                                            dampingRatio = Spring.DampingRatioNoBouncy,
-                                                            stiffness = Spring.StiffnessVeryLow
-                                                        )
-                                                    ) { v, _ -> offsetX.floatValue = v }
-                                                }
-                                                launch {
-                                                    androidx.compose.animation.core.animate(
-                                                        initialValue = offsetY.floatValue,
-                                                        targetValue = targetFlingY,
-                                                        initialVelocity = velocity.y,
-                                                        animationSpec = spring(
-                                                            dampingRatio = Spring.DampingRatioNoBouncy,
-                                                            stiffness = Spring.StiffnessVeryLow
-                                                        )
-                                                    ) { v, _ -> offsetY.floatValue = v }
-                                                }
-                                            }
-                                        }
-
-                                        // --- Tap / double-tap detection (fires after gesture ends) ---
-                                        if (!pastTouchSlop) {
-                                            if (isDoubleTap) {
-                                                lastTapTime = 0L
+                                            if (pastTouchSlop && scale.floatValue > 1.05f && maxPointerCount == 1) {
+                                                val velocity = velocityTracker.calculateVelocity()
+                                                val currentMaxX = (composableW * (scale.floatValue - 1)) / 2f
+                                                val currentMaxY = (composableH * (scale.floatValue - 1)) / 2f
+                                                val flingFactor = 0.4f
+                                                val targetFlingX = (offsetX.floatValue + velocity.x * flingFactor)
+                                                    .coerceIn(-currentMaxX, currentMaxX)
+                                                val targetFlingY = (offsetY.floatValue + velocity.y * flingFactor)
+                                                    .coerceIn(-currentMaxY, currentMaxY)
                                                 animJob.value?.cancel()
                                                 animJob.value = coroutineScope.launch {
-                                                    if (scale.floatValue > 1f) {
-                                                        // Zoom out to fit
-                                                        isUserScrollEnabled = true
-                                                        launch { androidx.compose.animation.core.animate(scale.floatValue, 1f, animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessLow)) { v, _ -> scale.floatValue = v } }
-                                                        launch { androidx.compose.animation.core.animate(offsetX.floatValue, 0f, animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessLow)) { v, _ -> offsetX.floatValue = v } }
-                                                        launch { androidx.compose.animation.core.animate(offsetY.floatValue, 0f, animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessLow)) { v, _ -> offsetY.floatValue = v } }
-                                                    } else {
-                                                        // Zoom in to tapped point
-                                                        isUserScrollEnabled = false
-                                                        val targetScale = 3.5f
-                                                        val targetX = -(downPosition.x - composableW / 2f) * (targetScale - 1)
-                                                        val targetY = -(downPosition.y - composableH / 2f) * (targetScale - 1)
-                                                        val maxX = (composableW * (targetScale - 1)) / 2f
-                                                        val maxY = (composableH * (targetScale - 1)) / 2f
-                                                        launch { androidx.compose.animation.core.animate(scale.floatValue, targetScale, animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessLow)) { v, _ -> scale.floatValue = v } }
-                                                        launch { androidx.compose.animation.core.animate(offsetX.floatValue, targetX.coerceIn(-maxX, maxX), animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessLow)) { v, _ -> offsetX.floatValue = v } }
-                                                        launch { androidx.compose.animation.core.animate(offsetY.floatValue, targetY.coerceIn(-maxY, maxY), animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessLow)) { v, _ -> offsetY.floatValue = v } }
+                                                    launch {
+                                                        androidx.compose.animation.core.animate(
+                                                            initialValue = offsetX.floatValue,
+                                                            targetValue = targetFlingX,
+                                                            initialVelocity = velocity.x,
+                                                            animationSpec = spring(
+                                                                dampingRatio = Spring.DampingRatioNoBouncy,
+                                                                stiffness = Spring.StiffnessVeryLow
+                                                            )
+                                                        ) { v, _ -> offsetX.floatValue = v }
                                                     }
-                                                }
-                                            } else {
-                                                // Single tap — use a short delay so a rapid second tap
-                                                // is detected as a double-tap before the UI toggle fires.
-                                                lastTapTime = downTime
-                                                lastTapPosition = downPosition
-                                                coroutineScope.launch {
-                                                    kotlinx.coroutines.delay(300L)
-                                                    if (lastTapTime == downTime) {
-                                                        activeHighlight = null
-                                                        if (showInfoCard || showUi) {
-                                                            showInfoCard = false
-                                                            showUi = false
-                                                        } else {
-                                                            showUi = true
-                                                        }
-                                                        lastTapTime = 0L
+                                                    launch {
+                                                        androidx.compose.animation.core.animate(
+                                                            initialValue = offsetY.floatValue,
+                                                            targetValue = targetFlingY,
+                                                            initialVelocity = velocity.y,
+                                                            animationSpec = spring(
+                                                                dampingRatio = Spring.DampingRatioNoBouncy,
+                                                                stiffness = Spring.StiffnessVeryLow
+                                                            )
+                                                        ) { v, _ -> offsetY.floatValue = v }
                                                     }
                                                 }
                                             }
@@ -787,29 +879,49 @@ fun DetailScreen(
                     .statusBarsPadding()
                     .padding(top = 8.dp, end = 16.dp)
             ) {
+                val maxThumbnailWidth = 80.dp
+                val maxThumbnailHeight = 120.dp
+
+                val thumbnailWidth = remember(imageAspectRatio) {
+                    if (imageAspectRatio > (80f / 120f)) {
+                        maxThumbnailWidth
+                    } else {
+                        maxThumbnailHeight * imageAspectRatio
+                    }
+                }
+                val thumbnailHeight = remember(imageAspectRatio) {
+                    if (imageAspectRatio > (80f / 120f)) {
+                        maxThumbnailWidth / imageAspectRatio
+                    } else {
+                        maxThumbnailHeight
+                    }
+                }
+
                 Box(
                     modifier = Modifier
-                        .size(100.dp, 150.dp)
+                        .size(thumbnailWidth, thumbnailHeight)
                         .clip(RoundedCornerShape(12.dp))
                         .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                        .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(12.dp))
+                        .border(1.dp, Color.Black, RoundedCornerShape(12.dp))
                 ) {
                     AsyncImage(
                         model = ImageRequest.Builder(context)
                             .data(resolvedUri)
-                            .size(300, 450)
+                            .size(240, 360)
                             .memoryCachePolicy(CachePolicy.ENABLED)
                             .build(),
                         contentDescription = "Minimap map",
-                        contentScale = ContentScale.Crop,
+                        contentScale = ContentScale.Fit,
                         modifier = Modifier.fillMaxSize()
                     )
                     // Draw the Viewport Indicator Map
                     Canvas(modifier = Modifier.matchParentSize()) {
                         val viewportWidth = size.width / scale.floatValue
                         val viewportHeight = size.height / scale.floatValue
-                        val maxOffsetX = (screenWidth * (scale.floatValue - 1)) / 2
-                        val maxOffsetY = (screenHeight * (scale.floatValue - 1)) / 2
+                        
+                        val maxOffsetX = (parentWidth * (scale.floatValue - 1)) / 2
+                        val maxOffsetY = (parentHeight * (scale.floatValue - 1)) / 2
+                        
                         val pctX = if (maxOffsetX > 0) -offsetX.floatValue / maxOffsetX else 0f
                         val pctY = if (maxOffsetY > 0) -offsetY.floatValue / maxOffsetY else 0f
                         val rectX = (size.width - viewportWidth) / 2 + (pctX * (size.width - viewportWidth) / 2)
@@ -838,8 +950,12 @@ fun DetailScreen(
                 .padding(16.dp)
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Start
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.8f))
+                    .padding(8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 FilledIconButton(
                     onClick = onBack,
@@ -853,6 +969,20 @@ fun DetailScreen(
                         contentDescription = "Go back"
                     )
                 }
+
+                androidx.compose.foundation.layout.Spacer(modifier = Modifier.width(12.dp))
+
+                Text(
+                    text = currentItem?.name ?: "",
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontWeight = FontWeight.SemiBold,
+                        fontFamily = FontFamily.SansSerif
+                    ),
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
             }
         }
 
@@ -897,26 +1027,6 @@ fun DetailScreen(
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        IconButton(onClick = { showShareSheet = true }) { 
-                            Icon(Icons.Outlined.Share, contentDescription = "Share") 
-                        }
-                        IconButton(
-                            onClick = {
-                                if (currentItem != null) {
-                                    val editIntent = Intent(Intent.ACTION_EDIT).apply {
-                                        setDataAndType(resolvedCurrentUri ?: currentItem.uri, if (currentItem.isVideo) "video/*" else "image/*")
-                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
-                                    }
-                                    try {
-                                        context.startActivity(Intent.createChooser(editIntent, "Edit Media"))
-                                    } catch (e: Exception) {
-                                        android.widget.Toast.makeText(context, "No editor available on device", android.widget.Toast.LENGTH_SHORT).show()
-                                    }
-                                }
-                            }
-                        ) { 
-                            Icon(Icons.Outlined.Edit, contentDescription = "Edit") 
-                        }
                         if (bucketName == "Trash") {
                             IconButton(
                                 onClick = {
@@ -948,7 +1058,48 @@ fun DetailScreen(
                             ) { 
                                 Icon(Icons.Outlined.Delete, contentDescription = "Permanently Delete", tint = MaterialTheme.colorScheme.error) 
                             }
+                            IconButton(
+                                onClick = {
+                                    showInfoCard = !showInfoCard
+                                }
+                            ) {
+                                Icon(Icons.Outlined.Info, contentDescription = "Info")
+                            }
                         } else {
+                            IconButton(onClick = { showShareSheet = true }) { 
+                                Icon(Icons.Outlined.Share, contentDescription = "Share") 
+                            }
+                            val isFavorite = currentItem?.id?.let { favoriteIds.contains(it) } ?: false
+                            IconButton(
+                                onClick = {
+                                    if (currentItem != null) {
+                                        viewModel.toggleFavorite(currentItem.id)
+                                    }
+                                }
+                            ) {
+                                Icon(
+                                    imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                                    contentDescription = "Favorite",
+                                    tint = if (isFavorite) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                            IconButton(
+                                onClick = {
+                                    if (currentItem != null) {
+                                        val editIntent = Intent(Intent.ACTION_EDIT).apply {
+                                            setDataAndType(resolvedCurrentUri ?: currentItem.uri, if (currentItem.isVideo) "video/*" else "image/*")
+                                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+                                        }
+                                        try {
+                                            context.startActivity(Intent.createChooser(editIntent, "Edit Media"))
+                                        } catch (e: Exception) {
+                                            android.widget.Toast.makeText(context, "No editor available on device", android.widget.Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                }
+                            ) { 
+                                Icon(Icons.Outlined.Edit, contentDescription = "Edit") 
+                            }
                             IconButton(
                                 onClick = {
                                     if (currentItem != null) {
@@ -962,74 +1113,87 @@ fun DetailScreen(
                                             }
                                             pendingDeleteItem = currentItem
                                             pendingDeletePage = pagerState.currentPage
-                                            showDeleteConfirmDialog = true
+                                            if (confirmDeleteEnabled) {
+                                                showDeleteConfirmDialog = true
+                                            } else {
+                                                try {
+                                                    val trashIntent = MediaStore.createTrashRequest(
+                                                        context.contentResolver, 
+                                                        listOf(currentItem.uri), 
+                                                        true
+                                                    )
+                                                    val request = IntentSenderRequest.Builder(trashIntent.intentSender).build()
+                                                    launcher.launch(request)
+                                                } catch (e: Exception) {
+                                                    e.printStackTrace()
+                                                    android.widget.Toast.makeText(
+                                                        context, 
+                                                        "Unable to trash this item: ${e.message}", 
+                                                        android.widget.Toast.LENGTH_SHORT
+                                                     ).show()
+                                                }
+                                            }
                                         }
                                     }
                                 }
                             ) { 
                                 Icon(Icons.Outlined.Delete, contentDescription = "Delete") 
                             }
-                        }
-                        
-                        Box {
-                            IconButton(onClick = { showMoreMenu = true }) {
-                                Icon(Icons.Outlined.MoreVert, contentDescription = "More")
-                            }
-                            val isFavorite = currentItem?.id?.let { favoriteIds.contains(it) } ?: false
-                            androidx.compose.material3.DropdownMenu(
-                                expanded = showMoreMenu,
-                                onDismissRequest = { showMoreMenu = false }
-                            ) {
-                                if (currentItem != null) {
-                                    androidx.compose.material3.DropdownMenuItem(
-                                        text = { Text(if (isFavorite) "Remove from Favorites" else "Add to Favorites") },
-                                        leadingIcon = {
-                                            if (isFavorite) {
-                                                Icon(Icons.Filled.Favorite, contentDescription = null, tint = MaterialTheme.colorScheme.error)
-                                            } else {
-                                                Icon(Icons.Outlined.FavoriteBorder, contentDescription = null)
-                                            }
-                                        },
-                                        onClick = {
-                                            showMoreMenu = false
-                                            currentItem.let { viewModel.toggleFavorite(it.id) }
-                                        }
-                                    )
-                                    androidx.compose.material3.DropdownMenuItem(
-                                        text = { Text("Info") },
-                                        leadingIcon = { Icon(Icons.Outlined.Info, contentDescription = null) },
-                                        onClick = {
-                                            showMoreMenu = false
-                                            showInfoCard = !showInfoCard
-                                        }
-                                    )
-                                    val isLocalFileMissing = !java.io.File(currentItem.path).exists()
-                                    if (isLocalFileMissing && currentItem.telegramFileId != null) {
+                            Box {
+                                IconButton(onClick = { showMoreMenu = true }) {
+                                    Icon(Icons.Outlined.MoreVert, contentDescription = "More")
+                                }
+                                androidx.compose.material3.DropdownMenu(
+                                    expanded = showMoreMenu,
+                                    onDismissRequest = { showMoreMenu = false },
+                                    shape = MaterialTheme.shapes.large,
+                                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                                ) {
+                                    if (currentItem != null) {
                                         androidx.compose.material3.DropdownMenuItem(
-                                            text = { Text("Download to Device") },
-                                            leadingIcon = { Icon(Icons.Outlined.Cloud, contentDescription = null) },
+                                            text = { Text("Rename") },
+                                            leadingIcon = { Icon(Icons.Outlined.Edit, contentDescription = null) },
                                             onClick = {
                                                 showMoreMenu = false
-                                                android.widget.Toast.makeText(context, "Downloading...", android.widget.Toast.LENGTH_SHORT).show()
-                                                viewModel.downloadCloudMedia(context, currentItem)
+                                                showRenameDialog = true
+                                            }
+                                        )
+                                        androidx.compose.material3.DropdownMenuItem(
+                                            text = { Text("Info") },
+                                            leadingIcon = { Icon(Icons.Outlined.Info, contentDescription = null) },
+                                            onClick = {
+                                                showMoreMenu = false
+                                                showInfoCard = !showInfoCard
+                                            }
+                                        )
+                                        val isLocalFileMissing = !java.io.File(currentItem.path).exists()
+                                        if (isLocalFileMissing && currentItem.telegramFileId != null) {
+                                            androidx.compose.material3.DropdownMenuItem(
+                                                text = { Text("Download to Device") },
+                                                leadingIcon = { Icon(Icons.Outlined.Cloud, contentDescription = null) },
+                                                onClick = {
+                                                    showMoreMenu = false
+                                                    android.widget.Toast.makeText(context, "Downloading...", android.widget.Toast.LENGTH_SHORT).show()
+                                                    viewModel.downloadCloudMedia(context, currentItem)
+                                                }
+                                            )
+                                        }
+                                    }
+                                    if (currentItem != null && !currentItem.isVideo) {
+                                        androidx.compose.material3.DropdownMenuItem(
+                                            text = { Text("Set as Wallpaper") },
+                                            leadingIcon = { Icon(Icons.Filled.Wallpaper, contentDescription = null) },
+                                            onClick = {
+                                                showMoreMenu = false
+                                                val intent = Intent(Intent.ACTION_ATTACH_DATA).apply {
+                                                    setDataAndType(resolvedCurrentUri ?: currentItem.uri, "image/*")
+                                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                                    putExtra("mimeType", "image/*")
+                                                }
+                                                context.startActivity(Intent.createChooser(intent, "Set as..."))
                                             }
                                         )
                                     }
-                                }
-                                if (currentItem != null && !currentItem.isVideo) {
-                                    androidx.compose.material3.DropdownMenuItem(
-                                        text = { Text("Set as Wallpaper") },
-                                        leadingIcon = { Icon(Icons.Filled.Wallpaper, contentDescription = null) },
-                                        onClick = {
-                                            showMoreMenu = false
-                                            val intent = Intent(Intent.ACTION_ATTACH_DATA).apply {
-                                                setDataAndType(resolvedCurrentUri ?: currentItem.uri, "image/*")
-                                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                                putExtra("mimeType", "image/*")
-                                            }
-                                            context.startActivity(Intent.createChooser(intent, "Set as..."))
-                                        }
-                                    )
                                 }
                             }
                         }
