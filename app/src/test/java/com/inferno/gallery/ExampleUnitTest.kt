@@ -9,6 +9,19 @@ class ExampleUnitTest {
     @Test
     fun testBPETokenizer() {
         val file = File(if (File("app/src/main/assets/tokenizer.json").exists()) "app/src/main/assets/tokenizer.json" else "src/main/assets/tokenizer.json")
+        if (!file.exists()) {
+            println("Downloading tokenizer.json for tests from Hugging Face...")
+            try {
+                file.parentFile?.mkdirs()
+                java.net.URL("https://huggingface.co/Xenova/clip-vit-base-patch32/resolve/main/tokenizer.json").openStream().use { input ->
+                    file.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
+                }
+            } catch (e: Exception) {
+                System.err.println("Failed to download tokenizer.json: ${e.message}")
+            }
+        }
         assertTrue("tokenizer.json should exist", file.exists())
         val json = file.readText()
         val tokenizer = BPETokenizer(json)

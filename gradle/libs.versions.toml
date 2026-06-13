@@ -35,6 +35,9 @@ paging = "3.3.6"
 # ML Kit (OCR)
 mlkitText = "16.0.1"
 
+# ONNX Runtime
+onnxruntime = "1.18.0"
+
 
 # Background Processing
 workManager = "2.11.2"
@@ -107,6 +110,8 @@ paging-compose = { group = "androidx.paging", name = "paging-compose", version.r
 # ── ML Kit ──
 mlkit-text-recognition = { group = "com.google.mlkit", name = "text-recognition", version.ref = "mlkitText" }
 
+# ── ONNX Runtime ──
+onnxruntime-android = { group = "com.microsoft.onnxruntime", name = "onnxruntime-android", version.ref = "onnxruntime" }
 
 # ── WorkManager ──
 androidx-work-runtime-ktx = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "workManager" }
