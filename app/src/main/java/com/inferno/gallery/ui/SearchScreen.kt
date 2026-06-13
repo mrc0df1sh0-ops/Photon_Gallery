@@ -18,6 +18,8 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import kotlinx.coroutines.flow.collectLatest
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -47,12 +49,13 @@ fun SearchScreen(
 ) {
     val query by viewModel.searchQuery.collectAsState()
     val ftsResults by viewModel.ftsSearchResults.collectAsState()
+    val smartResults by viewModel.smartSearchResults.collectAsState()
     val isSearching by viewModel.isSearching.collectAsState()
     val ocrIndexWorkInfo by viewModel.ocrIndexWorkInfo.collectAsState(initial = null)
     val unindexedOcrCount by viewModel.unindexedOcrImagesCount.collectAsState()
     val totalImagesCount by viewModel.totalImagesCount.collectAsState()
 
-    val hasAnyResults = ftsResults.isNotEmpty()
+    val hasAnyResults = ftsResults.isNotEmpty() || smartResults.isNotEmpty()
 
     Column(
         modifier = modifier
@@ -116,12 +119,14 @@ fun SearchScreen(
                 )
                 searching -> SearchingState()
                 !hasResults -> NoResultsState(query)
-                else -> TextSearchResults(
+                else -> SearchResultsList(
                     ftsResults = ftsResults,
+                    smartResults = smartResults,
                     sharedTransitionScope = sharedTransitionScope,
                     animatedVisibilityScope = animatedVisibilityScope,
                     onPhotoClick = onPhotoClick,
-                    query = query
+                    query = query,
+                    viewModel = viewModel
                 )
             }
         }
@@ -137,56 +142,65 @@ private fun EmptySearchState(
     onStopOcr: () -> Unit,
     onClearOcr: () -> Unit
 ) {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            modifier = Modifier.padding(bottom = 32.dp).widthIn(max = 320.dp)
+    Box(modifier = Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
+        Surface(
+            shape = MaterialTheme.shapes.extraLarge,
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            modifier = Modifier.widthIn(max = 340.dp)
         ) {
-            Box(
-                modifier = Modifier
-                    .size(96.dp)
-                    .clip(CircleShape)
-                    .background(
-                        Brush.radialGradient(
-                            listOf(
-                                MaterialTheme.colorScheme.primaryContainer,
-                                MaterialTheme.colorScheme.secondaryContainer
-                            )
-                        )
-                    ),
-                contentAlignment = Alignment.Center
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.padding(24.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Outlined.Search,
-                    contentDescription = null,
-                    modifier = Modifier.size(44.dp),
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer
+                Box(
+                    modifier = Modifier
+                        .size(80.dp)
+                        .clip(CircleShape)
+                        .background(
+                            Brush.radialGradient(
+                                listOf(
+                                    MaterialTheme.colorScheme.primaryContainer,
+                                    MaterialTheme.colorScheme.secondaryContainer
+                                )
+                            )
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Search,
+                        contentDescription = null,
+                        modifier = Modifier.size(36.dp),
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
+                Text(
+                    text = "Text Search",
+                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                    textAlign = TextAlign.Center
                 )
-            }
-            Text(
-                text = "Text Search",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                text = "Search for any text contained within your images.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center
-            )
+                Text(
+                    text = "Search for any text contained within your images.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
 
-            Spacer(modifier = Modifier.height(16.dp))
-            IndexingCard(
-                title = "Text Indexing",
-                workInfo = ocrIndexWorkInfo,
-                unindexedCount = unindexedOcrCount,
-                totalCount = totalCount,
-                onStart = onStartOcr,
-                onStop = onStopOcr,
-                onClearAndReindex = onClearOcr,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
-            )
+                val isOcrWorkerRunning = ocrIndexWorkInfo?.state == WorkInfo.State.RUNNING || ocrIndexWorkInfo?.state == WorkInfo.State.ENQUEUED
+                if (unindexedOcrCount > 0 || isOcrWorkerRunning) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    IndexingCard(
+                        title = "Text Indexing",
+                        workInfo = ocrIndexWorkInfo,
+                        unindexedCount = unindexedOcrCount,
+                        totalCount = totalCount,
+                        onStart = onStartOcr,
+                        onStop = onStopOcr,
+                        onClearAndReindex = onClearOcr,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
         }
     }
 }
@@ -216,79 +230,183 @@ private fun SearchingState() {
 
 @Composable
 private fun NoResultsState(query: String) {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+    Box(modifier = Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
+        Surface(
+            shape = MaterialTheme.shapes.extraLarge,
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            modifier = Modifier.widthIn(max = 320.dp)
         ) {
-            Text(
-                text = "No results for",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-                text = "\u201c$query\u201d",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold
-            )
-            Text(
-                text = "Try different words or descriptions.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center
-            )
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.padding(24.dp)
+            ) {
+                Text(
+                    text = "No results for",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    text = "\u201c$query\u201d",
+                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    text = "Try different words or descriptions.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+            }
         }
     }
 }
 
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
-private fun TextSearchResults(
+private fun SearchResultsList(
     ftsResults: List<GalleryItem>,
+    smartResults: List<GalleryItem>,
     sharedTransitionScope: SharedTransitionScope,
     animatedVisibilityScope: AnimatedVisibilityScope,
     onPhotoClick: (String, String?, String?) -> Unit,
-    query: String
+    query: String,
+    viewModel: GalleryViewModel
 ) {
     val onFtsClick = remember(onPhotoClick, query) {
         { item: GalleryItem -> onPhotoClick(item.id, "search_text", query) }
     }
+    val onSmartClick = remember(onPhotoClick, query) {
+        { item: GalleryItem -> onPhotoClick(item.id, "search_smart", query) }
+    }
+
+    var isFtsExpanded by remember(query) { mutableStateOf(false) }
+    val maxCollapsedItems = 3
+    val showExpandButton = ftsResults.size > maxCollapsedItems
+    val visibleFtsResults = if (isFtsExpanded) ftsResults else ftsResults.take(maxCollapsedItems)
+
+    val lazyGridState = rememberLazyGridState()
+
+    LaunchedEffect(lazyGridState) {
+        var previousIndex = 0
+        var previousScrollOffset = 0
+        snapshotFlow { lazyGridState.firstVisibleItemIndex to lazyGridState.firstVisibleItemScrollOffset }
+            .collectLatest { (index, offset) ->
+                if (index > previousIndex) {
+                    viewModel.setScrollDockVisible(false)
+                } else if (index < previousIndex) {
+                    viewModel.setScrollDockVisible(true)
+                } else {
+                    if (offset > previousScrollOffset + 15) {
+                        viewModel.setScrollDockVisible(false)
+                    } else if (offset < previousScrollOffset - 15) {
+                        viewModel.setScrollDockVisible(true)
+                    }
+                }
+                previousIndex = index
+                previousScrollOffset = offset
+            }
+    }
 
     LazyVerticalGrid(
         columns = GridCells.Fixed(3),
-        verticalArrangement = Arrangement.spacedBy(3.dp),
-        horizontalArrangement = Arrangement.spacedBy(3.dp),
-        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp),
+        state = lazyGridState,
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+        contentPadding = PaddingValues(horizontal = 2.dp, vertical = 8.dp),
         modifier = Modifier.fillMaxSize()
     ) {
-        item(span = { GridItemSpan(3) }) {
-            Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp)) {
-                Text(
-                    text = "Text matches for \"$query\"",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(bottom = 8.dp)
+        // 1. Text Matches Section (OCR)
+        if (ftsResults.isNotEmpty()) {
+            item(span = { GridItemSpan(3) }) {
+                Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp)) {
+                    Text(
+                        text = "Text Matches",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = "Found ${ftsResults.size} images containing \"$query\"",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            items(
+                items = visibleFtsResults,
+                key = { "fts_grid_${it.id}" }
+            ) { item ->
+                GalleryGridItem(
+                    item = item,
+                    sharedTransitionScope = sharedTransitionScope,
+                    animatedVisibilityScope = animatedVisibilityScope,
+                    onClick = onFtsClick
                 )
-                Text(
-                    text = "${ftsResults.size} images found",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(bottom = 8.dp)
-                )
+            }
+            if (showExpandButton && !isFtsExpanded) {
+                item(span = { GridItemSpan(3) }) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Button(
+                            onClick = { isFtsExpanded = true },
+                            colors = ButtonDefaults.filledTonalButtonColors(
+                                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                                contentColor = MaterialTheme.colorScheme.primary
+                            ),
+                            shape = MaterialTheme.shapes.medium
+                        ) {
+                            Text(
+                                text = "Show all matches (${ftsResults.size})",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+                }
             }
         }
 
-        items(
-            items = ftsResults,
-            key = { "fts_grid_${it.id}" }
-        ) { item ->
-            GalleryGridItem(
-                item = item,
-                sharedTransitionScope = sharedTransitionScope,
-                animatedVisibilityScope = animatedVisibilityScope,
-                onClick = onFtsClick
-            )
+        // Section separator spacer
+        if (ftsResults.isNotEmpty() && smartResults.isNotEmpty()) {
+            item(span = { GridItemSpan(3) }) {
+                Spacer(modifier = Modifier.height(24.dp))
+            }
+        }
+
+        // 2. Semantic Matches Section (Smart Search)
+        if (smartResults.isNotEmpty()) {
+            item(span = { GridItemSpan(3) }) {
+                Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp)) {
+                    Text(
+                        text = "Semantic Matches",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                    Text(
+                        text = "Found ${smartResults.size} images semantically matching your description",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            items(
+                items = smartResults,
+                key = { "smart_grid_${it.id}" }
+            ) { item ->
+                GalleryGridItem(
+                    item = item,
+                    sharedTransitionScope = sharedTransitionScope,
+                    animatedVisibilityScope = animatedVisibilityScope,
+                    onClick = onSmartClick
+                )
+            }
         }
     }
 }
@@ -311,60 +429,101 @@ private fun IndexingCard(
     val indexed = maxOf(dbIndexed, workerIndexed)
     val total = if (totalCount > 0) totalCount else (progress?.getInt("total", 0) ?: 0)
 
-    Card(
+    var showConfirmDialog by remember { mutableStateOf(false) }
+
+    if (showConfirmDialog) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showConfirmDialog = false },
+            title = { Text("Reindex Text") },
+            text = { Text("This will clear all currently indexed text search data and scan all your images again. This process uses battery and CPU. Are you sure you want to continue?") },
+            confirmButton = {
+                androidx.compose.material3.TextButton(
+                    onClick = {
+                        showConfirmDialog = false
+                        onClearAndReindex()
+                    }
+                ) {
+                    Text("Reindex", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { showConfirmDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    Surface(
         modifier = modifier,
         shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHighest)
+        color = MaterialTheme.colorScheme.surface
     ) {
         Column(
-            modifier = Modifier.padding(12.dp),
+            modifier = Modifier.padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
                 text = title,
-                style = MaterialTheme.typography.titleSmall,
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                 color = MaterialTheme.colorScheme.primary
             )
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(12.dp))
             
             if (isRunning) {
-                FilledTonalButton(onClick = onStop, modifier = Modifier.height(32.dp), contentPadding = PaddingValues(horizontal = 12.dp)) {
+                FilledTonalButton(onClick = onStop, modifier = Modifier.height(36.dp), contentPadding = PaddingValues(horizontal = 16.dp)) {
                     Text("Stop", style = MaterialTheme.typography.labelMedium)
                 }
             } else {
-                FilledTonalButton(onClick = onStart, modifier = Modifier.height(32.dp), contentPadding = PaddingValues(horizontal = 12.dp)) {
+                FilledTonalButton(onClick = onStart, modifier = Modifier.height(36.dp), contentPadding = PaddingValues(horizontal = 16.dp)) {
                     Text("Start", style = MaterialTheme.typography.labelMedium)
                 }
             }
             
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(16.dp))
+
+            val statusDescription = when {
+                workInfo?.state == WorkInfo.State.RUNNING -> {
+                    val currentImage = progress?.getString("current_image")
+                    if (currentImage != null) "Scanning: $currentImage" else "Scanning images for text…"
+                }
+                workInfo?.state == WorkInfo.State.ENQUEUED -> "Preparing text indexing…"
+                unindexedCount == 0 -> "All images indexed"
+                else -> "Indexing paused"
+            }
+
+            Text(
+                text = statusDescription,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 8.dp),
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+            )
 
             val progressFloat = if (total > 0) indexed.toFloat() / total.toFloat() else 0f
             LinearProgressIndicator(
                 progress = { progressFloat },
-                modifier = Modifier.fillMaxWidth().height(4.dp).clip(CircleShape),
+                modifier = Modifier.fillMaxWidth().height(6.dp).clip(CircleShape),
                 trackColor = MaterialTheme.colorScheme.surfaceVariant,
                 color = MaterialTheme.colorScheme.primary,
             )
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(6.dp))
             Text(
                 "$indexed / $total", 
-                style = MaterialTheme.typography.labelSmall,
+                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            Spacer(modifier = Modifier.height(8.dp))
-            OutlinedButton(
-                onClick = onClearAndReindex,
-                modifier = Modifier.fillMaxWidth().height(32.dp),
-                contentPadding = PaddingValues(0.dp),
-                colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
+            Spacer(modifier = Modifier.height(12.dp))
+            TextButton(
+                onClick = { showConfirmDialog = true },
+                modifier = Modifier.fillMaxWidth().height(36.dp),
+                colors = androidx.compose.material3.ButtonDefaults.textButtonColors(
                     contentColor = MaterialTheme.colorScheme.error
-                ),
-                border = androidx.compose.foundation.BorderStroke(
-                    1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f)
                 )
             ) {
-                Text("Reindex", style = MaterialTheme.typography.labelSmall)
+                Text("Reindex", style = MaterialTheme.typography.labelMedium)
             }
         }
     }
