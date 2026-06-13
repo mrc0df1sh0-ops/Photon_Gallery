@@ -1,3 +1,5 @@
+@file:OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+
 package com.inferno.gallery.ui
 
 import android.app.Application
@@ -29,6 +31,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.flatMapLatest
 import androidx.paging.PagingData
 import androidx.paging.Pager
@@ -62,6 +65,14 @@ data class GalleryItem(
     val searchScore: Float? = null,
     val telegramFileId: String? = null,
     val telegramThumbFileId: String? = null
+)
+
+data class BackupProgress(
+    val total: Int,
+    val pending: Int,
+    val successful: Int,
+    val failed: Int,
+    val progress: Float
 )
 
 sealed class GalleryListItem {
@@ -101,6 +112,13 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
     private val favoritesManager = FavoritesManager(application)
     private val database = DatabaseProvider.getDatabase(application)
 
+    private val _isScrollDockVisible = MutableStateFlow(true)
+    val isScrollDockVisible: StateFlow<Boolean> = _isScrollDockVisible.asStateFlow()
+
+    fun setScrollDockVisible(visible: Boolean) {
+        _isScrollDockVisible.value = visible
+    }
+
 
     val favoriteIds: StateFlow<Set<String>> = favoritesManager.favoritesFlow.stateIn(
         scope = viewModelScope,
@@ -131,6 +149,12 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
             settingsRepository.updateOnboardingCompleted(true)
         }
     }
+
+    val trashCount: StateFlow<Int> = database.mediaDao().observeTrashCount().stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = 0
+    )
 
 
 
@@ -177,26 +201,176 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
     private val _detailMedia = MutableStateFlow<List<GalleryItem>>(emptyList())
     val detailMedia: StateFlow<List<GalleryItem>> = _detailMedia.asStateFlow()
 
-    fun setDetailItem(mediaId: String) {
+    fun loadDetailMedia(mediaId: String, bucketName: String?) {
         viewModelScope.launch(Dispatchers.IO) {
-            val id = mediaId.toLongOrNull() ?: return@launch
-            val entity = database.mediaDao().getMediaById(id) ?: return@launch
-            val cloudItem = database.telegramBackupDao().getBackupForMedia(id)
-            val item = GalleryItem(
-                id = entity.id.toString(),
-                uri = Uri.parse(entity.uriString),
-                bucketName = entity.bucketName,
-                dateAdded = entity.dateAdded,
-                size = entity.size,
-                name = entity.name,
-                dateModified = entity.dateModified,
-                path = entity.filePath,
-                isVideo = entity.isVideo,
-                durationMs = entity.durationMs,
-                telegramFileId = cloudItem?.telegramFileId,
-                telegramThumbFileId = cloudItem?.telegramThumbFileId
-            )
-            _detailMedia.value = listOf(item)
+            if (bucketName == "search_text") {
+                _detailMedia.value = _ftsSearchResults.value
+                return@launch
+            }
+            if (bucketName == "search_smart") {
+                _detailMedia.value = _smartSearchResults.value
+                return@launch
+            }
+
+            // Build the SQLite query for the bucket
+            val filterIndex = selectedFilterIndex.value
+            val order = sortOrder.value
+            
+            var queryString = "SELECT cm.*, tb.telegramFileId, tb.telegramThumbFileId, tb.backupStatus FROM core_media cm LEFT JOIN telegram_backups tb ON cm.id = tb.mediaId "
+            val args = mutableListOf<Any>()
+            val conditions = mutableListOf<String>()
+
+            val folderName = when (filterIndex) {
+                1 -> "Camera"
+                2 -> "Screenshots"
+                else -> null
+            }
+            
+            if (bucketName == "All") {
+                conditions.add("cm.bucketName != 'Trash'")
+            } else if (bucketName == "telegram_cloud") {
+                conditions.add("tb.backupStatus = 'SUCCESS'")
+            } else if (bucketName == "Videos") {
+                conditions.add("cm.isVideo = 1")
+                conditions.add("cm.bucketName != 'Trash'")
+            } else if (bucketName != null) {
+                conditions.add("cm.bucketName = ?")
+                args.add(bucketName)
+            } else if (folderName != null) {
+                conditions.add("cm.bucketName = ?")
+                args.add(folderName)
+            } else {
+                conditions.add("cm.bucketName != 'Trash'")
+            }
+
+            if (conditions.isNotEmpty()) {
+                queryString += "WHERE " + conditions.joinToString(" AND ") + " "
+            }
+
+            when (order) {
+                SortOrder.NewToOld -> queryString += "ORDER BY cm.dateAdded DESC"
+                SortOrder.OldToNew -> queryString += "ORDER BY cm.dateAdded ASC"
+                SortOrder.SmallToBig -> queryString += "ORDER BY cm.size ASC"
+                SortOrder.BigToSmall -> queryString += "ORDER BY cm.size DESC"
+                SortOrder.NameAsc -> queryString += "ORDER BY cm.name ASC"
+            }
+
+            val query = androidx.sqlite.db.SimpleSQLiteQuery(queryString, args.toTypedArray())
+            val entities = try {
+                database.mediaDao().getMediaRaw(query)
+            } catch (e: Exception) {
+                emptyList()
+            }
+            val items = entities.map { entity ->
+                GalleryItem(
+                    id = entity.id.toString(),
+                    uri = Uri.parse(entity.uriString),
+                    bucketName = entity.bucketName,
+                    dateAdded = entity.dateAdded,
+                    size = entity.size,
+                    name = entity.name,
+                    dateModified = entity.dateModified,
+                    path = entity.filePath,
+                    isVideo = entity.isVideo,
+                    durationMs = entity.durationMs,
+                    telegramFileId = entity.telegramFileId,
+                    telegramThumbFileId = entity.telegramThumbFileId
+                )
+            }
+            
+            val containsTarget = items.any { it.id == mediaId }
+            if (items.isNotEmpty() && containsTarget) {
+                _detailMedia.value = items
+            } else {
+                // Fetch the clicked item as a fallback
+                val idLong = mediaId.toLongOrNull()
+                val entity = idLong?.let { database.mediaDao().getMediaById(it) }
+                if (entity != null) {
+                    val cloudItem = database.telegramBackupDao().getBackupForMedia(entity.id)
+                    val fallbackItem = GalleryItem(
+                        id = entity.id.toString(),
+                        uri = Uri.parse(entity.uriString),
+                        bucketName = entity.bucketName,
+                        dateAdded = entity.dateAdded,
+                        size = entity.size,
+                        name = entity.name,
+                        dateModified = entity.dateModified,
+                        path = entity.filePath,
+                        isVideo = entity.isVideo,
+                        durationMs = entity.durationMs,
+                        telegramFileId = cloudItem?.telegramFileId,
+                        telegramThumbFileId = cloudItem?.telegramThumbFileId
+                    )
+                    _detailMedia.value = listOf(fallbackItem)
+                } else {
+                    _detailMedia.value = emptyList()
+                }
+            }
+        }
+    }
+
+    fun renameMedia(
+        context: android.content.Context,
+        item: GalleryItem,
+        newName: String,
+        onSecurityException: (android.app.PendingIntent) -> Unit
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val uri = item.uri
+                val values = android.content.ContentValues().apply {
+                    put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, newName)
+                }
+                
+                try {
+                    val rows = context.contentResolver.update(uri, values, null, null)
+                    if (rows > 0) {
+                        database.mediaDao().updateMediaName(item.id.toLong(), newName)
+                        
+                        val currentDetailMedia = _detailMedia.value
+                        val updatedList = currentDetailMedia.map {
+                            if (it.id == item.id) {
+                                it.copy(name = newName)
+                            } else {
+                                it
+                            }
+                        }
+                        _detailMedia.value = updatedList
+                        
+                        withContext(Dispatchers.Main) {
+                            android.widget.Toast.makeText(context, "Renamed to $newName", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    } else {
+                        withContext(Dispatchers.Main) {
+                            android.widget.Toast.makeText(context, "Failed to rename: 0 rows updated", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                } catch (securityException: SecurityException) {
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                        val recoverable = securityException as? android.app.RecoverableSecurityException
+                        if (recoverable != null) {
+                            withContext(Dispatchers.Main) {
+                                onSecurityException(recoverable.userAction.actionIntent)
+                            }
+                        } else {
+                            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                                val pendingIntent = android.provider.MediaStore.createWriteRequest(context.contentResolver, listOf(uri))
+                                withContext(Dispatchers.Main) {
+                                    onSecurityException(pendingIntent)
+                                }
+                            } else {
+                                throw securityException
+                            }
+                        }
+                    } else {
+                        throw securityException
+                    }
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    android.widget.Toast.makeText(context, "Error renaming: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+                }
+            }
         }
     }
 
@@ -215,6 +389,34 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = 0
         )
+
+    val backupProgress: StateFlow<BackupProgress?> = database.telegramBackupDao().observeAllBackups().map { backups ->
+        val pendingItems = backups.filter { it.backupStatus == "PENDING" }
+        if (pendingItems.isEmpty()) {
+            null
+        } else {
+            val minPendingTimestamp = pendingItems.minOf { it.backupTimestamp }
+            val activeCompleted = backups.filter {
+                (it.backupStatus == "SUCCESS" || it.backupStatus == "FAILED") && it.backupTimestamp >= minPendingTimestamp
+            }
+            val successful = activeCompleted.count { it.backupStatus == "SUCCESS" }
+            val failed = activeCompleted.count { it.backupStatus == "FAILED" }
+            val pendingCount = pendingItems.size
+            val total = pendingCount + successful + failed
+            val progress = if (total > 0) successful.toFloat() / total.toFloat() else 0f
+            BackupProgress(
+                total = total,
+                pending = pendingCount,
+                successful = successful,
+                failed = failed,
+                progress = progress
+            )
+        }
+    }.flowOn(Dispatchers.Default).stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = null
+    )
 
     suspend fun getTelegramFileUrl(fileId: String): String? {
         if (fileId.isBlank()) return null
@@ -353,6 +555,18 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch {
             _gridCellsCount.value = settingsRepository.gridCellsCountFlow.first()
         }
+        viewModelScope.launch(Dispatchers.Default) {
+            try {
+                val searchEngine = com.inferno.gallery.data.ai.SmartSearchEngine.getInstance(application)
+                if (searchEngine.isModelDownloaded()) {
+                    Log.d("GalleryViewModel", "Pre-warming Smart Search Engine...")
+                    searchEngine.loadModel()
+                    Log.d("GalleryViewModel", "Smart Search Engine pre-warmed successfully.")
+                }
+            } catch (e: Exception) {
+                Log.w("GalleryViewModel", "Failed to pre-warm Smart Search Engine: ${e.message}")
+            }
+        }
     }
 
     val thumbnailCornerRadius: StateFlow<Float> = settingsRepository.thumbnailCornerRadiusFlow.stateIn(
@@ -444,31 +658,55 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
         }
     }.cachedIn(viewModelScope)
 
-    val pagedMedia: Flow<PagingData<GalleryListItem>> = pagedMediaRaw.map { pagingData ->
-        pagingData.insertSeparators { before: GalleryItem?, after: GalleryItem? ->
-            if (after == null) return@insertSeparators null
-            
-            val fullFormat = SimpleDateFormat("EEEE, dd-MM-yyyy", Locale.getDefault())
-            val dateFormat = SimpleDateFormat("dd-MM-yyyy", Locale.getDefault())
-            val oneWeekAgo = System.currentTimeMillis() - 7L * 24 * 60 * 60 * 1000
-            
-            val afterTimeMs = after.dateAdded * 1000L
-            val afterTitle = if (afterTimeMs < oneWeekAgo) dateFormat.format(Date(afterTimeMs)) else fullFormat.format(Date(afterTimeMs))
-            
-            if (before == null) {
-                return@insertSeparators GalleryListItem.Header(afterTitle)
+    private fun formatGroupHeader(dateAddedSeconds: Long): String {
+        val timeMs = dateAddedSeconds * 1000L
+        val itemDate = java.time.Instant.ofEpochMilli(timeMs)
+            .atZone(java.time.ZoneId.systemDefault())
+            .toLocalDate()
+        
+        val today = java.time.LocalDate.now()
+        val yesterday = today.minusDays(1)
+        
+        return when (itemDate) {
+            today -> "Today"
+            yesterday -> "Yesterday"
+            else -> {
+                if (itemDate.year == today.year) {
+                    val formatter = java.time.format.DateTimeFormatter.ofPattern("MMMM d", java.util.Locale.getDefault())
+                    itemDate.format(formatter)
+                } else {
+                    val formatter = java.time.format.DateTimeFormatter.ofPattern("MMMM d, yyyy", java.util.Locale.getDefault())
+                    itemDate.format(formatter)
+                }
             }
-            
-            val beforeTimeMs = before.dateAdded * 1000L
-            val beforeTitle = if (beforeTimeMs < oneWeekAgo) dateFormat.format(Date(beforeTimeMs)) else fullFormat.format(Date(beforeTimeMs))
-            
-            if (beforeTitle != afterTitle) {
-                return@insertSeparators GalleryListItem.Header(afterTitle)
+        }
+    }
+
+    val pagedMedia: Flow<PagingData<GalleryListItem>> = viewMode.flatMapLatest { mode ->
+        pagedMediaRaw.map { pagingData ->
+            if (mode == ViewMode.Immersive) {
+                pagingData.map { GalleryListItem.Item(it) as GalleryListItem }
             } else {
-                return@insertSeparators null
+                pagingData.insertSeparators { before: GalleryItem?, after: GalleryItem? ->
+                    if (after == null) return@insertSeparators null
+                    
+                    val afterTitle = formatGroupHeader(after.dateAdded)
+                    
+                    if (before == null) {
+                        return@insertSeparators GalleryListItem.Header(afterTitle)
+                    }
+                    
+                    val beforeTitle = formatGroupHeader(before.dateAdded)
+                    
+                    if (beforeTitle != afterTitle) {
+                        return@insertSeparators GalleryListItem.Header(afterTitle)
+                    } else {
+                        return@insertSeparators null
+                    }
+                }.map { item ->
+                    if (item is GalleryItem) GalleryListItem.Item(item) else item as GalleryListItem.Header
+                }
             }
-        }.map { item ->
-            if (item is GalleryItem) GalleryListItem.Item(item) else item as GalleryListItem.Header
         }
     }.cachedIn(viewModelScope)
 
@@ -502,8 +740,69 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
         _selectedUris.value = emptySet()
     }
 
-    fun selectAll() {
-        // Not supported in Paging3 without a direct DB query.
+    fun toggleSelectAll() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val bucket = _currentBucket.value
+            val filterIndex = selectedFilterIndex.value
+            
+            var queryString = "SELECT cm.uriString FROM core_media cm LEFT JOIN telegram_backups tb ON cm.id = tb.mediaId "
+            val args = mutableListOf<Any>()
+            val conditions = mutableListOf<String>()
+
+            val folderName = when (filterIndex) {
+                1 -> "Camera"
+                2 -> "Screenshots"
+                else -> null
+            }
+            if (bucket == "search_text") {
+                val ids = ftsSearchResults.value.map { it.id }
+                if (ids.isEmpty()) {
+                    conditions.add("cm.id IN (0)")
+                } else {
+                    conditions.add("cm.id IN (${ids.joinToString(",")})")
+                    conditions.add("cm.bucketName != 'Trash'")
+                }
+            } else {
+                if (bucket == "All" || bucket == null) {
+                    conditions.add("cm.bucketName != 'Trash'")
+                } else if (bucket == "telegram_cloud") {
+                    conditions.add("tb.backupStatus = 'SUCCESS'")
+                } else if (bucket == "Videos") {
+                    conditions.add("cm.isVideo = 1")
+                    conditions.add("cm.bucketName != 'Trash'")
+                } else {
+                    conditions.add("cm.bucketName = ?")
+                    args.add(bucket)
+                }
+                
+                if (folderName != null) {
+                    conditions.add("cm.bucketName = ?")
+                    args.add(folderName)
+                }
+            }
+
+            if (conditions.isNotEmpty()) {
+                queryString += "WHERE " + conditions.joinToString(" AND ")
+            }
+            
+            try {
+                val dbQuery = androidx.sqlite.db.SimpleSQLiteQuery(queryString, args.toTypedArray())
+                val allUris = database.mediaDao().getUrisRaw(dbQuery).toSet()
+                
+                val currentSelected = _selectedUris.value
+                val allSelected = allUris.isNotEmpty() && allUris.all { currentSelected.contains(it) }
+                
+                if (allSelected) {
+                    // Deselect all matching items in current view
+                    _selectedUris.value = currentSelected - allUris
+                } else {
+                    // Select all matching items in current view
+                    _selectedUris.value = currentSelected + allUris
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("GalleryViewModel", "Error toggling select all: ${e.message}", e)
+            }
+        }
     }
 
     fun selectRange(startUri: String, endUri: String) {
@@ -605,6 +904,7 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
         _searchQuery.value = query
         if (query.isBlank()) {
             _ftsSearchResults.value = emptyList()
+            _smartSearchResults.value = emptyList()
             _isSearching.value = false
             searchJob?.cancel()
             return
@@ -620,6 +920,9 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
     private val _ftsSearchResults = MutableStateFlow<List<GalleryItem>>(emptyList())
     val ftsSearchResults: StateFlow<List<GalleryItem>> = _ftsSearchResults.asStateFlow()
 
+    private val _smartSearchResults = MutableStateFlow<List<GalleryItem>>(emptyList())
+    val smartSearchResults: StateFlow<List<GalleryItem>> = _smartSearchResults.asStateFlow()
+
     private val _isSearching = MutableStateFlow(false)
     val isSearching: StateFlow<Boolean> = _isSearching.asStateFlow()
 
@@ -627,35 +930,112 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch {
             _isSearching.value = true
             try {
-                // Run FTS text-in-image search
-                val ftsResults = withContext(Dispatchers.IO) {
-                    try {
-                        val ftsEntities = if (query.isNotBlank()) {
-                            DatabaseProvider.searchFts(database, query)
-                        } else {
+                kotlinx.coroutines.coroutineScope {
+                    val ftsDeferred = async(Dispatchers.IO) {
+                        try {
+                            val ftsEntities = if (query.isNotBlank()) {
+                                DatabaseProvider.searchFts(database, query)
+                            } else {
+                                emptyList()
+                            }
+                            val ids = ftsEntities.map { it.id }
+                            val backups = if (ids.isNotEmpty()) {
+                                database.telegramBackupDao().getBackupsForMediaIds(ids)
+                            } else {
+                                emptyList()
+                            }
+                            val backupMap = backups.associateBy { it.mediaId }
+                            ftsEntities.map { entity ->
+                                val backup = backupMap[entity.id]
+                                GalleryItem(
+                                    id = entity.id.toString(),
+                                    uri = Uri.parse(entity.uriString),
+                                    bucketName = entity.bucketName,
+                                    dateAdded = entity.dateAdded,
+                                    size = entity.size,
+                                    name = entity.name,
+                                    dateModified = entity.dateModified,
+                                    path = entity.filePath,
+                                    isVideo = entity.isVideo,
+                                    durationMs = entity.durationMs,
+                                    telegramFileId = backup?.telegramFileId,
+                                    telegramThumbFileId = backup?.telegramThumbFileId
+                                )
+                            }
+                        } catch (e: Exception) {
+                            android.util.Log.e("GalleryViewModel", "FTS search failed: ${e.message}")
                             emptyList()
                         }
-                        ftsEntities.map { entity ->
-                            GalleryItem(
-                                id = entity.id.toString(),
-                                uri = Uri.parse(entity.uriString),
-                                bucketName = entity.bucketName,
-                                dateAdded = entity.dateAdded,
-                                size = entity.size,
-                                name = entity.name,
-                                dateModified = entity.dateModified,
-                                path = entity.filePath,
-                                isVideo = entity.isVideo,
-                                durationMs = entity.durationMs
-                            )
-                        }
-                    } catch (e: Exception) {
-                        android.util.Log.e("GalleryViewModel", "FTS search failed: ${e.message}")
-                        emptyList()
                     }
-                }
 
-                _ftsSearchResults.value = ftsResults
+                    val smartDeferred = async(Dispatchers.Default) {
+                        try {
+                            val searchEngine = com.inferno.gallery.data.ai.SmartSearchEngine.getInstance(getApplication())
+                            if (searchEngine.isModelDownloaded()) {
+                                if (!searchEngine.isLoaded()) {
+                                    searchEngine.loadModel()
+                                }
+                                val queryVector = searchEngine.encodeText(query)
+                                val allEmbeddings = database.embeddingDao().getAllEmbeddings()
+                                val threshold = settingsRepository.smartSearchThresholdFlow.first()
+
+                                android.util.Log.i("GalleryViewModel", "Smart search for: '$query'. Query vector sample: [${queryVector.take(3).joinToString(", ")}], Total DB embeddings: ${allEmbeddings.size}, Threshold: $threshold")
+
+                                val matchedIds = allEmbeddings.mapNotNull { record ->
+                                    val score = searchEngine.dotProduct(queryVector, record.embedding)
+                                    if (score >= threshold) {
+                                        android.util.Log.i("GalleryViewModel", "Match found! ID: ${record.mediaId}, score: $score >= threshold $threshold")
+                                        Pair(record.mediaId, score)
+                                    } else {
+                                        if (score > 0.05f) {
+                                            android.util.Log.i("GalleryViewModel", "Low match score: $score for ID: ${record.mediaId}")
+                                        }
+                                        null
+                                    }
+                                }.sortedByDescending { it.second }.map { it.first }
+
+                                if (matchedIds.isNotEmpty()) {
+                                    val entitiesMap = database.mediaDao().getMediaByIdsList(matchedIds).associateBy { it.id }
+                                    val orderedEntities = matchedIds.mapNotNull { entitiesMap[it] }
+
+                                    val backups = database.telegramBackupDao().getBackupsForMediaIds(matchedIds)
+                                    val backupMap = backups.associateBy { it.mediaId }
+
+                                    orderedEntities.map { entity ->
+                                        val backup = backupMap[entity.id]
+                                        GalleryItem(
+                                            id = entity.id.toString(),
+                                            uri = Uri.parse(entity.uriString),
+                                            bucketName = entity.bucketName,
+                                            dateAdded = entity.dateAdded,
+                                            size = entity.size,
+                                            name = entity.name,
+                                            dateModified = entity.dateModified,
+                                            path = entity.filePath,
+                                            isVideo = entity.isVideo,
+                                            durationMs = entity.durationMs,
+                                            telegramFileId = backup?.telegramFileId,
+                                            telegramThumbFileId = backup?.telegramThumbFileId
+                                        )
+                                    }
+                                } else {
+                                    emptyList()
+                                }
+                            } else {
+                                emptyList()
+                            }
+                        } catch (e: Exception) {
+                            android.util.Log.e("GalleryViewModel", "Smart search failed: ${e.message}")
+                            emptyList()
+                        }
+                    }
+
+                    val ftsResults = ftsDeferred.await()
+                    val smartResults = smartDeferred.await()
+
+                    _ftsSearchResults.value = ftsResults
+                    _smartSearchResults.value = smartResults
+                }
             } finally {
                 _isSearching.value = false
             }
@@ -746,6 +1126,146 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
             }
         }
     }
+
+    fun copySelectedMedia(targetBucket: String) {
+        val selected = _selectedUris.value.toList()
+        if (selected.isEmpty()) return
+
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                    val resolver = getApplication<android.app.Application>().contentResolver
+                    var successCount = 0
+                    for (uriString in selected) {
+                        val uri = Uri.parse(uriString)
+                        if (uriString.startsWith("content://")) {
+                            // 1. Get info about original file
+                            var displayName: String? = null
+                            var mimeType: String? = null
+                            resolver.query(uri, arrayOf(
+                                android.provider.MediaStore.MediaColumns.DISPLAY_NAME,
+                                android.provider.MediaStore.MediaColumns.MIME_TYPE
+                            ), null, null, null)?.use { cursor ->
+                                if (cursor.moveToFirst()) {
+                                    displayName = cursor.getString(0)
+                                    mimeType = cursor.getString(1)
+                                }
+                            }
+                            
+                            if (displayName == null) {
+                                displayName = "copied_media_${System.currentTimeMillis()}"
+                            }
+                            if (mimeType == null) {
+                                mimeType = "image/jpeg"
+                            }
+
+                            // 2. Insert copy entry in MediaStore
+                            val isVideo = mimeType?.startsWith("video/") == true
+                            val baseUri = if (isVideo) {
+                                android.provider.MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+                            } else {
+                                android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+                            }
+
+                            val values = android.content.ContentValues().apply {
+                                put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, displayName)
+                                put(android.provider.MediaStore.MediaColumns.MIME_TYPE, mimeType)
+                                put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, android.os.Environment.DIRECTORY_PICTURES + "/" + targetBucket)
+                                put(android.provider.MediaStore.MediaColumns.IS_PENDING, 1)
+                            }
+
+                            val newUri = resolver.insert(baseUri, values)
+                            if (newUri != null) {
+                                try {
+                                    // 3. Copy bytes
+                                    resolver.openInputStream(uri)?.use { input ->
+                                        resolver.openOutputStream(newUri)?.use { output ->
+                                            input.copyTo(output)
+                                        }
+                                    }
+                                    
+                                    // 4. Release pending status
+                                    val updateValues = android.content.ContentValues().apply {
+                                        put(android.provider.MediaStore.MediaColumns.IS_PENDING, 0)
+                                    }
+                                    resolver.update(newUri, updateValues, null, null)
+                                    successCount++
+                                } catch (e: Exception) {
+                                    android.util.Log.e("GalleryViewModel", "Failed copy stream: ${e.message}")
+                                    resolver.delete(newUri, null, null)
+                                }
+                            }
+                        }
+                    }
+                    
+                    if (successCount > 0) {
+                        // Trigger MediaSyncWorker to update our database and grid UI
+                        val syncWorkRequest = androidx.work.OneTimeWorkRequestBuilder<com.inferno.gallery.workers.MediaSyncWorker>().build()
+                        androidx.work.WorkManager.getInstance(getApplication()).enqueueUniqueWork(
+                            "MediaSyncWorker",
+                            androidx.work.ExistingWorkPolicy.REPLACE,
+                            syncWorkRequest
+                        )
+                    }
+
+                    clearSelection()
+                    withContext(Dispatchers.Main) {
+                        android.widget.Toast.makeText(getApplication(), "Copied $successCount items to $targetBucket", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                } else {
+                    withContext(Dispatchers.Main) {
+                        android.widget.Toast.makeText(getApplication(), "Copy not supported on this Android version", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("GalleryViewModel", "Error copying media: ${e.message}", e)
+            }
+        }
+    }
+
+    fun deleteSelectedMediaFromDb(uris: List<String>) {
+        viewModelScope.launch(Dispatchers.IO) {
+            for (uriString in uris) {
+                database.mediaDao().deleteByUri(uriString)
+            }
+        }
+    }
+
+    fun createAlbum(albumName: String, onSuccess: () -> Unit, onError: (String) -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val picturesDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_PICTURES)
+                val newFolder = java.io.File(picturesDir, albumName)
+                if (newFolder.exists()) {
+                    withContext(Dispatchers.Main) {
+                        onError("Album directory already exists")
+                    }
+                    return@launch
+                }
+                val success = newFolder.mkdirs()
+                if (success) {
+                    android.media.MediaScannerConnection.scanFile(
+                        getApplication(),
+                        arrayOf(newFolder.absolutePath),
+                        null
+                    ) { _, _ -> }
+                    
+                    withContext(Dispatchers.Main) {
+                        onSuccess()
+                    }
+                } else {
+                    withContext(Dispatchers.Main) {
+                        onError("Could not create directory. Make sure you have storage permissions.")
+                    }
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    onError(e.message ?: "Unknown error")
+                }
+            }
+        }
+    }
+
 
     val ocrIndexWorkInfo = WorkManager.getInstance(application)
         .getWorkInfosForUniqueWorkFlow("OcrIndexWorker")
@@ -1016,23 +1536,38 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
             val allMediaList = database.mediaDao().getAllMedia()
             val backupDao = database.telegramBackupDao()
             
+            var skippedCount = 0
             selected.forEach { uriStr ->
                 val mediaItem = allMediaList.firstOrNull { it.uriString == uriStr }
                 if (mediaItem != null) {
-                    backupDao.insertOrUpdate(
-                        TelegramBackupEntity(
-                            mediaId = mediaItem.id,
-                            telegramFileId = null,
-                            telegramThumbFileId = null,
-                            backupStatus = "PENDING",
-                            backupTimestamp = System.currentTimeMillis()
+                    if (mediaItem.size > 50 * 1024 * 1024L) {
+                        skippedCount++
+                        return@forEach
+                    }
+                    val existingBackup = backupDao.getBackupForMedia(mediaItem.id)
+                    if (existingBackup == null || existingBackup.backupStatus == "FAILED") {
+                        backupDao.insertOrUpdate(
+                            TelegramBackupEntity(
+                                mediaId = mediaItem.id,
+                                telegramFileId = null,
+                                telegramThumbFileId = null,
+                                backupStatus = "PENDING",
+                                backupTimestamp = System.currentTimeMillis()
+                            )
                         )
-                    )
+                    }
                 }
             }
             
             withContext(Dispatchers.Main) {
                 clearSelection()
+                if (skippedCount > 0) {
+                    android.widget.Toast.makeText(
+                        getApplication(),
+                        "Skipped $skippedCount items (Telegram limit: max 50MB per file)",
+                        android.widget.Toast.LENGTH_LONG
+                    ).show()
+                }
             }
             
             val request = OneTimeWorkRequestBuilder<com.inferno.gallery.workers.TelegramBackupWorker>()
@@ -1058,5 +1593,42 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
             deleteCloudBackups(mediaIds)
         }
     }
+
+    data class SystemStatus(val isOffline: Boolean, val isBatteryPauseActive: Boolean)
+
+    val telegramConfigured: StateFlow<Boolean> = combine(
+        settingsRepository.telegramBotTokensFlow,
+        settingsRepository.telegramChatIdFlow
+    ) { tokens, chatId ->
+        tokens.isNotEmpty() && chatId.isNotBlank()
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    private fun isBatteryTooLow(context: android.content.Context): Boolean {
+        val filter = android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED)
+        val batteryStatus = context.registerReceiver(null, filter) ?: return false
+        val level = batteryStatus.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1)
+        val scale = batteryStatus.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, -1)
+        val batteryPct = if (level >= 0 && scale > 0) (level * 100 / scale) else 100
+        val status = batteryStatus.getIntExtra(android.os.BatteryManager.EXTRA_STATUS, -1)
+        val isCharging = status == android.os.BatteryManager.BATTERY_STATUS_CHARGING ||
+                status == android.os.BatteryManager.BATTERY_STATUS_FULL
+        return batteryPct < 35 && !isCharging
+    }
+
+    private fun isNetworkConnected(context: android.content.Context): Boolean {
+        val connectivityManager = context.getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager
+        val activeNetwork = connectivityManager?.activeNetwork ?: return false
+        val capabilities = connectivityManager.getNetworkCapabilities(activeNetwork) ?: return false
+        return capabilities.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET)
+    }
+
+    val systemStatus: StateFlow<SystemStatus> = kotlinx.coroutines.flow.flow {
+        while (true) {
+            val offline = !isNetworkConnected(getApplication())
+            val batteryPause = settingsRepository.telegramAutoBackupBatteryLowPauseFlow.first() && isBatteryTooLow(getApplication())
+            emit(SystemStatus(offline, batteryPause))
+            kotlinx.coroutines.delay(5000)
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SystemStatus(false, false))
 
 }
