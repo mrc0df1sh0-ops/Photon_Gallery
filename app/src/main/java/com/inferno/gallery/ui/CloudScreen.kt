@@ -7,6 +7,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.Spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -16,9 +19,12 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.CloudUpload
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -39,15 +45,19 @@ fun CloudScreen(
     onPhotoClick: (mediaId: String, bucketName: String?, query: String?) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: GalleryViewModel = viewModel(),
-    contentPadding: PaddingValues = PaddingValues(0.dp)
+    contentPadding: PaddingValues = PaddingValues(0.dp),
+    onNavigateToSettings: () -> Unit = {}
 ) {
     val cloudMedia by viewModel.cloudMedia.collectAsState()
     val pendingCount by viewModel.pendingBackupsCount.collectAsState()
+    val backupProgress by viewModel.backupProgress.collectAsState()
     val thumbnailCornerRadius by viewModel.thumbnailCornerRadius.collectAsState()
     val gridAutoPlay by viewModel.gridAutoPlay.collectAsState()
     val isRefreshing by viewModel.isCloudRefreshing.collectAsState()
     val selectedUris by viewModel.selectedUris.collectAsState()
     val isSelectionMode by viewModel.isSelectionMode.collectAsState()
+    val telegramConfigured by viewModel.telegramConfigured.collectAsState()
+    val systemStatus by viewModel.systemStatus.collectAsState()
     val gridState = rememberLazyGridState()
 
     val galleryItems = remember(cloudMedia) {
@@ -73,17 +83,68 @@ fun CloudScreen(
         cloudMedia.sumOf { it.size }
     }
 
+    if (!telegramConfigured) {
+        Box(
+            modifier = modifier
+                .fillMaxSize()
+                .padding(contentPadding)
+                .padding(24.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Card(
+                shape = RoundedCornerShape(28.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                ),
+                modifier = Modifier.fillMaxWidth().wrapContentHeight()
+            ) {
+                Column(
+                    modifier = Modifier.padding(32.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.CloudUpload,
+                        contentDescription = "Cloud Upload",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(64.dp)
+                    )
+                    Text(
+                        text = "Telegram Cloud Sync",
+                        style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
+                        textAlign = TextAlign.Center
+                    )
+                    Text(
+                        text = "Securely backup your photos and videos to a private Telegram channel. Enjoy unlimited free storage with automatic metadata stripping for privacy.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        textAlign = TextAlign.Center,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(
+                        onClick = onNavigateToSettings,
+                        shape = CircleShape,
+                        modifier = Modifier.fillMaxWidth(0.8f)
+                    ) {
+                        Text("Configure Telegram Bot")
+                    }
+                }
+            }
+        }
+        return
+    }
+
     LazyVerticalGrid(
         columns = GridCells.Fixed(3),
         state = gridState,
         contentPadding = PaddingValues(
             top = contentPadding.calculateTopPadding() + 8.dp,
             bottom = contentPadding.calculateBottomPadding() + 80.dp,
-            start = 12.dp,
-            end = 12.dp
+            start = 6.dp,
+            end = 6.dp
         ),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
         modifier = modifier
             .fillMaxSize()
             .pointerInput(gridState) {
@@ -236,43 +297,283 @@ fun CloudScreen(
                             }
                         }
 
-                        if (pendingCount > 0) {
-                            Surface(
-                                shape = RoundedCornerShape(12.dp),
-                                color = MaterialTheme.colorScheme.surfaceVariant,
-                                contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        // ── Storage Breakdown Segmented Bar ──────────────────────────
+                        val storageBreakdown = remember(cloudMedia) {
+                            var photoBytes = 0L
+                            var videoBytes = 0L
+                            var photoCount = 0
+                            var videoCount = 0
+                            for (item in cloudMedia) {
+                                if (item.isVideo) {
+                                    videoBytes += item.size
+                                    videoCount++
+                                } else {
+                                    photoBytes += item.size
+                                    photoCount++
+                                }
+                            }
+                            val total = photoBytes + videoBytes
+                            val photoRatio = if (total > 0) photoBytes.toFloat() / total else 0f
+                            val videoRatio = if (total > 0) videoBytes.toFloat() / total else 0f
+                            
+                            object {
+                                val photos = photoBytes
+                                val videos = videoBytes
+                                val photosCount = photoCount
+                                val videosCount = videoCount
+                                val totalBytes = total
+                                val photoRatio = photoRatio
+                                val videoRatio = videoRatio
+                            }
+                        }
+
+                        val animatedPhotoRatio by animateFloatAsState(
+                            targetValue = storageBreakdown.photoRatio,
+                            animationSpec = spring(
+                                dampingRatio = Spring.DampingRatioNoBouncy,
+                                stiffness = Spring.StiffnessLow
+                            ),
+                            label = "photoRatio"
+                        )
+                        val animatedVideoRatio by animateFloatAsState(
+                            targetValue = storageBreakdown.videoRatio,
+                            animationSpec = spring(
+                                dampingRatio = Spring.DampingRatioNoBouncy,
+                                stiffness = Spring.StiffnessLow
+                            ),
+                            label = "videoRatio"
+                        )
+
+                        Spacer(modifier = Modifier.height(4.dp))
+                        
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(10.dp)
+                                .clip(RoundedCornerShape(5.dp))
+                                .background(MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.15f))
+                        ) {
+                            if (storageBreakdown.totalBytes > 0L) {
+                                if (animatedPhotoRatio > 0f) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxHeight()
+                                            .weight(animatedPhotoRatio)
+                                            .background(MaterialTheme.colorScheme.primary)
+                                    )
+                                }
+                                if (animatedVideoRatio > 0f) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxHeight()
+                                            .weight(animatedVideoRatio)
+                                            .background(MaterialTheme.colorScheme.tertiary)
+                                    )
+                                }
+                            } else {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .background(MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.1f))
+                                )
+                            }
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .clip(CircleShape)
+                                        .background(MaterialTheme.colorScheme.primary)
+                                )
+                                Text(
+                                    text = "Photos: ${formatSize(storageBreakdown.photos)} (${storageBreakdown.photosCount})",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                                )
+                            }
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .clip(CircleShape)
+                                        .background(MaterialTheme.colorScheme.tertiary)
+                                )
+                                Text(
+                                    text = "Videos: ${formatSize(storageBreakdown.videos)} (${storageBreakdown.videosCount})",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                                )
+                            }
+                        }
+                        
+                        Spacer(modifier = Modifier.height(4.dp))
+                        HorizontalDivider(color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.15f))
+                        Spacer(modifier = Modifier.height(2.dp))
+
+                        val currentBackupProgress = backupProgress
+                        if (currentBackupProgress != null) {
+                            val animatedProgress by animateFloatAsState(
+                                targetValue = currentBackupProgress.progress,
+                                animationSpec = spring(
+                                    dampingRatio = Spring.DampingRatioNoBouncy,
+                                    stiffness = Spring.StiffnessLow
+                                ),
+                                label = "backupProgressPercent"
+                            )
+
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 Row(
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    WavyProgressIndicator(
-                                        modifier = Modifier.size(width = 28.dp, height = 16.dp),
-                                        strokeWidth = 2.dp,
-                                        amplitude = 2.dp,
-                                        frequency = 1.5f,
-                                        color = MaterialTheme.colorScheme.primary
+                                    Text(
+                                        text = "Backing up batch...",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer
                                     )
                                     Text(
-                                        text = "$pendingCount pending",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        fontWeight = FontWeight.Bold
+                                        text = "${(currentBackupProgress.progress * 100).toInt()}% (${currentBackupProgress.successful}/${currentBackupProgress.total})",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer
                                     )
+                                }
+
+                                LinearProgressIndicator(
+                                    progress = { animatedProgress },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(8.dp)
+                                        .clip(RoundedCornerShape(4.dp)),
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    trackColor = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.2f)
+                                )
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = MaterialTheme.colorScheme.surfaceVariant,
+                                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                    ) {
+                                        Text(
+                                            text = "${currentBackupProgress.pending} pending",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                        )
+                                    }
+                                    if (currentBackupProgress.successful > 0) {
+                                        Surface(
+                                            shape = RoundedCornerShape(8.dp),
+                                            color = MaterialTheme.colorScheme.primary,
+                                            contentColor = MaterialTheme.colorScheme.onPrimary
+                                        ) {
+                                            Text(
+                                                text = "${currentBackupProgress.successful} uploaded",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.Bold,
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                            )
+                                        }
+                                    }
+                                    if (currentBackupProgress.failed > 0) {
+                                        Surface(
+                                            shape = RoundedCornerShape(8.dp),
+                                            color = MaterialTheme.colorScheme.errorContainer,
+                                            contentColor = MaterialTheme.colorScheme.onErrorContainer
+                                        ) {
+                                            Text(
+                                                text = "${currentBackupProgress.failed} failed",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.Bold,
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                            )
+                                        }
+                                    }
+                                    
+                                    if (systemStatus.isOffline) {
+                                        Surface(
+                                            shape = RoundedCornerShape(8.dp),
+                                            color = MaterialTheme.colorScheme.errorContainer,
+                                            contentColor = MaterialTheme.colorScheme.onErrorContainer
+                                        ) {
+                                            Text(
+                                                text = "Offline",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.Bold,
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         } else {
-                            Surface(
-                                shape = RoundedCornerShape(12.dp),
-                                color = MaterialTheme.colorScheme.primary,
-                                contentColor = MaterialTheme.colorScheme.onPrimary
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(
-                                    text = "Up to date",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                                )
+                                Surface(
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = MaterialTheme.colorScheme.primary,
+                                    contentColor = MaterialTheme.colorScheme.onPrimary
+                                ) {
+                                    Text(
+                                        text = "Up to date",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                    )
+                                }
+
+                                if (systemStatus.isOffline) {
+                                    Surface(
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = MaterialTheme.colorScheme.errorContainer,
+                                        contentColor = MaterialTheme.colorScheme.onErrorContainer
+                                    ) {
+                                        Text(
+                                            text = "Offline",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                        )
+                                    }
+                                } else if (systemStatus.isBatteryPauseActive) {
+                                    Surface(
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = MaterialTheme.colorScheme.errorContainer,
+                                        contentColor = MaterialTheme.colorScheme.onErrorContainer
+                                    ) {
+                                        Text(
+                                            text = "Low Battery (paused)",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -283,6 +584,37 @@ fun CloudScreen(
         // Gap/Spacer item
         item(span = { GridItemSpan(maxLineSpan) }) {
             Spacer(modifier = Modifier.height(8.dp))
+        }
+
+        // Warning/Disclaimer Item
+        item(span = { GridItemSpan(maxLineSpan) }) {
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.15f)
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Info,
+                        contentDescription = "Disclaimer",
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Text(
+                        text = "Do not delete backup database or manifest files from your Telegram chat. Deleting them will erase your cloud synchronization index, item counts, and storage usage statistics.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                }
+            }
         }
 
         // ── Photo Grid or Empty State ──────────────────────────────────────────
