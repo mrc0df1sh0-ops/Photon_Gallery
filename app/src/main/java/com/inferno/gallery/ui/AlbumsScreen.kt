@@ -13,11 +13,16 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.ui.draw.clip
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.Spring
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.collectLatest
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.clickable
@@ -79,8 +84,48 @@ fun AlbumsScreen(
     val albumSortOrder by viewModel.albumSortOrder.collectAsState()
     val favoriteItems by viewModel.favoriteMedia.collectAsState()
     val gridAutoPlay by viewModel.gridAutoPlay.collectAsState()
+    val trashCount by viewModel.trashCount.collectAsState()
+
+    val pinnedAlbumsWithTrash = remember(pinnedAlbums, trashCount) {
+        val list = pinnedAlbums.toMutableList()
+        val screenshotIndex = list.indexOfFirst { it.bucketName.contains("Screenshots", ignoreCase = true) || it.bucketName.contains("Screenshot", ignoreCase = true) }
+        val trashBucket = AlbumBucket(
+            bucketName = "Trash",
+            coverUri = Uri.EMPTY,
+            itemCount = trashCount
+        )
+        if (screenshotIndex != -1) {
+            list.add(screenshotIndex + 1, trashBucket)
+        } else {
+            list.add(trashBucket)
+        }
+        list
+    }
     
     var showSortMenu by remember { mutableStateOf(false) }
+
+    val lazyGridState = rememberLazyGridState()
+
+    LaunchedEffect(lazyGridState) {
+        var previousIndex = 0
+        var previousScrollOffset = 0
+        snapshotFlow { lazyGridState.firstVisibleItemIndex to lazyGridState.firstVisibleItemScrollOffset }
+            .collectLatest { (index, offset) ->
+                if (index > previousIndex) {
+                    viewModel.setScrollDockVisible(false)
+                } else if (index < previousIndex) {
+                    viewModel.setScrollDockVisible(true)
+                } else {
+                    if (offset > previousScrollOffset + 15) {
+                        viewModel.setScrollDockVisible(false)
+                    } else if (offset < previousScrollOffset - 15) {
+                        viewModel.setScrollDockVisible(true)
+                    }
+                }
+                previousIndex = index
+                previousScrollOffset = offset
+            }
+    }
     
     
 
@@ -89,81 +134,105 @@ fun AlbumsScreen(
 
     LazyVerticalGrid(
         columns = GridCells.Fixed(12),
+        state = lazyGridState,
         contentPadding = contentPadding,
         verticalArrangement = Arrangement.spacedBy(8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         modifier = modifier
             .fillMaxSize()
-            .padding(horizontal = 8.dp)
+            .padding(horizontal = 16.dp)
     ) {
         if (favoriteItems.isNotEmpty()) {
             item(span = { GridItemSpan(maxLineSpan) }) {
-                Column(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
-                    Text("Favorites", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp))
-                    @OptIn(ExperimentalMaterial3ExpressiveApi::class)
-                    HorizontalUncontainedCarousel(
-                        state = rememberCarouselState { favoriteItems.size },
-                        itemWidth = 160.dp,
-                        itemSpacing = 8.dp,
-                        contentPadding = PaddingValues(horizontal = 8.dp),
-                        modifier = Modifier.fillMaxWidth().height(160.dp)
-                    ) { i ->
-                        val item = favoriteItems[i]
-                        Box(modifier = Modifier.fillMaxSize().clickable { onAlbumClick("All") }) {
-                            AsyncImage(
-                                model = ImageRequest.Builder(LocalContext.current)
-                                    .data(item.uri)
-                                    .size(300, 300)
-                                    .crossfade(true)
-                                    .apply {
-                                        if (!gridAutoPlay) {
-                                            repeatCount(0)
-                                            videoFrameMillis(0)
-                                        }
-                                    }
-                                    .build(),
-                                contentDescription = null,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier.fillMaxSize()
-                            )
-                            // Text Overlay
-                            Surface(
+                Surface(
+                    shape = MaterialTheme.shapes.extraLarge,
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
+                ) {
+                    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp)) {
+                        Text(
+                            text = "Favorites",
+                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                        )
+                        @OptIn(ExperimentalMaterial3ExpressiveApi::class)
+                        HorizontalUncontainedCarousel(
+                            state = rememberCarouselState { favoriteItems.size },
+                            itemWidth = 140.dp,
+                            itemSpacing = 8.dp,
+                            contentPadding = PaddingValues(horizontal = 16.dp),
+                            modifier = Modifier.fillMaxWidth().height(140.dp)
+                        ) { i ->
+                            val item = favoriteItems[i]
+                            Box(
                                 modifier = Modifier
-                                    .align(Alignment.BottomStart)
-                                    .padding(8.dp),
-                                shape = MaterialTheme.shapes.small,
-                                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                contentColor = MaterialTheme.colorScheme.onSurface
+                                    .fillMaxSize()
+                                    .clip(MaterialTheme.shapes.large)
+                                    .expressiveClick { onAlbumClick("All") }
                             ) {
-                                Text(
-                                    text = item.name ?: "Unknown",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                    maxLines = 1,
-                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                AsyncImage(
+                                    model = ImageRequest.Builder(LocalContext.current)
+                                        .data(item.uri)
+                                        .size(300, 300)
+                                        .precision(Precision.EXACT)
+                                        .crossfade(true)
+                                        .apply {
+                                            if (!gridAutoPlay) {
+                                                repeatCount(0)
+                                                videoFrameMillis(0)
+                                            }
+                                        }
+                                        .build(),
+                                    contentDescription = null,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.fillMaxSize()
                                 )
+                                // Text Overlay
+                                Surface(
+                                    modifier = Modifier
+                                        .align(Alignment.BottomStart)
+                                        .padding(8.dp),
+                                    shape = MaterialTheme.shapes.small,
+                                    color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.8f),
+                                    contentColor = MaterialTheme.colorScheme.onSurface
+                                ) {
+                                    Text(
+                                        text = item.name ?: "Unknown",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                        maxLines = 1,
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                    )
+                                }
                             }
                         }
                     }
                 }
             }
         }
-        if (pinnedAlbums.isNotEmpty()) {
+        if (pinnedAlbumsWithTrash.isNotEmpty()) {
             items(
-                items = pinnedAlbums,
+                items = pinnedAlbumsWithTrash,
                 key = { "pinned_${it.bucketName}" },
                 span = { GridItemSpan(4) }
             ) { bucket ->
-                // Map screen recordings bucket name for UI display
-                val displayBucketName = when (bucket.bucketName) {
-                    "Screenrecordings", "Screenrecords", "ScreenRecord" -> "Screen recordings"
-                    else -> bucket.bucketName
+                if (bucket.bucketName == "Trash") {
+                    TrashCard(
+                        itemCount = bucket.itemCount,
+                        onClick = { onAlbumClick("Trash") }
+                    )
+                } else {
+                    // Map screen recordings bucket name for UI display
+                    val displayBucketName = when (bucket.bucketName) {
+                        "Screenrecordings", "Screenrecords", "ScreenRecord" -> "Screen recordings"
+                        else -> bucket.bucketName
+                    }
+                    AlbumCard(
+                        bucket = bucket.copy(bucketName = displayBucketName), 
+                        gridAutoPlay = gridAutoPlay,
+                        onClick = { onAlbumClick(bucket.bucketName) } // Pass original bucketName for click querying
+                    )
                 }
-                AlbumCard(
-                    bucket = bucket.copy(bucketName = displayBucketName), 
-                    gridAutoPlay = gridAutoPlay,
-                    onClick = { onAlbumClick(bucket.bucketName) } // Pass original bucketName for click querying
-                )
             }
         }
         
@@ -271,32 +340,6 @@ fun AlbumsScreen(
 
         item(span = { GridItemSpan(maxLineSpan) }) {
             Spacer(modifier = Modifier.height(24.dp))
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .expressiveClick { onAlbumClick("Trash") },
-                shape = MaterialTheme.shapes.extraLarge,
-                color = MaterialTheme.colorScheme.errorContainer,
-                contentColor = MaterialTheme.colorScheme.onErrorContainer
-            ) {
-                Row(
-                    modifier = Modifier.padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    androidx.compose.material3.Icon(
-                        imageVector = Icons.Outlined.Delete,
-                        contentDescription = "Recycle Bin",
-                        modifier = Modifier.size(32.dp)
-                    )
-                    Spacer(modifier = Modifier.width(16.dp))
-                    Text(
-                        text = "Recycle Bin",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
-            Spacer(modifier = Modifier.height(24.dp))
         }
     }
 }
@@ -305,8 +348,11 @@ fun AlbumsScreen(
 fun Modifier.expressiveClick(onClick: () -> Unit): Modifier {
     var isPressed by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(
-        targetValue = if (isPressed) 0.92f else 1f,
-        animationSpec = spring(),
+        targetValue = if (isPressed) 0.97f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessHigh
+        ),
         label = "expressiveClickScale"
     )
     return this
@@ -335,7 +381,7 @@ fun CollageCover(
             ImageRequest.Builder(context)
                 .data(uri)
                 .size(150, 150)
-                .precision(Precision.INEXACT)
+                .precision(Precision.EXACT)
                 .crossfade(150)
                 .memoryCachePolicy(CachePolicy.ENABLED)
                 .diskCachePolicy(CachePolicy.ENABLED)
@@ -421,7 +467,7 @@ fun AlbumCard(
         ImageRequest.Builder(context)
             .data(bucket.coverUri)
             .size(Size(300, 300))
-            .precision(Precision.INEXACT)
+            .precision(Precision.EXACT)
             .crossfade(150)
             .memoryCachePolicy(CachePolicy.ENABLED)
             .diskCachePolicy(CachePolicy.ENABLED)
@@ -434,20 +480,24 @@ fun AlbumCard(
             .build()
     }
 
-    Box(
-        modifier = modifier.fillMaxWidth(),
-        contentAlignment = Alignment.Center
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .expressiveClick(onClick),
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh
     ) {
         Column(
-            modifier = Modifier.fillMaxWidth(0.95f),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(8.dp),
             horizontalAlignment = Alignment.Start
         ) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .aspectRatio(1f)
-                    .clip(MaterialTheme.shapes.extraLarge)
-                    .expressiveClick(onClick),
+                    .clip(MaterialTheme.shapes.large),
                 contentAlignment = Alignment.Center
             ) {
                 if (bucket.coverUris.size == 4) {
@@ -466,11 +516,11 @@ fun AlbumCard(
                 }
             }
             
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(8.dp))
             
             Text(
                 text = bucket.bucketName,
-                style = MaterialTheme.typography.titleMedium.copy(
+                style = MaterialTheme.typography.titleSmall.copy(
                     fontWeight = FontWeight.Bold
                 ),
                 maxLines = 1,
@@ -478,11 +528,72 @@ fun AlbumCard(
                 modifier = Modifier.padding(horizontal = 4.dp)
             )
             
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(2.dp))
             
             Text(
                 text = java.text.NumberFormat.getInstance(java.util.Locale.US).format(bucket.itemCount),
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                modifier = Modifier.padding(horizontal = 4.dp)
+            )
+        }
+    }
+}
+
+@Composable
+fun TrashCard(
+    itemCount: Int,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .expressiveClick(onClick),
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(8.dp),
+            horizontalAlignment = Alignment.Start
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(1f)
+                    .clip(MaterialTheme.shapes.large)
+                    .background(MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center
+            ) {
+                androidx.compose.material3.Icon(
+                    imageVector = Icons.Outlined.Delete,
+                    contentDescription = "Recycle Bin",
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(48.dp)
+                )
+            }
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            Text(
+                text = "Recycle Bin",
+                style = MaterialTheme.typography.titleSmall.copy(
+                    fontWeight = FontWeight.Bold
+                ),
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                modifier = Modifier.padding(horizontal = 4.dp)
+            )
+            
+            Spacer(modifier = Modifier.height(2.dp))
+            
+            Text(
+                text = java.text.NumberFormat.getInstance(java.util.Locale.US).format(itemCount),
+                style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
