@@ -38,6 +38,14 @@ class SettingsRepository(private val context: Context) {
         val TELEGRAM_AUTO_BACKUP_BATTERY_LOW_PAUSE = booleanPreferencesKey("telegram_auto_backup_battery_low_pause")
         val ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
         val STRIP_METADATA_ON_SHARE = booleanPreferencesKey("strip_metadata_on_share")
+        val SMART_SEARCH_AUTO_INDEX = booleanPreferencesKey("smart_search_auto_index")
+        val SMART_SEARCH_THRESHOLD = floatPreferencesKey("smart_search_threshold")
+        val CONFIRM_DELETE_ENABLED = booleanPreferencesKey("confirm_delete_enabled")
+        val AUTOPLAY_WITH_SOUND_ENABLED = booleanPreferencesKey("autoplay_with_sound_enabled")
+        val AUTO_CLEAN_TRASH_ENABLED = booleanPreferencesKey("auto_clean_trash_enabled")
+        val AUTO_CLEAN_TRASH_DAYS = androidx.datastore.preferences.core.intPreferencesKey("auto_clean_trash_days")
+        val CACHE_THUMBNAILS_ENABLED = booleanPreferencesKey("cache_thumbnails_enabled")
+        val MAX_BRIGHTNESS_ENABLED = booleanPreferencesKey("max_brightness_enabled")
     }
 
     val themeModeFlow: Flow<String> = context.dataStore.data
@@ -73,6 +81,46 @@ class SettingsRepository(private val context: Context) {
     val useAmoledBlackFlow: Flow<Boolean> = context.dataStore.data
         .map { preferences ->
             preferences[USE_AMOLED_BLACK] ?: false
+        }
+
+    val smartSearchAutoIndexFlow: Flow<Boolean> = context.dataStore.data
+        .map { preferences ->
+            preferences[SMART_SEARCH_AUTO_INDEX] ?: false
+        }
+
+    val smartSearchThresholdFlow: Flow<Float> = context.dataStore.data
+        .map { preferences ->
+            preferences[SMART_SEARCH_THRESHOLD] ?: 0.23f
+        }
+
+    val confirmDeleteEnabledFlow: Flow<Boolean> = context.dataStore.data
+        .map { preferences ->
+            preferences[CONFIRM_DELETE_ENABLED] ?: true
+        }
+
+    val autoplayWithSoundEnabledFlow: Flow<Boolean> = context.dataStore.data
+        .map { preferences ->
+            preferences[AUTOPLAY_WITH_SOUND_ENABLED] ?: false
+        }
+
+    val autoCleanTrashEnabledFlow: Flow<Boolean> = context.dataStore.data
+        .map { preferences ->
+            preferences[AUTO_CLEAN_TRASH_ENABLED] ?: false
+        }
+
+    val autoCleanTrashDaysFlow: Flow<Int> = context.dataStore.data
+        .map { preferences ->
+            preferences[AUTO_CLEAN_TRASH_DAYS] ?: 30
+        }
+
+    val cacheThumbnailsEnabledFlow: Flow<Boolean> = context.dataStore.data
+        .map { preferences ->
+            preferences[CACHE_THUMBNAILS_ENABLED] ?: true
+        }
+
+    val maxBrightnessEnabledFlow: Flow<Boolean> = context.dataStore.data
+        .map { preferences ->
+            preferences[MAX_BRIGHTNESS_ENABLED] ?: false
         }
 
     suspend fun updateThemeMode(mode: String) {
@@ -299,6 +347,54 @@ class SettingsRepository(private val context: Context) {
     suspend fun updateStripMetadataOnShare(enabled: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[STRIP_METADATA_ON_SHARE] = enabled
+        }
+    }
+
+    suspend fun updateSmartSearchAutoIndex(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[SMART_SEARCH_AUTO_INDEX] = enabled
+        }
+    }
+
+    suspend fun updateSmartSearchThreshold(threshold: Float) {
+        context.dataStore.edit { preferences ->
+            preferences[SMART_SEARCH_THRESHOLD] = threshold
+        }
+    }
+
+    suspend fun updateConfirmDeleteEnabled(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[CONFIRM_DELETE_ENABLED] = enabled
+        }
+    }
+
+    suspend fun updateAutoplayWithSoundEnabled(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[AUTOPLAY_WITH_SOUND_ENABLED] = enabled
+        }
+    }
+
+    suspend fun updateAutoCleanTrashEnabled(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[AUTO_CLEAN_TRASH_ENABLED] = enabled
+        }
+    }
+
+    suspend fun updateAutoCleanTrashDays(days: Int) {
+        context.dataStore.edit { preferences ->
+            preferences[AUTO_CLEAN_TRASH_DAYS] = days
+        }
+    }
+
+    suspend fun updateCacheThumbnailsEnabled(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[CACHE_THUMBNAILS_ENABLED] = enabled
+        }
+    }
+
+    suspend fun updateMaxBrightnessEnabled(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[MAX_BRIGHTNESS_ENABLED] = enabled
         }
     }
 }
