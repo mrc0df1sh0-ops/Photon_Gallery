@@ -37,6 +37,9 @@ interface TelegramBackupDao {
 
     @Query("SELECT * FROM telegram_backups")
     fun observeAllBackups(): Flow<List<TelegramBackupEntity>>
+
+    @Query("SELECT * FROM telegram_backups WHERE mediaId IN (:mediaIds)")
+    suspend fun getBackupsForMediaIds(mediaIds: List<Long>): List<TelegramBackupEntity>
 }
 
 data class CloudMediaItem(
