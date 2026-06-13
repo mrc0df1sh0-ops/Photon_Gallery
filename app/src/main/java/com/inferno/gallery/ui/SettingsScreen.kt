@@ -101,6 +101,8 @@ import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Shield
+import androidx.compose.material.icons.outlined.Update
+import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.automirrored.outlined.VolumeUp
@@ -167,6 +169,7 @@ fun SettingsScreen(
 
     var showClearIndexConfirm by remember { mutableStateOf(false) }
     var showDeleteModelConfirm by remember { mutableStateOf(false) }
+    var showLicensesDialog by remember { mutableStateOf(false) }
 
     val isCurrentlyDark = when (themeMode) {
         ThemeMode.SYSTEM -> isSystemDark
@@ -217,6 +220,41 @@ fun SettingsScreen(
             dismissButton = {
                 androidx.compose.material3.TextButton(onClick = { showDeleteModelConfirm = false }) {
                     Text("Cancel")
+                }
+            }
+        )
+    }
+
+    if (showLicensesDialog) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showLicensesDialog = false },
+            title = { Text("Open Source Licenses") },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .verticalScroll(rememberScrollState())
+                        .padding(vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        text = "Photon Gallery is built using open source software:",
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        text = "• Jetpack Compose (Apache 2.0 License)\n" +
+                               "• Coil 3 (Apache 2.0 License)\n" +
+                               "• Room Database (Apache 2.0 License)\n" +
+                               "• ONNX Runtime (MIT License)\n" +
+                               "• MobileCLIP (MIT License)\n" +
+                               "• Google Sans Flex (SIL Open Font License 1.1)",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = { showLicensesDialog = false }) {
+                    Text("Close")
                 }
             }
         )
@@ -288,6 +326,12 @@ fun SettingsScreen(
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
                         CategoryCard(
+                            title = "About",
+                            subtitle = "App information, updates, and licenses",
+                            icon = Icons.Outlined.Info,
+                            onClick = { activeSection = "About" }
+                        )
+                        CategoryCard(
                             title = "General",
                             subtitle = "App preferences and customizations",
                             icon = Icons.Outlined.Settings,
@@ -323,8 +367,6 @@ fun SettingsScreen(
                             icon = Icons.Outlined.AutoAwesome,
                             onClick = { activeSection = "Smart Search & OCR" }
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        AboutCard(uriHandler = uriHandler)
                     }
                 } else {
                     Column(
@@ -336,81 +378,6 @@ fun SettingsScreen(
                     ) {
                         when (section) {
                             "General" -> {
-                                SettingsGroup(title = "Theme") {
-                                    Column(modifier = Modifier.padding(16.dp)) {
-                                        SingleChoiceSegmentedButtonRow(
-                                            modifier = Modifier.fillMaxWidth()
-                                        ) {
-                                            SegmentedButton(
-                                                shape = SegmentedButtonDefaults.itemShape(index = 0, count = 3),
-                                                onClick = { viewModel.setThemeMode(ThemeMode.SYSTEM) },
-                                                selected = themeMode == ThemeMode.SYSTEM,
-                                                icon = { Icon(Icons.Outlined.BrightnessAuto, contentDescription = null) },
-                                                label = { Text("System", style = MaterialTheme.typography.labelMedium) }
-                                            )
-                                            SegmentedButton(
-                                                shape = SegmentedButtonDefaults.itemShape(index = 1, count = 3),
-                                                onClick = { viewModel.setThemeMode(ThemeMode.LIGHT) },
-                                                selected = themeMode == ThemeMode.LIGHT,
-                                                icon = { Icon(Icons.Outlined.LightMode, contentDescription = null) },
-                                                label = { Text("Light", style = MaterialTheme.typography.labelMedium) }
-                                            )
-                                            SegmentedButton(
-                                                shape = SegmentedButtonDefaults.itemShape(index = 2, count = 3),
-                                                onClick = { viewModel.setThemeMode(ThemeMode.DARK) },
-                                                selected = themeMode == ThemeMode.DARK,
-                                                icon = { Icon(Icons.Outlined.DarkMode, contentDescription = null) },
-                                                label = { Text("Dark", style = MaterialTheme.typography.labelMedium) }
-                                            )
-                                        }
-                                    }
-                                    
-                                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-
-                                    ListItem(
-                                        leadingContent = { Icon(Icons.Outlined.Palette, contentDescription = null) },
-                                        headlineContent = { Text("Material You") },
-                                        supportingContent = { Text("Use dynamic system colors") },
-                                        trailingContent = {
-                                            Switch(
-                                                checked = useMaterialYou,
-                                                onCheckedChange = { viewModel.setUseMaterialYou(it) },
-                                                thumbContent = {
-                                                    Icon(
-                                                        imageVector = if (useMaterialYou) Icons.Outlined.Check else Icons.Outlined.Close,
-                                                        contentDescription = null,
-                                                        modifier = Modifier.size(SwitchDefaults.IconSize)
-                                                    )
-                                                }
-                                            )
-                                        },
-                                        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
-                                    )
-
-                                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-
-                                    ListItem(
-                                        leadingContent = { Icon(Icons.Outlined.Contrast, contentDescription = null) },
-                                        headlineContent = { Text("AMOLED Black") },
-                                        supportingContent = { Text("Use pitch black background in dark mode") },
-                                        trailingContent = {
-                                            Switch(
-                                                checked = useAmoledBlack,
-                                                onCheckedChange = { viewModel.setUseAmoledBlack(it) },
-                                                enabled = isCurrentlyDark,
-                                                thumbContent = {
-                                                    Icon(
-                                                        imageVector = if (useAmoledBlack) Icons.Outlined.Check else Icons.Outlined.Close,
-                                                        contentDescription = null,
-                                                        modifier = Modifier.size(SwitchDefaults.IconSize)
-                                                    )
-                                                }
-                                            )
-                                        },
-                                        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
-                                    )
-                                }
-
                                 SettingsGroup(title = "Display Preferences") {
                                     ListItem(
                                         leadingContent = { Icon(Icons.Outlined.Fullscreen, contentDescription = null) },
@@ -677,6 +644,81 @@ fun SettingsScreen(
                                 }
                             }
                             "Look & Feel" -> {
+                                SettingsGroup(title = "Theme") {
+                                    Column(modifier = Modifier.padding(16.dp)) {
+                                        SingleChoiceSegmentedButtonRow(
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            SegmentedButton(
+                                                shape = SegmentedButtonDefaults.itemShape(index = 0, count = 3),
+                                                onClick = { viewModel.setThemeMode(ThemeMode.SYSTEM) },
+                                                selected = themeMode == ThemeMode.SYSTEM,
+                                                icon = { Icon(Icons.Outlined.BrightnessAuto, contentDescription = null) },
+                                                label = { Text("System", style = MaterialTheme.typography.labelMedium) }
+                                            )
+                                            SegmentedButton(
+                                                shape = SegmentedButtonDefaults.itemShape(index = 1, count = 3),
+                                                onClick = { viewModel.setThemeMode(ThemeMode.LIGHT) },
+                                                selected = themeMode == ThemeMode.LIGHT,
+                                                icon = { Icon(Icons.Outlined.LightMode, contentDescription = null) },
+                                                label = { Text("Light", style = MaterialTheme.typography.labelMedium) }
+                                            )
+                                            SegmentedButton(
+                                                shape = SegmentedButtonDefaults.itemShape(index = 2, count = 3),
+                                                onClick = { viewModel.setThemeMode(ThemeMode.DARK) },
+                                                selected = themeMode == ThemeMode.DARK,
+                                                icon = { Icon(Icons.Outlined.DarkMode, contentDescription = null) },
+                                                label = { Text("Dark", style = MaterialTheme.typography.labelMedium) }
+                                            )
+                                        }
+                                    }
+                                    
+                                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+
+                                    ListItem(
+                                        leadingContent = { Icon(Icons.Outlined.Palette, contentDescription = null) },
+                                        headlineContent = { Text("Material You") },
+                                        supportingContent = { Text("Use dynamic system colors") },
+                                        trailingContent = {
+                                            Switch(
+                                                checked = useMaterialYou,
+                                                onCheckedChange = { viewModel.setUseMaterialYou(it) },
+                                                thumbContent = {
+                                                    Icon(
+                                                        imageVector = if (useMaterialYou) Icons.Outlined.Check else Icons.Outlined.Close,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(SwitchDefaults.IconSize)
+                                                    )
+                                                }
+                                            )
+                                        },
+                                        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                                    )
+
+                                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+
+                                    ListItem(
+                                        leadingContent = { Icon(Icons.Outlined.Contrast, contentDescription = null) },
+                                        headlineContent = { Text("AMOLED Black") },
+                                        supportingContent = { Text("Use pitch black background in dark mode") },
+                                        trailingContent = {
+                                            Switch(
+                                                checked = useAmoledBlack,
+                                                onCheckedChange = { viewModel.setUseAmoledBlack(it) },
+                                                enabled = isCurrentlyDark,
+                                                thumbContent = {
+                                                    Icon(
+                                                        imageVector = if (useAmoledBlack) Icons.Outlined.Check else Icons.Outlined.Close,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(SwitchDefaults.IconSize)
+                                                    )
+                                                }
+                                            )
+                                        },
+                                        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                                    )
+                                }
+
                                 SettingsGroup(title = "Media Playback") {
                                     ListItem(
                                         leadingContent = { Icon(Icons.Outlined.PlayCircleOutline, contentDescription = null) },
@@ -1580,6 +1622,134 @@ fun SettingsScreen(
                                     }
                                 }
                             }
+                            "About" -> {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 16.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    // 1. Placeholder app icon in the top center
+                                    Card(
+                                        shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+                                        colors = CardDefaults.cardColors(
+                                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                        ),
+                                        modifier = Modifier.size(96.dp),
+                                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier.fillMaxSize(),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Outlined.Image,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(56.dp)
+                                            )
+                                        }
+                                    }
+                                    
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                    
+                                    // 2. App Name below it
+                                    Text(
+                                        text = "Photon Gallery",
+                                        style = MaterialTheme.typography.headlineLarge,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = "open source android media gallery app .",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
+                                    )
+                                    
+                                    Spacer(modifier = Modifier.height(24.dp))
+                                    
+                                    // 3. Card below them (containing dev name and github icon next to the name)
+                                    Card(
+                                        shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                                        colors = CardDefaults.cardColors(
+                                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                        ),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 16.dp)
+                                            .clickable { uriHandler.openUri("https://github.com/Bn5prS") }
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(16.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = GithubIcon,
+                                                contentDescription = "GitHub",
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                modifier = Modifier.size(24.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(12.dp))
+                                            Text(
+                                                text = "Bn5prS",
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+                                    
+                                    Spacer(modifier = Modifier.height(24.dp))
+                                    
+                                    // 4. Options below the card
+                                    val context = androidx.compose.ui.platform.LocalContext.current
+                                    SettingsGroup(title = "App Details") {
+                                        // Check for updates
+                                        ListItem(
+                                            leadingContent = { Icon(Icons.Outlined.Update, contentDescription = null) },
+                                            headlineContent = { Text("Check for updates") },
+                                            supportingContent = { Text("Verify if you are running the latest release") },
+                                            modifier = Modifier.clickable {
+                                                android.widget.Toast.makeText(context, "Photon Gallery is up to date (v1.0.0)", android.widget.Toast.LENGTH_SHORT).show()
+                                            },
+                                            colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                                        )
+                                        
+                                        HorizontalDivider(
+                                            modifier = Modifier.padding(horizontal = 16.dp),
+                                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                                        )
+                                        
+                                        // Version number
+                                        ListItem(
+                                            leadingContent = { Icon(Icons.Outlined.Info, contentDescription = null) },
+                                            headlineContent = { Text("Version") },
+                                            supportingContent = { Text("v1.0.0 (Material 3 Expressive)") },
+                                            colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                                        )
+                                        
+                                        HorizontalDivider(
+                                            modifier = Modifier.padding(horizontal = 16.dp),
+                                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                                        )
+                                        
+                                        // Licenses
+                                        ListItem(
+                                            leadingContent = { Icon(Icons.Outlined.Description, contentDescription = null) },
+                                            headlineContent = { Text("Licenses") },
+                                            supportingContent = { Text("Open source libraries and licenses") },
+                                            modifier = Modifier.clickable {
+                                                showLicensesDialog = true
+                                            },
+                                            colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                                        )
+                                    }
+                                }
+                            }
                         }
                         Spacer(modifier = Modifier.height(32.dp))
                     }
@@ -1623,106 +1793,7 @@ fun SettingsGroup(
     }
 }
 
-@Composable
-fun AboutCard(uriHandler: androidx.compose.ui.platform.UriHandler) {
-    Card(
-        shape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer,
-            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-        ),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp)
-    ) {
-        Column(
-            modifier = Modifier.padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Icon(
-                imageVector = Icons.Outlined.Image,
-                contentDescription = null,
-                modifier = Modifier.size(64.dp),
-                tint = MaterialTheme.colorScheme.onPrimaryContainer
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-            Text(
-                text = "Photon Gallery",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = "open source android media gallery app .",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-            
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Version in a filled pill
-                Surface(
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                    contentColor = MaterialTheme.colorScheme.primaryContainer,
-                    shape = androidx.compose.foundation.shape.CircleShape
-                ) {
-                    Text(
-                        text = "v1.0.0",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                    )
-                }
-                
-                // Material 3 name in a pilled shape
-                Surface(
-                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.15f),
-                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                    shape = androidx.compose.foundation.shape.CircleShape,
-                    border = androidx.compose.foundation.BorderStroke(
-                        width = 1.dp,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.3f)
-                    )
-                ) {
-                    Text(
-                        text = "Material 3 Expressive",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                    )
-                }
-            }
-            
-            Spacer(modifier = Modifier.height(24.dp))
-            
-            // Maintainer row with GitHub icon
-            Row(
-                modifier = Modifier
-                    .clickable { uriHandler.openUri("https://github.com/Bn5prS") }
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
-            ) {
-                Icon(
-                    imageVector = GithubIcon,
-                    contentDescription = "GitHub",
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                    modifier = Modifier.size(20.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "Bn5prS",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-        }
-    }
-}
+// AboutCard deleted - replaced with inline details inside SettingsScreen
 
 @Composable
 fun CategoryCard(
