@@ -98,15 +98,15 @@ val AppTypography = Typography(
         letterSpacing = (-0.25).sp,
     ),
     displayMedium = TextStyle(
-        fontFamily = displayFontFamily(weight = 700, width = 120f, opticalSize = 45f),
-        fontWeight = FontWeight.Bold,
+        fontFamily = displayFontFamily(weight = 750, width = 120f, opticalSize = 45f),
+        fontWeight = FontWeight.ExtraBold,
         fontSize = 45.sp,
         lineHeight = 52.sp,
         letterSpacing = 0.sp,
     ),
     displaySmall = TextStyle(
-        fontFamily = displayFontFamily(weight = 600, width = 115f, opticalSize = 36f),
-        fontWeight = FontWeight.SemiBold,
+        fontFamily = displayFontFamily(weight = 700, width = 115f, opticalSize = 36f),
+        fontWeight = FontWeight.Bold,
         fontSize = 36.sp,
         lineHeight = 44.sp,
         letterSpacing = 0.sp,
@@ -114,22 +114,22 @@ val AppTypography = Typography(
 
     // ── Headline ────────────────────────────────────────────────────────────
     headlineLarge = TextStyle(
-        fontFamily = displayFontFamily(weight = 700, width = 115f, opticalSize = 32f),
-        fontWeight = FontWeight.Bold,
+        fontFamily = displayFontFamily(weight = 750, width = 120f, opticalSize = 32f),
+        fontWeight = FontWeight.ExtraBold,
         fontSize = 32.sp,
         lineHeight = 40.sp,
         letterSpacing = 0.sp,
     ),
     headlineMedium = TextStyle(
-        fontFamily = displayFontFamily(weight = 600, width = 110f, opticalSize = 28f),
-        fontWeight = FontWeight.SemiBold,
+        fontFamily = displayFontFamily(weight = 700, width = 115f, opticalSize = 28f),
+        fontWeight = FontWeight.Bold,
         fontSize = 28.sp,
         lineHeight = 36.sp,
         letterSpacing = 0.sp,
     ),
     headlineSmall = TextStyle(
-        fontFamily = titleFontFamily(weight = 600, width = 108f, opticalSize = 24f),
-        fontWeight = FontWeight.SemiBold,
+        fontFamily = titleFontFamily(weight = 700, width = 115f, opticalSize = 24f),
+        fontWeight = FontWeight.Bold,
         fontSize = 24.sp,
         lineHeight = 32.sp,
         letterSpacing = 0.sp,
@@ -137,21 +137,21 @@ val AppTypography = Typography(
 
     // ── Title ───────────────────────────────────────────────────────────────
     titleLarge = TextStyle(
-        fontFamily = titleFontFamily(weight = 600, width = 108f, opticalSize = 22f),
-        fontWeight = FontWeight.SemiBold,
+        fontFamily = titleFontFamily(weight = 750, width = 120f, opticalSize = 22f),
+        fontWeight = FontWeight.ExtraBold,
         fontSize = 22.sp,
         lineHeight = 28.sp,
         letterSpacing = 0.sp,
     ),
     titleMedium = TextStyle(
-        fontFamily = titleFontFamily(weight = 550, width = 105f, opticalSize = 16f),
+        fontFamily = titleFontFamily(weight = 600, width = 108f, opticalSize = 16f),
         fontWeight = FontWeight.Medium,
         fontSize = 16.sp,
         lineHeight = 24.sp,
         letterSpacing = 0.15.sp,
     ),
     titleSmall = TextStyle(
-        fontFamily = titleFontFamily(weight = 500, width = 105f, opticalSize = 14f),
+        fontFamily = titleFontFamily(weight = 550, width = 105f, opticalSize = 14f),
         fontWeight = FontWeight.Medium,
         fontSize = 14.sp,
         lineHeight = 20.sp,
@@ -160,21 +160,21 @@ val AppTypography = Typography(
 
     // ── Body ────────────────────────────────────────────────────────────────
     bodyLarge = TextStyle(
-        fontFamily = bodyFontFamily(weight = 400, width = 100f, opticalSize = 16f),
+        fontFamily = bodyFontFamily(weight = 450, width = 98f, opticalSize = 16f),
         fontWeight = FontWeight.Normal,
         fontSize = 16.sp,
         lineHeight = 24.sp,
         letterSpacing = 0.5.sp,
     ),
     bodyMedium = TextStyle(
-        fontFamily = bodyFontFamily(weight = 400, width = 100f, opticalSize = 14f),
+        fontFamily = bodyFontFamily(weight = 450, width = 95f, opticalSize = 14f),
         fontWeight = FontWeight.Normal,
         fontSize = 14.sp,
         lineHeight = 20.sp,
         letterSpacing = 0.25.sp,
     ),
     bodySmall = TextStyle(
-        fontFamily = bodyFontFamily(weight = 400, width = 100f, opticalSize = 12f),
+        fontFamily = bodyFontFamily(weight = 450, width = 95f, opticalSize = 12f),
         fontWeight = FontWeight.Normal,
         fontSize = 12.sp,
         lineHeight = 16.sp,
@@ -183,21 +183,21 @@ val AppTypography = Typography(
 
     // ── Label ───────────────────────────────────────────────────────────────
     labelLarge = TextStyle(
-        fontFamily = labelFontFamily(weight = 550, width = 98f, opticalSize = 14f),
+        fontFamily = labelFontFamily(weight = 500, width = 98f, opticalSize = 14f),
         fontWeight = FontWeight.Medium,
         fontSize = 14.sp,
         lineHeight = 20.sp,
         letterSpacing = 0.1.sp,
     ),
     labelMedium = TextStyle(
-        fontFamily = labelFontFamily(weight = 500, width = 95f, opticalSize = 12f),
+        fontFamily = labelFontFamily(weight = 450, width = 95f, opticalSize = 12f),
         fontWeight = FontWeight.Medium,
         fontSize = 12.sp,
         lineHeight = 16.sp,
         letterSpacing = 0.5.sp,
     ),
     labelSmall = TextStyle(
-        fontFamily = labelFontFamily(weight = 500, width = 95f, opticalSize = 11f),
+        fontFamily = labelFontFamily(weight = 450, width = 95f, opticalSize = 11f),
         fontWeight = FontWeight.Medium,
         fontSize = 11.sp,
         lineHeight = 16.sp,
