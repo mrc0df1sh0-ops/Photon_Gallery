@@ -2,6 +2,10 @@ package com.inferno.gallery.ui
 
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionLayout
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.Spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -48,7 +52,11 @@ fun NavigationGraph(
     SharedTransitionLayout(modifier = modifier) {
         NavHost(
             navController = navController,
-            startDestination = "gallery"
+            startDestination = "gallery",
+            enterTransition = { fadeIn(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) },
+            exitTransition = { fadeOut(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) },
+            popEnterTransition = { fadeIn(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) },
+            popExitTransition = { fadeOut(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) }
         ) {
 
             composable("gallery") {
@@ -59,10 +67,20 @@ fun NavigationGraph(
                         var route = "detail/$mediaId"
                         if (bucket != null) route += "?bucket=${android.net.Uri.encode(bucket)}"
                         if (query != null) {
-                            route += if (bucket != null) "&highlight=${android.net.Uri.encode(query)}" 
+                            route += if (bucket != null) "&highlight=${android.net.Uri.encode(query)}"
                                      else "?highlight=${android.net.Uri.encode(query)}"
                         }
                         navController.navigate(route)
+                    },
+                    onCreateCollage = { uriStrings ->
+                        // Join with | separator (safer than comma for content URIs),
+                        // then double-encode so navArgs parser doesn't choke on URI chars
+                        val joined = uriStrings.joinToString("|")
+                        val encoded = android.util.Base64.encodeToString(
+                            joined.toByteArray(Charsets.UTF_8),
+                            android.util.Base64.URL_SAFE or android.util.Base64.NO_WRAP
+                        )
+                        navController.navigate("collage?uris=$encoded")
                     },
                     viewModel = galleryViewModel
                 )
@@ -80,8 +98,8 @@ fun NavigationGraph(
                 val bucketName = backStackEntry.arguments?.getString("bucketName")
                 val highlightText = backStackEntry.arguments?.getString("highlightText")
                 
-                androidx.compose.runtime.LaunchedEffect(mediaId) {
-                    galleryViewModel.setDetailItem(mediaId)
+                androidx.compose.runtime.LaunchedEffect(mediaId, bucketName) {
+                    galleryViewModel.loadDetailMedia(mediaId, bucketName)
                 }
                 
                 val useFullScreen by settingsViewModel.useFullScreen.collectAsState()
@@ -94,6 +112,26 @@ fun NavigationGraph(
                     animatedVisibilityScope = this@composable,
                     onBack = { navController.popBackStack() },
                     viewModel = galleryViewModel
+                )
+            }
+
+            composable(
+                route = "collage?uris={uris}",
+                arguments = listOf(
+                    navArgument("uris") { type = NavType.StringType }
+                )
+            ) { backStackEntry ->
+                val encoded = backStackEntry.arguments?.getString("uris") ?: ""
+                val joined = try {
+                    String(
+                        android.util.Base64.decode(encoded, android.util.Base64.URL_SAFE or android.util.Base64.NO_WRAP),
+                        Charsets.UTF_8
+                    )
+                } catch (e: Exception) { "" }
+                val uris = joined.split("|").filter { it.isNotBlank() }
+                CollageScreen(
+                    initialUris = uris,
+                    onBack = { navController.popBackStack() }
                 )
             }
         }
