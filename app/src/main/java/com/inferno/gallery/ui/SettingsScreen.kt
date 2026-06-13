@@ -114,6 +114,8 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.path
 
 @Composable
 fun SettingsScreen(
@@ -299,9 +301,15 @@ fun SettingsScreen(
                         )
                         CategoryCard(
                             title = "Look & Feel",
-                            subtitle = "Change how the app looks",
+                            subtitle = "Autoplay preferences and playback options",
                             icon = Icons.Outlined.Palette,
                             onClick = { activeSection = "Look & Feel" }
+                        )
+                        CategoryCard(
+                            title = "Layout & Navigation",
+                            subtitle = "Customize app dock, grid size, and shapes",
+                            icon = Icons.Outlined.Tune,
+                            onClick = { activeSection = "Layout & Navigation" }
                         )
                         CategoryCard(
                             title = "Cloud Backup",
@@ -315,6 +323,8 @@ fun SettingsScreen(
                             icon = Icons.Outlined.AutoAwesome,
                             onClick = { activeSection = "Smart Search & OCR" }
                         )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        AboutCard(uriHandler = uriHandler)
                     }
                 } else {
                     Column(
@@ -326,35 +336,222 @@ fun SettingsScreen(
                     ) {
                         when (section) {
                             "General" -> {
-                                SettingsGroup(title = "App Information") {
-                                    Surface(
-                                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(vertical = 8.dp),
-                                        shape = MaterialTheme.shapes.extraLarge,
-                                        color = MaterialTheme.colorScheme.primaryContainer,
-                                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                                    ) {
-                                        Column(
-                                            modifier = Modifier.padding(24.dp),
-                                            horizontalAlignment = Alignment.CenterHorizontally
+                                SettingsGroup(title = "Theme") {
+                                    Column(modifier = Modifier.padding(16.dp)) {
+                                        SingleChoiceSegmentedButtonRow(
+                                            modifier = Modifier.fillMaxWidth()
                                         ) {
-                                            Icon(Icons.Outlined.Image, contentDescription = null, modifier = Modifier.size(64.dp))
-                                            Spacer(modifier = Modifier.height(16.dp))
-                                            Text("Photon Gallery", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                                            Text("Version 1.0 (Expressive)", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f))
-                                            Spacer(modifier = Modifier.height(16.dp))
-                                            Text("Crafted with ♥ by Bn5prS", style = MaterialTheme.typography.titleMedium)
-                                            Spacer(modifier = Modifier.height(24.dp))
-                                            Button(
-                                                onClick = { uriHandler.openUri("https://github.com/Bn5prS/Photon_Gallery") },
-                                                colors = ButtonDefaults.buttonColors(
-                                                    containerColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                                                    contentColor = MaterialTheme.colorScheme.primaryContainer
-                                                )
+                                            SegmentedButton(
+                                                shape = SegmentedButtonDefaults.itemShape(index = 0, count = 3),
+                                                onClick = { viewModel.setThemeMode(ThemeMode.SYSTEM) },
+                                                selected = themeMode == ThemeMode.SYSTEM,
+                                                icon = { Icon(Icons.Outlined.BrightnessAuto, contentDescription = null) },
+                                                label = { Text("System", style = MaterialTheme.typography.labelMedium) }
+                                            )
+                                            SegmentedButton(
+                                                shape = SegmentedButtonDefaults.itemShape(index = 1, count = 3),
+                                                onClick = { viewModel.setThemeMode(ThemeMode.LIGHT) },
+                                                selected = themeMode == ThemeMode.LIGHT,
+                                                icon = { Icon(Icons.Outlined.LightMode, contentDescription = null) },
+                                                label = { Text("Light", style = MaterialTheme.typography.labelMedium) }
+                                            )
+                                            SegmentedButton(
+                                                shape = SegmentedButtonDefaults.itemShape(index = 2, count = 3),
+                                                onClick = { viewModel.setThemeMode(ThemeMode.DARK) },
+                                                selected = themeMode == ThemeMode.DARK,
+                                                icon = { Icon(Icons.Outlined.DarkMode, contentDescription = null) },
+                                                label = { Text("Dark", style = MaterialTheme.typography.labelMedium) }
+                                            )
+                                        }
+                                    }
+                                    
+                                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+
+                                    ListItem(
+                                        leadingContent = { Icon(Icons.Outlined.Palette, contentDescription = null) },
+                                        headlineContent = { Text("Material You") },
+                                        supportingContent = { Text("Use dynamic system colors") },
+                                        trailingContent = {
+                                            Switch(
+                                                checked = useMaterialYou,
+                                                onCheckedChange = { viewModel.setUseMaterialYou(it) },
+                                                thumbContent = {
+                                                    Icon(
+                                                        imageVector = if (useMaterialYou) Icons.Outlined.Check else Icons.Outlined.Close,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(SwitchDefaults.IconSize)
+                                                    )
+                                                }
+                                            )
+                                        },
+                                        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                                    )
+
+                                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+
+                                    ListItem(
+                                        leadingContent = { Icon(Icons.Outlined.Contrast, contentDescription = null) },
+                                        headlineContent = { Text("AMOLED Black") },
+                                        supportingContent = { Text("Use pitch black background in dark mode") },
+                                        trailingContent = {
+                                            Switch(
+                                                checked = useAmoledBlack,
+                                                onCheckedChange = { viewModel.setUseAmoledBlack(it) },
+                                                enabled = isCurrentlyDark,
+                                                thumbContent = {
+                                                    Icon(
+                                                        imageVector = if (useAmoledBlack) Icons.Outlined.Check else Icons.Outlined.Close,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(SwitchDefaults.IconSize)
+                                                    )
+                                                }
+                                            )
+                                        },
+                                        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                                    )
+                                }
+
+                                SettingsGroup(title = "Display Preferences") {
+                                    ListItem(
+                                        leadingContent = { Icon(Icons.Outlined.Fullscreen, contentDescription = null) },
+                                        headlineContent = { Text("Full Screen Mode") },
+                                        supportingContent = { Text("Hide status bar and navigation bar to maximize content area") },
+                                        trailingContent = {
+                                            Switch(
+                                                checked = useFullScreen,
+                                                onCheckedChange = { viewModel.setUseFullScreen(it) },
+                                                thumbContent = {
+                                                    Icon(
+                                                        imageVector = if (useFullScreen) Icons.Outlined.Check else Icons.Outlined.Close,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(SwitchDefaults.IconSize)
+                                                    )
+                                                }
+                                            )
+                                        },
+                                        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                                    )
+
+                                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+
+                                    ListItem(
+                                        leadingContent = { Icon(Icons.Outlined.BrightnessHigh, contentDescription = null) },
+                                        headlineContent = { Text("Maximize Fullscreen Brightness") },
+                                        supportingContent = { Text("Temporarily maximize screen brightness when viewing media in full screen") },
+                                        trailingContent = {
+                                            Switch(
+                                                checked = maxBrightnessEnabled,
+                                                onCheckedChange = { viewModel.setMaxBrightnessEnabled(it) },
+                                                thumbContent = {
+                                                    Icon(
+                                                        imageVector = if (maxBrightnessEnabled) Icons.Outlined.Check else Icons.Outlined.Close,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(SwitchDefaults.IconSize)
+                                                    )
+                                                }
+                                            )
+                                        },
+                                        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                                    )
+                                }
+
+                                SettingsGroup(title = "Recycle Bin & Deletion") {
+                                    val confirmDelete by viewModel.confirmDeleteEnabled.collectAsState()
+                                    ListItem(
+                                        leadingContent = { Icon(Icons.Outlined.Delete, contentDescription = null) },
+                                        headlineContent = { Text("Confirm Deletion") },
+                                        supportingContent = { Text("Show confirmation dialog when moving media to recycle bin") },
+                                        trailingContent = {
+                                            Switch(
+                                                checked = confirmDelete,
+                                                onCheckedChange = { viewModel.setConfirmDeleteEnabled(it) },
+                                                thumbContent = {
+                                                    Icon(
+                                                        imageVector = if (confirmDelete) Icons.Outlined.Check else Icons.Outlined.Close,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(SwitchDefaults.IconSize)
+                                                    )
+                                                }
+                                            )
+                                        },
+                                        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                                    )
+
+                                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+
+                                    val autoCleanTrash by viewModel.autoCleanTrashEnabled.collectAsState()
+                                    ListItem(
+                                        leadingContent = { Icon(Icons.Outlined.Delete, contentDescription = null) },
+                                        headlineContent = { Text("Auto-clean Recycle Bin") },
+                                        supportingContent = { Text("Automatically delete old items in the recycle bin") },
+                                        trailingContent = {
+                                            Switch(
+                                                checked = autoCleanTrash,
+                                                onCheckedChange = { viewModel.setAutoCleanTrashEnabled(it) },
+                                                thumbContent = {
+                                                    Icon(
+                                                        imageVector = if (autoCleanTrash) Icons.Outlined.Check else Icons.Outlined.Close,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(SwitchDefaults.IconSize)
+                                                    )
+                                                }
+                                            )
+                                        },
+                                        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                                    )
+
+                                    if (autoCleanTrash) {
+                                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+
+                                        val autoCleanDays by viewModel.autoCleanTrashDays.collectAsState()
+                                        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                                            Text(text = "Retention Period: $autoCleanDays Days", style = MaterialTheme.typography.bodyLarge)
+                                            SingleChoiceSegmentedButtonRow(
+                                                modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
                                             ) {
-                                                Text("GitHub Repository")
+                                                SegmentedButton(
+                                                    shape = SegmentedButtonDefaults.itemShape(index = 0, count = 3),
+                                                    onClick = { viewModel.setAutoCleanTrashDays(7) },
+                                                    selected = autoCleanDays == 7,
+                                                    label = { Text("7 Days") }
+                                                )
+                                                SegmentedButton(
+                                                    shape = SegmentedButtonDefaults.itemShape(index = 1, count = 3),
+                                                    onClick = { viewModel.setAutoCleanTrashDays(14) },
+                                                    selected = autoCleanDays == 14,
+                                                    label = { Text("14 Days") }
+                                                )
+                                                SegmentedButton(
+                                                    shape = SegmentedButtonDefaults.itemShape(index = 2, count = 3),
+                                                    onClick = { viewModel.setAutoCleanTrashDays(30) },
+                                                    selected = autoCleanDays == 30,
+                                                    label = { Text("30 Days") }
+                                                )
                                             }
                                         }
                                     }
+                                }
+
+                                SettingsGroup(title = "Performance") {
+                                    ListItem(
+                                        leadingContent = { Icon(Icons.Outlined.Tune, contentDescription = null) },
+                                        headlineContent = { Text("Cache Grid Thumbnails") },
+                                        supportingContent = { Text("Pre-cache grid thumbnails for instant, super-smooth scrolling (uses device storage)") },
+                                        trailingContent = {
+                                            Switch(
+                                                checked = cacheThumbnailsEnabled,
+                                                onCheckedChange = { viewModel.setCacheThumbnailsEnabled(it) },
+                                                thumbContent = {
+                                                    Icon(
+                                                        imageVector = if (cacheThumbnailsEnabled) Icons.Outlined.Check else Icons.Outlined.Close,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(SwitchDefaults.IconSize)
+                                                    )
+                                                }
+                                            )
+                                        },
+                                        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                                    )
                                 }
                             }
                             "Privacy & Security" -> {
@@ -480,48 +677,18 @@ fun SettingsScreen(
                                 }
                             }
                             "Look & Feel" -> {
-                                SettingsGroup(title = "Theme") {
-                                    Column(modifier = Modifier.padding(16.dp)) {
-                                        SingleChoiceSegmentedButtonRow(
-                                            modifier = Modifier.fillMaxWidth()
-                                        ) {
-                                            SegmentedButton(
-                                                shape = SegmentedButtonDefaults.itemShape(index = 0, count = 3),
-                                                onClick = { viewModel.setThemeMode(ThemeMode.SYSTEM) },
-                                                selected = themeMode == ThemeMode.SYSTEM,
-                                                icon = { Icon(Icons.Outlined.BrightnessAuto, contentDescription = null) },
-                                                label = { Text("System", style = MaterialTheme.typography.labelMedium) }
-                                            )
-                                            SegmentedButton(
-                                                shape = SegmentedButtonDefaults.itemShape(index = 1, count = 3),
-                                                onClick = { viewModel.setThemeMode(ThemeMode.LIGHT) },
-                                                selected = themeMode == ThemeMode.LIGHT,
-                                                icon = { Icon(Icons.Outlined.LightMode, contentDescription = null) },
-                                                label = { Text("Light", style = MaterialTheme.typography.labelMedium) }
-                                            )
-                                            SegmentedButton(
-                                                shape = SegmentedButtonDefaults.itemShape(index = 2, count = 3),
-                                                onClick = { viewModel.setThemeMode(ThemeMode.DARK) },
-                                                selected = themeMode == ThemeMode.DARK,
-                                                icon = { Icon(Icons.Outlined.DarkMode, contentDescription = null) },
-                                                label = { Text("Dark", style = MaterialTheme.typography.labelMedium) }
-                                            )
-                                        }
-                                    }
-                                    
-                                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-
+                                SettingsGroup(title = "Media Playback") {
                                     ListItem(
-                                        leadingContent = { Icon(Icons.Outlined.Palette, contentDescription = null) },
-                                        headlineContent = { Text("Material You") },
-                                        supportingContent = { Text("Use dynamic system colors") },
+                                        leadingContent = { Icon(Icons.Outlined.PlayCircleOutline, contentDescription = null) },
+                                        headlineContent = { Text("Auto-Play Media") },
+                                        supportingContent = { Text("Play GIFs and videos in grid") },
                                         trailingContent = {
                                             Switch(
-                                                checked = useMaterialYou,
-                                                onCheckedChange = { viewModel.setUseMaterialYou(it) },
+                                                checked = gridAutoPlay,
+                                                onCheckedChange = { galleryViewModel.toggleGridAutoPlay() },
                                                 thumbContent = {
                                                     Icon(
-                                                        imageVector = if (useMaterialYou) Icons.Outlined.Check else Icons.Outlined.Close,
+                                                        imageVector = if (gridAutoPlay) Icons.Outlined.Check else Icons.Outlined.Close,
                                                         contentDescription = null,
                                                         modifier = Modifier.size(SwitchDefaults.IconSize)
                                                     )
@@ -533,40 +700,18 @@ fun SettingsScreen(
 
                                     HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
 
+                                    val autoplayWithSound by viewModel.autoplayWithSoundEnabled.collectAsState()
                                     ListItem(
-                                        leadingContent = { Icon(Icons.Outlined.Contrast, contentDescription = null) },
-                                        headlineContent = { Text("AMOLED Black") },
-                                        supportingContent = { Text("Use pitch black background in dark mode") },
+                                        leadingContent = { Icon(Icons.AutoMirrored.Outlined.VolumeUp, contentDescription = null) },
+                                        headlineContent = { Text("Autoplay Video with Sound") },
+                                        supportingContent = { Text("Play videos with sound automatically in full screen (muted by default)") },
                                         trailingContent = {
                                             Switch(
-                                                checked = useAmoledBlack,
-                                                onCheckedChange = { viewModel.setUseAmoledBlack(it) },
-                                                enabled = isCurrentlyDark,
+                                                checked = autoplayWithSound,
+                                                onCheckedChange = { viewModel.setAutoplayWithSoundEnabled(it) },
                                                 thumbContent = {
                                                     Icon(
-                                                        imageVector = if (useAmoledBlack) Icons.Outlined.Check else Icons.Outlined.Close,
-                                                        contentDescription = null,
-                                                        modifier = Modifier.size(SwitchDefaults.IconSize)
-                                                    )
-                                                }
-                                            )
-                                        },
-                                        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
-                                    )
-
-                                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-
-                                    ListItem(
-                                        leadingContent = { Icon(Icons.Outlined.Fullscreen, contentDescription = null) },
-                                        headlineContent = { Text("Full Screen Mode") },
-                                        supportingContent = { Text("Hide status bar and navigation bar to maximize content area") },
-                                        trailingContent = {
-                                            Switch(
-                                                checked = useFullScreen,
-                                                onCheckedChange = { viewModel.setUseFullScreen(it) },
-                                                thumbContent = {
-                                                    Icon(
-                                                        imageVector = if (useFullScreen) Icons.Outlined.Check else Icons.Outlined.Close,
+                                                        imageVector = if (autoplayWithSound) Icons.Outlined.Check else Icons.Outlined.Close,
                                                         contentDescription = null,
                                                         modifier = Modifier.size(SwitchDefaults.IconSize)
                                                     )
@@ -576,7 +721,8 @@ fun SettingsScreen(
                                         colors = ListItemDefaults.colors(containerColor = Color.Transparent)
                                     )
                                 }
-
+                            }
+                            "Layout & Navigation" -> {
                                 SettingsGroup(title = "Layout & Navigation") {
                                     ListItem(
                                         leadingContent = { Icon(Icons.Outlined.Menu, contentDescription = null) },
@@ -636,96 +782,6 @@ fun SettingsScreen(
                                             valueRange = 0f..24f
                                         )
                                     }
-
-                                }
-
-                                SettingsGroup(title = "Media Playback") {
-                                    ListItem(
-                                        leadingContent = { Icon(Icons.Outlined.PlayCircleOutline, contentDescription = null) },
-                                        headlineContent = { Text("Auto-Play Media") },
-                                        supportingContent = { Text("Play GIFs and videos in grid") },
-                                        trailingContent = {
-                                            Switch(
-                                                checked = gridAutoPlay,
-                                                onCheckedChange = { galleryViewModel.toggleGridAutoPlay() },
-                                                thumbContent = {
-                                                    Icon(
-                                                        imageVector = if (gridAutoPlay) Icons.Outlined.Check else Icons.Outlined.Close,
-                                                        contentDescription = null,
-                                                        modifier = Modifier.size(SwitchDefaults.IconSize)
-                                                    )
-                                                }
-                                            )
-                                        },
-                                        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
-                                    )
-
-                                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-
-                                    val autoplayWithSound by viewModel.autoplayWithSoundEnabled.collectAsState()
-                                    ListItem(
-                                        leadingContent = { Icon(Icons.AutoMirrored.Outlined.VolumeUp, contentDescription = null) },
-                                        headlineContent = { Text("Autoplay Video with Sound") },
-                                        supportingContent = { Text("Play videos with sound automatically in full screen (muted by default)") },
-                                        trailingContent = {
-                                            Switch(
-                                                checked = autoplayWithSound,
-                                                onCheckedChange = { viewModel.setAutoplayWithSoundEnabled(it) },
-                                                thumbContent = {
-                                                    Icon(
-                                                        imageVector = if (autoplayWithSound) Icons.Outlined.Check else Icons.Outlined.Close,
-                                                        contentDescription = null,
-                                                        modifier = Modifier.size(SwitchDefaults.IconSize)
-                                                    )
-                                                }
-                                            )
-                                        },
-                                        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
-                                    )
-
-                                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-
-                                    ListItem(
-                                        leadingContent = { Icon(Icons.Outlined.Delete, contentDescription = null) },
-                                        headlineContent = { Text("Cache Grid Thumbnails") },
-                                        supportingContent = { Text("Pre-cache grid thumbnails for instant, super-smooth scrolling (uses device storage)") },
-                                        trailingContent = {
-                                            Switch(
-                                                checked = cacheThumbnailsEnabled,
-                                                onCheckedChange = { viewModel.setCacheThumbnailsEnabled(it) },
-                                                thumbContent = {
-                                                    Icon(
-                                                        imageVector = if (cacheThumbnailsEnabled) Icons.Outlined.Check else Icons.Outlined.Close,
-                                                        contentDescription = null,
-                                                        modifier = Modifier.size(SwitchDefaults.IconSize)
-                                                    )
-                                                }
-                                            )
-                                        },
-                                        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
-                                     )
-
-                                     HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-
-                                     ListItem(
-                                         leadingContent = { Icon(Icons.Outlined.BrightnessHigh, contentDescription = null) },
-                                         headlineContent = { Text("Maximize Fullscreen Brightness") },
-                                         supportingContent = { Text("Temporarily maximize screen brightness when viewing media in full screen") },
-                                         trailingContent = {
-                                             Switch(
-                                                 checked = maxBrightnessEnabled,
-                                                 onCheckedChange = { viewModel.setMaxBrightnessEnabled(it) },
-                                                 thumbContent = {
-                                                     Icon(
-                                                         imageVector = if (maxBrightnessEnabled) Icons.Outlined.Check else Icons.Outlined.Close,
-                                                         contentDescription = null,
-                                                         modifier = Modifier.size(SwitchDefaults.IconSize)
-                                                     )
-                                                 }
-                                             )
-                                         },
-                                         colors = ListItemDefaults.colors(containerColor = Color.Transparent)
-                                    )
                                 }
                             }
                             "Cloud Backup" -> {
@@ -1568,6 +1624,107 @@ fun SettingsGroup(
 }
 
 @Composable
+fun AboutCard(uriHandler: androidx.compose.ui.platform.UriHandler) {
+    Card(
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+        ),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.Image,
+                contentDescription = null,
+                modifier = Modifier.size(64.dp),
+                tint = MaterialTheme.colorScheme.onPrimaryContainer
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = "Photon Gallery",
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "open source android media gallery app .",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Version in a filled pill
+                Surface(
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    contentColor = MaterialTheme.colorScheme.primaryContainer,
+                    shape = androidx.compose.foundation.shape.CircleShape
+                ) {
+                    Text(
+                        text = "v1.0.0",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                    )
+                }
+                
+                // Material 3 name in a pilled shape
+                Surface(
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.15f),
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    shape = androidx.compose.foundation.shape.CircleShape,
+                    border = androidx.compose.foundation.BorderStroke(
+                        width = 1.dp,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.3f)
+                    )
+                ) {
+                    Text(
+                        text = "Material 3 Expressive",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                    )
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(24.dp))
+            
+            // Maintainer row with GitHub icon
+            Row(
+                modifier = Modifier
+                    .clickable { uriHandler.openUri("https://github.com/Bn5prS") }
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Icon(
+                    imageVector = GithubIcon,
+                    contentDescription = "GitHub",
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Bn5prS",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+    }
+}
+
+@Composable
 fun CategoryCard(
     title: String,
     subtitle: String,
@@ -1654,3 +1811,41 @@ fun CategoryCard(
         }
     }
 }
+
+val GithubIcon: ImageVector = ImageVector.Builder(
+    name = "Github",
+    defaultWidth = 24.dp,
+    defaultHeight = 24.dp,
+    viewportWidth = 24f,
+    viewportHeight = 24f
+).path(
+    fill = SolidColor(Color.Black),
+) {
+    moveTo(12f, 2f)
+    curveTo(6.477f, 2f, 2f, 6.477f, 2f, 12f)
+    curveTo(2f, 16.42f, 4.865f, 20.166f, 8.839f, 21.489f)
+    curveTo(9.339f, 21.581f, 9.521f, 21.272f, 9.521f, 21.007f)
+    curveTo(9.521f, 20.77f, 9.513f, 20.141f, 9.508f, 19.307f)
+    curveTo(6.726f, 19.91f, 6.139f, 17.967f, 6.139f, 17.967f)
+    curveTo(5.685f, 16.811f, 5.029f, 16.503f, 5.029f, 16.503f)
+    curveTo(4.121f, 15.883f, 5.09f, 15.895f, 5.09f, 15.895f)
+    curveTo(6.093f, 15.965f, 6.621f, 16.925f, 6.621f, 16.925f)
+    curveTo(7.513f, 18.454f, 8.962f, 18.012f, 9.531f, 17.756f)
+    curveTo(9.623f, 17.11f, 9.881f, 16.67f, 10.167f, 16.42f)
+    curveTo(7.947f, 16.167f, 5.612f, 15.31f, 5.612f, 11.477f)
+    curveTo(5.612f, 10.386f, 6.002f, 9.493f, 6.641f, 8.794f)
+    curveTo(6.538f, 8.541f, 6.195f, 7.524f, 6.739f, 6.147f)
+    curveTo(6.739f, 6.147f, 7.579f, 5.878f, 9.489f, 7.172f)
+    curveTo(10.289f, 6.95f, 11.144f, 6.839f, 12f, 6.839f)
+    curveTo(12.856f, 6.839f, 13.711f, 6.95f, 14.511f, 7.172f)
+    curveTo(16.421f, 5.878f, 17.261f, 6.147f, 17.261f, 6.147f)
+    curveTo(17.805f, 7.524f, 17.462f, 8.541f, 17.359f, 8.794f)
+    curveTo(17.998f, 9.493f, 18.388f, 10.386f, 18.388f, 11.477f)
+    curveTo(18.388f, 15.32f, 16.05f, 16.164f, 13.823f, 16.412f)
+    curveTo(14.182f, 16.721f, 14.501f, 17.331f, 14.501f, 18.264f)
+    curveTo(14.501f, 19.6f, 14.489f, 20.679f, 14.489f, 21.007f)
+    curveTo(14.489f, 21.275f, 14.669f, 21.587f, 15.177f, 21.489f)
+    curveTo(19.141f, 20.163f, 22f, 16.42f, 22f, 12f)
+    curveTo(22f, 6.477f, 17.522f, 2f, 12f, 2f)
+    close()
+}.build()
