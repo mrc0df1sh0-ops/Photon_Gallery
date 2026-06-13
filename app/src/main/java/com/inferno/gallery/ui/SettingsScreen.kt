@@ -1,4 +1,5 @@
 package com.inferno.gallery.ui
+
 import androidx.compose.material.icons.outlined.Cloud
 import com.inferno.gallery.ui.ConnectionTestResult
 import androidx.compose.foundation.layout.Box
@@ -68,24 +69,51 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.material.icons.outlined.PrivacyTip
+import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.Link
+import androidx.compose.material.icons.outlined.BrightnessHigh
+import androidx.compose.material3.Slider
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ScrollableTabRow
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.compose.material3.OutlinedTextField
+import com.inferno.gallery.ui.ThemeMode
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.automirrored.outlined.Send
-import androidx.compose.material.icons.outlined.Cloud
+import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Wifi
 import androidx.compose.material.icons.outlined.BatteryChargingFull
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.material.icons.outlined.PrivacyTip
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Shield
+import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.automirrored.outlined.VolumeUp
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.Spring
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 
 @Composable
 fun SettingsScreen(
@@ -94,9 +122,108 @@ fun SettingsScreen(
     galleryViewModel: GalleryViewModel = viewModel(),
     onBackClick: () -> Unit = {}
 ) {
+    val themeMode by viewModel.themeMode.collectAsState()
+    val useMaterialYou by viewModel.useMaterialYou.collectAsState()
+    val useAmoledBlack by viewModel.useAmoledBlack.collectAsState()
+    val useFullScreen by viewModel.useFullScreen.collectAsState()
+    val isSystemDark = androidx.compose.foundation.isSystemInDarkTheme()
+    val dockStyle by viewModel.dockStyle.collectAsState()
+    val gridCellsCount by galleryViewModel.gridCellsCount.collectAsState()
+    val thumbnailCornerRadius by viewModel.thumbnailCornerRadius.collectAsState()
+    val gridAutoPlay by galleryViewModel.gridAutoPlay.collectAsState()
+    val ocrProgressState by viewModel.ocrProgress.collectAsState()
+    val clipProgressState by viewModel.clipProgress.collectAsState()
+    val ocrIndexWorkInfo by viewModel.ocrIndexWorkInfo.collectAsState(initial = null)
+    val totalImagesCount by viewModel.totalImagesCount.collectAsState()
+    val unindexedOcrImagesCount by viewModel.unindexedOcrImagesCount.collectAsState()
+    val stripMetadataOnShare by viewModel.stripMetadataOnShare.collectAsState()
+    val cacheThumbnailsEnabled by viewModel.cacheThumbnailsEnabled.collectAsState()
+    val maxBrightnessEnabled by viewModel.maxBrightnessEnabled.collectAsState()
+    
+    val savedTokens by viewModel.telegramBotTokens.collectAsState()
+    val savedChatId by viewModel.telegramChatId.collectAsState()
+    val backupEnabled by viewModel.telegramBackupEnabled.collectAsState()
+    val stripLocation by viewModel.telegramStripLocation.collectAsState()
+    val showFolderDialog = remember { mutableStateOf(false) }
+    val selectedFolders by viewModel.telegramAutoBackupFolders.collectAsState()
+    val allFolders by viewModel.allBucketNames.collectAsState()
+
+    val smartSearchModelDownloaded by viewModel.smartSearchModelDownloaded.collectAsState()
+    val modelDownloadWorkInfo by viewModel.modelDownloadWorkInfo.collectAsState(initial = null)
+    val smartSearchIndexWorkInfo by viewModel.smartSearchIndexWorkInfo.collectAsState(initial = null)
+    val unindexedSmartSearchCount by viewModel.unindexedSmartSearchCount.collectAsState()
+    val smartSearchAutoIndex by viewModel.smartSearchAutoIndex.collectAsState()
+    val smartSearchThreshold by viewModel.smartSearchThreshold.collectAsState()
+
+    var passwordVisiblePrimary by remember { mutableStateOf(false) }
+    var passwordVisibleSecondary by remember { mutableStateOf(false) }
+
+    var activeSection by remember { mutableStateOf<String?>(null) }
+    var primaryTokenInput by remember(savedTokens) { mutableStateOf(savedTokens.getOrNull(0) ?: "") }
+    var secondaryTokenInput by remember(savedTokens) { mutableStateOf(savedTokens.getOrNull(1) ?: "") }
+    var localChatId by remember(savedChatId) { mutableStateOf(savedChatId) }
+
+    var showClearIndexConfirm by remember { mutableStateOf(false) }
+    var showDeleteModelConfirm by remember { mutableStateOf(false) }
+
+    val isCurrentlyDark = when (themeMode) {
+        ThemeMode.SYSTEM -> isSystemDark
+        ThemeMode.LIGHT -> false
+        ThemeMode.DARK -> true
+    }
+
+    val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
+
+    if (showClearIndexConfirm) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showClearIndexConfirm = false },
+            title = { Text("Clear Smart Search Index") },
+            text = { Text("This will wipe out all computed image embeddings for semantic search. You will need to run the indexer again to use smart search. Are you sure you want to proceed?") },
+            confirmButton = {
+                androidx.compose.material3.TextButton(
+                    onClick = {
+                        showClearIndexConfirm = false
+                        viewModel.clearSmartSearchEmbeddings()
+                    }
+                ) {
+                    Text("Clear Index", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { showClearIndexConfirm = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    if (showDeleteModelConfirm) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showDeleteModelConfirm = false },
+            title = { Text("Delete AI Model Files") },
+            text = { Text("This will delete the local ONNX model files (approx. 30MB+). You will not be able to use semantic search or index new images until you download them again. Are you sure?") },
+            confirmButton = {
+                androidx.compose.material3.TextButton(
+                    onClick = {
+                        showDeleteModelConfirm = false
+                        viewModel.deleteSmartSearchModel()
+                    }
+                ) {
+                    Text("Delete Files", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { showDeleteModelConfirm = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
         topBar = {
-            Surface(color = MaterialTheme.colorScheme.background) {
+            Surface(color = MaterialTheme.colorScheme.surfaceContainerLow) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -105,11 +232,19 @@ fun SettingsScreen(
                         .padding(horizontal = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(onClick = onBackClick) {
+                    IconButton(
+                        onClick = {
+                            if (activeSection != null) {
+                                activeSection = null
+                            } else {
+                                onBackClick()
+                            }
+                        }
+                    ) {
                         Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
                     }
                     Text(
-                        "Settings",
+                        text = activeSection ?: "Settings",
                         style = MaterialTheme.typography.titleLarge,
                         modifier = Modifier.padding(start = 16.dp).weight(1f)
                     )
@@ -121,843 +256,1279 @@ fun SettingsScreen(
             modifier = Modifier
                 .padding(innerPadding)
                 .padding(contentPadding)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .fillMaxSize()
         ) {
-            val themeMode by viewModel.themeMode.collectAsState()
-            val useMaterialYou by viewModel.useMaterialYou.collectAsState()
-            val useAmoledBlack by viewModel.useAmoledBlack.collectAsState()
-            val useFullScreen by viewModel.useFullScreen.collectAsState()
-            val isSystemDark = androidx.compose.foundation.isSystemInDarkTheme()
-            val dockStyle by viewModel.dockStyle.collectAsState()
-            val gridCellsCount by galleryViewModel.gridCellsCount.collectAsState()
-            val thumbnailCornerRadius by viewModel.thumbnailCornerRadius.collectAsState()
-            val gridAutoPlay by galleryViewModel.gridAutoPlay.collectAsState()
-            val ocrIndexWorkInfo by viewModel.ocrIndexWorkInfo.collectAsState(initial = null)
-            val totalImagesCount by viewModel.totalImagesCount.collectAsState()
-            val unindexedOcrImagesCount by viewModel.unindexedOcrImagesCount.collectAsState()
-            val stripMetadataOnShare by viewModel.stripMetadataOnShare.collectAsState()
-            
-            val isCurrentlyDark = when (themeMode) {
-                ThemeMode.SYSTEM -> isSystemDark
-                ThemeMode.LIGHT -> false
-                ThemeMode.DARK -> true
-            }
-
-            val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
-
-            // 1. App Info Card
-            Surface(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(top = 8.dp),
-                shape = MaterialTheme.shapes.extraLarge,
-                color = MaterialTheme.colorScheme.primaryContainer,
-                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-            ) {
-                Column(
-                    modifier = Modifier.padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Icon(Icons.Outlined.Image, contentDescription = null, modifier = Modifier.size(64.dp))
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text("Photon Gallery", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                    Text("Version 1.0 (Expressive)", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f))
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text("Crafted with ♥ by Bn5prS", style = MaterialTheme.typography.titleMedium)
-                    Spacer(modifier = Modifier.height(24.dp))
-                    Button(
-                        onClick = { uriHandler.openUri("https://github.com/Bn5prS/Photon_Gallery") },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                            contentColor = MaterialTheme.colorScheme.primaryContainer
+            AnimatedContent(
+                targetState = activeSection,
+                transitionSpec = {
+                    androidx.compose.animation.fadeIn(
+                        animationSpec = androidx.compose.animation.core.spring(
+                            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioNoBouncy,
+                            stiffness = androidx.compose.animation.core.Spring.StiffnessHigh
                         )
-                    ) {
-                        Text("GitHub Repository")
-                    }
-                }
-            }
-
-            SettingsGroup(title = "Appearance") {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    SingleChoiceSegmentedButtonRow(
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        SegmentedButton(
-                            shape = SegmentedButtonDefaults.itemShape(index = 0, count = 3),
-                            onClick = { viewModel.setThemeMode(ThemeMode.SYSTEM) },
-                            selected = themeMode == ThemeMode.SYSTEM,
-                            icon = { Icon(Icons.Outlined.BrightnessAuto, contentDescription = null) },
-                            label = { Text("System", style = MaterialTheme.typography.labelMedium) }
+                    ) togetherWith
+                    androidx.compose.animation.fadeOut(
+                        animationSpec = androidx.compose.animation.core.spring(
+                            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioNoBouncy,
+                            stiffness = androidx.compose.animation.core.Spring.StiffnessHigh
                         )
-                        SegmentedButton(
-                            shape = SegmentedButtonDefaults.itemShape(index = 1, count = 3),
-                            onClick = { viewModel.setThemeMode(ThemeMode.LIGHT) },
-                            selected = themeMode == ThemeMode.LIGHT,
-                            icon = { Icon(Icons.Outlined.LightMode, contentDescription = null) },
-                            label = { Text("Light", style = MaterialTheme.typography.labelMedium) }
-                        )
-                        SegmentedButton(
-                            shape = SegmentedButtonDefaults.itemShape(index = 2, count = 3),
-                            onClick = { viewModel.setThemeMode(ThemeMode.DARK) },
-                            selected = themeMode == ThemeMode.DARK,
-                            icon = { Icon(Icons.Outlined.DarkMode, contentDescription = null) },
-                            label = { Text("Dark", style = MaterialTheme.typography.labelMedium) }
-                        )
-                    }
-                }
-                
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-
-                ListItem(
-                    leadingContent = { Icon(Icons.Outlined.Palette, contentDescription = null) },
-                    headlineContent = { Text("Material You") },
-                    supportingContent = { Text("Use dynamic system colors") },
-                    trailingContent = {
-                        Switch(
-                            checked = useMaterialYou,
-                            onCheckedChange = { viewModel.setUseMaterialYou(it) },
-                            thumbContent = {
-                                Icon(
-                                    imageVector = if (useMaterialYou) Icons.Outlined.Check else Icons.Outlined.Close,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(SwitchDefaults.IconSize)
-                                )
-                            }
-                        )
-                    },
-                    colors = ListItemDefaults.colors(containerColor = Color.Transparent)
-                )
-
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-
-                ListItem(
-                    leadingContent = { Icon(Icons.Outlined.Contrast, contentDescription = null) },
-                    headlineContent = { Text("AMOLED Black") },
-                    supportingContent = { Text("Use pitch black background in dark mode") },
-                    trailingContent = {
-                        Switch(
-                            checked = useAmoledBlack,
-                            onCheckedChange = { viewModel.setUseAmoledBlack(it) },
-                            enabled = isCurrentlyDark,
-                            thumbContent = {
-                                Icon(
-                                    imageVector = if (useAmoledBlack) Icons.Outlined.Check else Icons.Outlined.Close,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(SwitchDefaults.IconSize)
-                                )
-                            }
-                        )
-                    },
-                    colors = ListItemDefaults.colors(containerColor = Color.Transparent)
-                )
-
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-
-                ListItem(
-                    leadingContent = { Icon(Icons.Outlined.Fullscreen, contentDescription = null) },
-                    headlineContent = { Text("Full Screen Mode") },
-                    supportingContent = { Text("Hide status bar and navigation bar to maximize content area") },
-                    trailingContent = {
-                        Switch(
-                            checked = useFullScreen,
-                            onCheckedChange = { viewModel.setUseFullScreen(it) },
-                            thumbContent = {
-                                Icon(
-                                    imageVector = if (useFullScreen) Icons.Outlined.Check else Icons.Outlined.Close,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(SwitchDefaults.IconSize)
-                                )
-                            }
-                        )
-                    },
-                    colors = ListItemDefaults.colors(containerColor = Color.Transparent)
-                )
-            }
-
-            SettingsGroup(title = "Layout & Navigation") {
-                ListItem(
-                    leadingContent = { Icon(Icons.Outlined.Menu, contentDescription = null) },
-                    headlineContent = { Text("Full-Width Dock") },
-                    supportingContent = { Text("Use standard edge-to-edge dock instead of floating pill") },
-                    trailingContent = {
-                        val isDockFullWidth = dockStyle == com.inferno.gallery.data.DockStyle.FULL_WIDTH
-                        Switch(
-                            checked = isDockFullWidth, 
-                            onCheckedChange = { isChecked ->
-                                viewModel.setDockStyle(if (isChecked) com.inferno.gallery.data.DockStyle.FULL_WIDTH else com.inferno.gallery.data.DockStyle.PILL)
-                            },
-                            thumbContent = {
-                                Icon(
-                                    imageVector = if (isDockFullWidth) Icons.Outlined.Check else Icons.Outlined.Close,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(SwitchDefaults.IconSize)
-                                )
-                            }
-                        )
-                    },
-                    colors = ListItemDefaults.colors(containerColor = Color.Transparent)
-                )
-
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-
-                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                    Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                        Text(text = "Grid Items per Row: $gridCellsCount", style = MaterialTheme.typography.bodyLarge)
-                    }
-                    androidx.compose.material3.Slider(
-                        value = gridCellsCount.toFloat(),
-                        onValueChange = { galleryViewModel.setGridCellsCount(it.toInt()) },
-                        valueRange = 2f..6f,
-                        steps = 3
                     )
-                }
-
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-
-                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(text = "Thumbnail Corner Radius", style = MaterialTheme.typography.bodyLarge)
-                        val previewScale = 48f / 120f
-                        Surface(
-                            modifier = Modifier.size(48.dp),
-                            shape = androidx.compose.foundation.shape.RoundedCornerShape((thumbnailCornerRadius * previewScale).dp),
-                            color = MaterialTheme.colorScheme.primaryContainer
-                        ) {}
-                    }
-                    androidx.compose.material3.Slider(
-                        value = thumbnailCornerRadius,
-                        onValueChange = { viewModel.setThumbnailCornerRadius(it) },
-                        valueRange = 0f..24f
-                    )
-                }
-            }
-
-            SettingsGroup(title = "Media & Storage") {
-                ListItem(
-                    leadingContent = { Icon(Icons.Outlined.PlayCircleOutline, contentDescription = null) },
-                    headlineContent = { Text("Auto-Play Media") },
-                    supportingContent = { Text("Play GIFs and videos in grid") },
-                    trailingContent = {
-                        Switch(
-                            checked = gridAutoPlay,
-                            onCheckedChange = { galleryViewModel.toggleGridAutoPlay() },
-                            thumbContent = {
-                                Icon(
-                                    imageVector = if (gridAutoPlay) Icons.Outlined.Check else Icons.Outlined.Close,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(SwitchDefaults.IconSize)
-                                )
-                            }
-                        )
-                    },
-                    colors = ListItemDefaults.colors(containerColor = Color.Transparent)
-                )
-
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-
-                ListItem(
-                    leadingContent = { Icon(Icons.Outlined.PrivacyTip, contentDescription = null) },
-                    headlineContent = { Text("Strip Metadata Before Sharing") },
-                    supportingContent = { Text("Remove GPS, camera specifications, timestamps, timezone offsets, and author/attribution details when sharing") },
-                    trailingContent = {
-                        Switch(
-                            checked = stripMetadataOnShare,
-                            onCheckedChange = { viewModel.setStripMetadataOnShare(it) },
-                            thumbContent = {
-                                Icon(
-                                    imageVector = if (stripMetadataOnShare) Icons.Outlined.Check else Icons.Outlined.Close,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(SwitchDefaults.IconSize)
-                                )
-                            }
-                        )
-                    },
-                    colors = ListItemDefaults.colors(containerColor = Color.Transparent)
-                )
-            }
-
-            SettingsGroup(title = "Telegram Cloud Backup") {
-                val savedTokens by viewModel.telegramBotTokens.collectAsState()
-                val savedChatId by viewModel.telegramChatId.collectAsState()
-                val backupEnabled by viewModel.telegramBackupEnabled.collectAsState()
-                val stripLocation by viewModel.telegramStripLocation.collectAsState()
-                val showFolderDialog = remember { mutableStateOf(false) }
-                val selectedFolders by viewModel.telegramAutoBackupFolders.collectAsState()
-                val allFolders by viewModel.allBucketNames.collectAsState()
-
-                var passwordVisiblePrimary by remember { mutableStateOf(false) }
-                var passwordVisibleSecondary by remember { mutableStateOf(false) }
-
-                val initialPrimary = remember(savedTokens) { savedTokens.getOrNull(0) ?: "" }
-                val initialSecondary = remember(savedTokens) { savedTokens.getOrNull(1) ?: "" }
-
-                var primaryTokenInput by remember(initialPrimary) { mutableStateOf(initialPrimary) }
-                var secondaryTokenInput by remember(initialSecondary) { mutableStateOf(initialSecondary) }
-                var localChatId by remember(savedChatId) { mutableStateOf(savedChatId) }
-
-                val testResult by viewModel.connectionTestState.collectAsState()
-                val hasChanges = primaryTokenInput != initialPrimary || 
-                                 secondaryTokenInput != initialSecondary || 
-                                 localChatId != savedChatId
-
-                LaunchedEffect(testResult) {
-                    val result = testResult
-                    if (result is ConnectionTestResult.Migrated) {
-                        localChatId = result.newChatId
-                    }
-                }
-
-                val credentialsExpanded = remember { mutableStateOf(false) }
-
-                Column(
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    // Header for API Credentials Setup
-                    ListItem(
-                        leadingContent = { Icon(Icons.Outlined.Lock, contentDescription = null) },
-                        headlineContent = { Text("API Credentials Setup") },
-                        supportingContent = { Text("Configure bot tokens and chat ID") },
-                        trailingContent = {
-                            Icon(
-                                imageVector = if (credentialsExpanded.value) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
-                                contentDescription = if (credentialsExpanded.value) "Collapse" else "Expand"
-                            )
-                        },
+                },
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                label = "SettingsSectionContent"
+            ) { section ->
+                if (section == null) {
+                    Column(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { credentialsExpanded.value = !credentialsExpanded.value },
-                        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
-                    )
-
-                    androidx.compose.animation.AnimatedVisibility(
-                        visible = credentialsExpanded.value,
-                        enter = androidx.compose.animation.expandVertically(
-                            animationSpec = androidx.compose.animation.core.spring(
-                                stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow
-                            )
-                        ),
-                        exit = androidx.compose.animation.shrinkVertically(
-                            animationSpec = androidx.compose.animation.core.spring(
-                                stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow
-                            )
-                        )
+                            .fillMaxSize()
+                            .verticalScroll(rememberScrollState())
+                            .padding(vertical = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 8.dp)
-                                .background(
-                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
-                                    shape = MaterialTheme.shapes.large
-                                )
-                                .padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            OutlinedTextField(
-                                value = primaryTokenInput,
-                                onValueChange = { 
-                                    primaryTokenInput = it
-                                    viewModel.clearConnectionTestResult()
-                                },
-                                label = { Text("Primary Bot Token (Required)") },
-                                placeholder = { Text("123456:ABC-DEF...") },
-                                singleLine = true,
-                                leadingIcon = { Icon(Icons.Outlined.Lock, contentDescription = null) },
-                                trailingIcon = {
-                                    val image = if (passwordVisiblePrimary) Icons.Filled.Visibility else Icons.Filled.VisibilityOff
-                                    IconButton(onClick = { passwordVisiblePrimary = !passwordVisiblePrimary }) {
-                                        Icon(imageVector = image, contentDescription = null)
-                                    }
-                                },
-                                visualTransformation = if (passwordVisiblePrimary) VisualTransformation.None else PasswordVisualTransformation(),
-                                modifier = Modifier.fillMaxWidth()
-                            )
-
-                            OutlinedTextField(
-                                value = secondaryTokenInput,
-                                onValueChange = { 
-                                    secondaryTokenInput = it
-                                    viewModel.clearConnectionTestResult()
-                                },
-                                label = { Text("Secondary Bot Token (Optional)") },
-                                placeholder = { Text("654321:XYZ-UVW...") },
-                                supportingText = { Text("Configures dual-bot concurrent media uploading to speed up backups.") },
-                                singleLine = true,
-                                leadingIcon = { Icon(Icons.Outlined.Lock, contentDescription = null) },
-                                trailingIcon = {
-                                    val image = if (passwordVisibleSecondary) Icons.Filled.Visibility else Icons.Filled.VisibilityOff
-                                    IconButton(onClick = { passwordVisibleSecondary = !passwordVisibleSecondary }) {
-                                        Icon(imageVector = image, contentDescription = null)
-                                    }
-                                },
-                                visualTransformation = if (passwordVisibleSecondary) VisualTransformation.None else PasswordVisualTransformation(),
-                                modifier = Modifier.fillMaxWidth()
-                            )
-
-                            OutlinedTextField(
-                                value = localChatId,
-                                onValueChange = { 
-                                    localChatId = it
-                                    viewModel.clearConnectionTestResult()
-                                },
-                                label = { Text("Telegram Channel / Chat ID") },
-                                placeholder = { Text("-100XXXXXXXXXX") },
-                                singleLine = true,
-                                leadingIcon = { Icon(Icons.AutoMirrored.Outlined.Send, contentDescription = null) },
-                                modifier = Modifier.fillMaxWidth()
-                            )
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Button(
-                                    onClick = { 
-                                        val tokens = listOfNotNull(
-                                            primaryTokenInput.trim().takeIf { it.isNotEmpty() },
-                                            secondaryTokenInput.trim().takeIf { it.isNotEmpty() }
-                                        )
-                                        viewModel.setTelegramBotTokens(tokens)
-                                        viewModel.setTelegramChatId(localChatId)
-                                    },
-                                    enabled = hasChanges && primaryTokenInput.isNotBlank() && localChatId.isNotBlank(),
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Text("Save Credentials")
-                                }
-
-                                FilledTonalButton(
-                                    onClick = { 
-                                        viewModel.testTelegramConnection(primaryTokenInput.trim(), localChatId.trim()) 
-                                    },
-                                    enabled = testResult != ConnectionTestResult.Testing && primaryTokenInput.isNotBlank() && localChatId.isNotBlank(),
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Text("Test Connection")
-                                }
-                            }
-
-                            if (testResult != null) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.Start,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    when (val res = testResult) {
-                                        ConnectionTestResult.Testing -> {
-                                            com.inferno.gallery.ui.components.WavyProgressIndicator(
-                                                modifier = Modifier.size(width = 32.dp, height = 20.dp),
-                                                strokeWidth = 2.dp,
-                                                amplitude = 3.dp,
-                                                frequency = 1.5f
-                                            )
-                                            Spacer(Modifier.width(8.dp))
-                                            Text("Testing connection…", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                        }
-                                        ConnectionTestResult.Success -> {
-                                            Icon(
-                                                imageVector = Icons.Outlined.Check,
-                                                contentDescription = "Success",
-                                                tint = MaterialTheme.colorScheme.primary,
-                                                modifier = Modifier.size(20.dp)
-                                            )
-                                            Spacer(Modifier.width(4.dp))
-                                            Text("Success! Connection verified.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-                                        }
-                                        is ConnectionTestResult.Migrated -> {
-                                            Icon(
-                                                imageVector = Icons.Outlined.Check,
-                                                contentDescription = "Success",
-                                                tint = MaterialTheme.colorScheme.primary,
-                                                modifier = Modifier.size(20.dp)
-                                            )
-                                            Spacer(Modifier.width(4.dp))
-                                            Text("Group upgraded to supergroup! Stored ID updated.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-                                        }
-                                        is ConnectionTestResult.Error -> {
-                                            Icon(
-                                                imageVector = Icons.Outlined.Close,
-                                                contentDescription = "Error",
-                                                tint = MaterialTheme.colorScheme.error,
-                                                modifier = Modifier.size(20.dp)
-                                            )
-                                            Spacer(Modifier.width(4.dp))
-                                            Text("Failed: ${res.message}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
-                                        }
-                                        else -> {}
-                                    }
-                                }
-                            }
-                        }
+                        CategoryCard(
+                            title = "General",
+                            subtitle = "App preferences and customizations",
+                            icon = Icons.Outlined.Settings,
+                            onClick = { activeSection = "General" }
+                        )
+                        CategoryCard(
+                            title = "Privacy & Security",
+                            subtitle = "Fine grained control over your data",
+                            icon = Icons.Outlined.Shield,
+                            onClick = { activeSection = "Privacy & Security" }
+                        )
+                        CategoryCard(
+                            title = "Look & Feel",
+                            subtitle = "Change how the app looks",
+                            icon = Icons.Outlined.Palette,
+                            onClick = { activeSection = "Look & Feel" }
+                        )
+                        CategoryCard(
+                            title = "Cloud Backup",
+                            subtitle = "Telegram cloud and backup options",
+                            icon = Icons.Outlined.Cloud,
+                            onClick = { activeSection = "Cloud Backup" }
+                        )
+                        CategoryCard(
+                            title = "Smart Search & OCR",
+                            subtitle = "Local text search and semantic search options",
+                            icon = Icons.Outlined.AutoAwesome,
+                            onClick = { activeSection = "Smart Search & OCR" }
+                        )
                     }
-
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-
-                    val localContext = androidx.compose.ui.platform.LocalContext.current
-                    ListItem(
-                        leadingContent = { Icon(Icons.Outlined.Cloud, contentDescription = null) },
-                        headlineContent = { Text("Restore from Cloud") },
-                        supportingContent = { Text("Fetch sync manifest and restore database entries") },
+                } else {
+                    Column(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                viewModel.restoreFromManifest(localContext)
-                            },
-                        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
-                    )
-
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-
-                    ListItem(
-                        leadingContent = { Icon(Icons.Outlined.Lock, contentDescription = null) },
-                        headlineContent = { Text("Strip Location Metadata") },
-                        supportingContent = { Text("Remove GPS coordinates from images before uploading") },
-                        trailingContent = {
-                            Switch(
-                                checked = stripLocation,
-                                onCheckedChange = { viewModel.setTelegramStripLocation(it) },
-                                thumbContent = {
-                                    Icon(
-                                        imageVector = if (stripLocation) Icons.Outlined.Check else Icons.Outlined.Close,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(SwitchDefaults.IconSize)
-                                    )
-                                }
-                            )
-                        },
-                        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
-                    )
-
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-
-                    ListItem(
-                        leadingContent = { Icon(Icons.Outlined.Cloud, contentDescription = null) },
-                        headlineContent = { Text("Automated Background Backup") },
-                        supportingContent = { Text("Backup new media in background based on criteria below") },
-                        trailingContent = {
-                            Switch(
-                                checked = backupEnabled,
-                                onCheckedChange = { viewModel.setTelegramBackupEnabled(it) },
-                                thumbContent = {
-                                    Icon(
-                                        imageVector = if (backupEnabled) Icons.Outlined.Check else Icons.Outlined.Close,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(SwitchDefaults.IconSize)
-                                    )
-                                }
-                            )
-                        },
-                        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
-                    )
-
-                    if (backupEnabled) {
-                        Column(
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-
-                            val wifiOnly by viewModel.telegramAutoBackupWifiOnly.collectAsState()
-                            val batteryPause by viewModel.telegramAutoBackupBatteryLowPause.collectAsState()
-
-                            ListItem(
-                                leadingContent = { Icon(Icons.Outlined.Folder, contentDescription = null) },
-                                headlineContent = { Text("Choose Folders") },
-                                supportingContent = {
-                                    Text(
-                                        if (selectedFolders.isEmpty()) "No folders selected (Nothing will backup)"
-                                        else selectedFolders.joinToString(", ")
-                                    )
-                                },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { showFolderDialog.value = true },
-                                colors = ListItemDefaults.colors(containerColor = Color.Transparent)
-                            )
-
-                            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-
-                            ListItem(
-                                leadingContent = { Icon(Icons.Outlined.Wifi, contentDescription = null) },
-                                headlineContent = { Text("Wi-Fi Only") },
-                                supportingContent = { Text("Backup only when connected to an unmetered Wi-Fi network") },
-                                trailingContent = {
-                                    Switch(
-                                        checked = wifiOnly,
-                                        onCheckedChange = { viewModel.setTelegramAutoBackupWifiOnly(it) },
-                                        thumbContent = {
-                                            Icon(
-                                                imageVector = if (wifiOnly) Icons.Outlined.Check else Icons.Outlined.Close,
-                                                contentDescription = null,
-                                                modifier = Modifier.size(SwitchDefaults.IconSize)
-                                            )
-                                        }
-                                    )
-                                },
-                                colors = ListItemDefaults.colors(containerColor = Color.Transparent)
-                            )
-
-                            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-
-                            ListItem(
-                                leadingContent = { Icon(Icons.Outlined.BatteryChargingFull, contentDescription = null) },
-                                headlineContent = { Text("Battery Saver Pause") },
-                                supportingContent = { Text("Pause backup if battery is less than 35% (unless charging)") },
-                                trailingContent = {
-                                    Switch(
-                                        checked = batteryPause,
-                                        onCheckedChange = { viewModel.setTelegramAutoBackupBatteryLowPause(it) },
-                                        thumbContent = {
-                                            Icon(
-                                                imageVector = if (batteryPause) Icons.Outlined.Check else Icons.Outlined.Close,
-                                                contentDescription = null,
-                                                modifier = Modifier.size(SwitchDefaults.IconSize)
-                                            )
-                                        }
-                                    )
-                                },
-                                colors = ListItemDefaults.colors(containerColor = Color.Transparent)
-                            )
-                        }
-                    }
-
-                    if (showFolderDialog.value) {
-                        androidx.compose.material3.AlertDialog(
-                            onDismissRequest = { showFolderDialog.value = false },
-                            title = { Text("Select Backup Folders") },
-                            text = {
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .verticalScroll(rememberScrollState()),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    if (allFolders.isEmpty()) {
-                                        Text("No folders found", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    } else {
-                                        allFolders.forEach { folder ->
-                                            val isChecked = selectedFolders.contains(folder)
-                                            Row(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .clickable {
-                                                        val updated = if (isChecked) {
-                                                            selectedFolders - folder
-                                                        } else {
-                                                            selectedFolders + folder
-                                                        }
-                                                        viewModel.setTelegramAutoBackupFolders(updated)
-                                                    }
-                                                    .padding(vertical = 8.dp),
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                androidx.compose.material3.Checkbox(
-                                                    checked = isChecked,
-                                                    onCheckedChange = { checked ->
-                                                        val updated = if (checked == true) {
-                                                            selectedFolders + folder
-                                                        } else {
-                                                            selectedFolders - folder
-                                                        }
-                                                        viewModel.setTelegramAutoBackupFolders(updated)
-                                                    }
+                            .fillMaxSize()
+                            .verticalScroll(rememberScrollState())
+                            .padding(vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        when (section) {
+                            "General" -> {
+                                SettingsGroup(title = "App Information") {
+                                    Surface(
+                                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(vertical = 8.dp),
+                                        shape = MaterialTheme.shapes.extraLarge,
+                                        color = MaterialTheme.colorScheme.primaryContainer,
+                                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                    ) {
+                                        Column(
+                                            modifier = Modifier.padding(24.dp),
+                                            horizontalAlignment = Alignment.CenterHorizontally
+                                        ) {
+                                            Icon(Icons.Outlined.Image, contentDescription = null, modifier = Modifier.size(64.dp))
+                                            Spacer(modifier = Modifier.height(16.dp))
+                                            Text("Photon Gallery", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                                            Text("Version 1.0 (Expressive)", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f))
+                                            Spacer(modifier = Modifier.height(16.dp))
+                                            Text("Crafted with ♥ by Bn5prS", style = MaterialTheme.typography.titleMedium)
+                                            Spacer(modifier = Modifier.height(24.dp))
+                                            Button(
+                                                onClick = { uriHandler.openUri("https://github.com/Bn5prS/Photon_Gallery") },
+                                                colors = ButtonDefaults.buttonColors(
+                                                    containerColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                                    contentColor = MaterialTheme.colorScheme.primaryContainer
                                                 )
-                                                Spacer(modifier = Modifier.width(12.dp))
-                                                Text(folder, style = MaterialTheme.typography.bodyLarge)
+                                            ) {
+                                                Text("GitHub Repository")
                                             }
                                         }
                                     }
                                 }
-                            },
-                            confirmButton = {
-                                Button(onClick = { showFolderDialog.value = false }) {
-                                    Text("Done")
-                                }
                             }
-                        )
-                    }
-                }
-            }
+                            "Privacy & Security" -> {
+                                SettingsGroup(title = "Metadata Privacy") {
+                                    ListItem(
+                                        leadingContent = { Icon(Icons.Outlined.PrivacyTip, contentDescription = null) },
+                                        headlineContent = { Text("Strip Metadata Before Sharing") },
+                                        supportingContent = { Text("Remove GPS, camera specifications, timestamps, timezone offsets, and author/attribution details when sharing") },
+                                        trailingContent = {
+                                            Switch(
+                                                checked = stripMetadataOnShare,
+                                                onCheckedChange = { viewModel.setStripMetadataOnShare(it) },
+                                                thumbContent = {
+                                                    Icon(
+                                                        imageVector = if (stripMetadataOnShare) Icons.Outlined.Check else Icons.Outlined.Close,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(SwitchDefaults.IconSize)
+                                                    )
+                                                }
+                                            )
+                                        },
+                                        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                                    )
 
-            SettingsGroup(title = "Local AI Engine") {
-                val dbIndexed = totalImagesCount - unindexedOcrImagesCount
-                val workerIndexed = ocrIndexWorkInfo?.progress?.getInt("progress", 0) ?: 0
-                val indexed = maxOf(dbIndexed, workerIndexed)
-                val total = if (totalImagesCount > 0) totalImagesCount else (ocrIndexWorkInfo?.progress?.getInt("total", 0) ?: 0)
-                val isRunning = ocrIndexWorkInfo?.state == WorkInfo.State.RUNNING || ocrIndexWorkInfo?.state == WorkInfo.State.ENQUEUED
+                                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
 
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    // Header Row: Icon, Title, and Status Badge
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Search,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text(
-                            text = "Text (OCR) Indexing",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.weight(1f)
-                        )
-                        
-                        // Status Badge
-                        val badgeColor = if (isRunning) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
-                        val badgeTextColor = if (isRunning) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
-                        val badgeText = if (isRunning) "Indexing" else "Idle"
-                        
-                        Surface(
-                            color = badgeColor,
-                            contentColor = badgeTextColor,
-                            shape = MaterialTheme.shapes.extraSmall,
-                            modifier = Modifier.padding(start = 8.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                if (isRunning) {
-                                    com.inferno.gallery.ui.components.WavyProgressIndicator(
-                                        modifier = Modifier.size(width = 16.dp, height = 10.dp),
-                                        strokeWidth = 1.5.dp,
-                                        amplitude = 2.dp,
-                                        frequency = 1.2f,
-                                        color = badgeTextColor
+                                    ListItem(
+                                        leadingContent = { Icon(Icons.Outlined.Lock, contentDescription = null) },
+                                        headlineContent = { Text("Strip Location on Backup") },
+                                        supportingContent = { Text("Remove GPS coordinates from images before uploading to Telegram Cloud") },
+                                        trailingContent = {
+                                            Switch(
+                                                checked = stripLocation,
+                                                onCheckedChange = { viewModel.setTelegramStripLocation(it) },
+                                                thumbContent = {
+                                                    Icon(
+                                                        imageVector = if (stripLocation) Icons.Outlined.Check else Icons.Outlined.Close,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(SwitchDefaults.IconSize)
+                                                    )
+                                                }
+                                            )
+                                        },
+                                        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
                                     )
                                 }
-                                Text(
-                                    text = badgeText,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                        }
-                    }
 
-                    Text(
-                        text = "Index photos locally to search for text printed on them.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
-                    // Progress Section (determinate/wavy)
-                    if (total > 0) {
-                        val progressFloat = (indexed.toFloat() / total.toFloat()).coerceIn(0f, 1f)
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(10.dp)
-                                    .background(
-                                        color = MaterialTheme.colorScheme.surfaceVariant,
-                                        shape = CircleShape
+                                SettingsGroup(title = "Recycle Bin & Deletion") {
+                                    val confirmDelete by viewModel.confirmDeleteEnabled.collectAsState()
+                                    ListItem(
+                                        leadingContent = { Icon(Icons.Outlined.Delete, contentDescription = null) },
+                                        headlineContent = { Text("Confirm Deletion") },
+                                        supportingContent = { Text("Show confirmation dialog when moving media to recycle bin") },
+                                        trailingContent = {
+                                            Switch(
+                                                checked = confirmDelete,
+                                                onCheckedChange = { viewModel.setConfirmDeleteEnabled(it) },
+                                                thumbContent = {
+                                                    Icon(
+                                                        imageVector = if (confirmDelete) Icons.Outlined.Check else Icons.Outlined.Close,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(SwitchDefaults.IconSize)
+                                                    )
+                                                }
+                                            )
+                                        },
+                                        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
                                     )
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth(progressFloat)
-                                        .fillMaxHeight()
-                                        .background(
-                                            color = MaterialTheme.colorScheme.primary,
-                                            shape = CircleShape
+
+                                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+
+                                    val autoCleanTrash by viewModel.autoCleanTrashEnabled.collectAsState()
+                                    ListItem(
+                                        leadingContent = { Icon(Icons.Outlined.Delete, contentDescription = null) },
+                                        headlineContent = { Text("Auto-clean Recycle Bin") },
+                                        supportingContent = { Text("Automatically delete old items in the recycle bin") },
+                                        trailingContent = {
+                                            Switch(
+                                                checked = autoCleanTrash,
+                                                onCheckedChange = { viewModel.setAutoCleanTrashEnabled(it) },
+                                                thumbContent = {
+                                                    Icon(
+                                                        imageVector = if (autoCleanTrash) Icons.Outlined.Check else Icons.Outlined.Close,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(SwitchDefaults.IconSize)
+                                                    )
+                                                }
+                                            )
+                                        },
+                                        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                                    )
+
+                                    if (autoCleanTrash) {
+                                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+
+                                        val autoCleanDays by viewModel.autoCleanTrashDays.collectAsState()
+                                        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                                            Text(text = "Retention Period: $autoCleanDays Days", style = MaterialTheme.typography.bodyLarge)
+                                            SingleChoiceSegmentedButtonRow(
+                                                modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                                            ) {
+                                                SegmentedButton(
+                                                    shape = SegmentedButtonDefaults.itemShape(index = 0, count = 3),
+                                                    onClick = { viewModel.setAutoCleanTrashDays(7) },
+                                                    selected = autoCleanDays == 7,
+                                                    label = { Text("7 Days") }
+                                                )
+                                                SegmentedButton(
+                                                    shape = SegmentedButtonDefaults.itemShape(index = 1, count = 3),
+                                                    onClick = { viewModel.setAutoCleanTrashDays(14) },
+                                                    selected = autoCleanDays == 14,
+                                                    label = { Text("14 Days") }
+                                                )
+                                                SegmentedButton(
+                                                    shape = SegmentedButtonDefaults.itemShape(index = 2, count = 3),
+                                                    onClick = { viewModel.setAutoCleanTrashDays(30) },
+                                                    selected = autoCleanDays == 30,
+                                                    label = { Text("30 Days") }
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            "Look & Feel" -> {
+                                SettingsGroup(title = "Theme") {
+                                    Column(modifier = Modifier.padding(16.dp)) {
+                                        SingleChoiceSegmentedButtonRow(
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            SegmentedButton(
+                                                shape = SegmentedButtonDefaults.itemShape(index = 0, count = 3),
+                                                onClick = { viewModel.setThemeMode(ThemeMode.SYSTEM) },
+                                                selected = themeMode == ThemeMode.SYSTEM,
+                                                icon = { Icon(Icons.Outlined.BrightnessAuto, contentDescription = null) },
+                                                label = { Text("System", style = MaterialTheme.typography.labelMedium) }
+                                            )
+                                            SegmentedButton(
+                                                shape = SegmentedButtonDefaults.itemShape(index = 1, count = 3),
+                                                onClick = { viewModel.setThemeMode(ThemeMode.LIGHT) },
+                                                selected = themeMode == ThemeMode.LIGHT,
+                                                icon = { Icon(Icons.Outlined.LightMode, contentDescription = null) },
+                                                label = { Text("Light", style = MaterialTheme.typography.labelMedium) }
+                                            )
+                                            SegmentedButton(
+                                                shape = SegmentedButtonDefaults.itemShape(index = 2, count = 3),
+                                                onClick = { viewModel.setThemeMode(ThemeMode.DARK) },
+                                                selected = themeMode == ThemeMode.DARK,
+                                                icon = { Icon(Icons.Outlined.DarkMode, contentDescription = null) },
+                                                label = { Text("Dark", style = MaterialTheme.typography.labelMedium) }
+                                            )
+                                        }
+                                    }
+                                    
+                                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+
+                                    ListItem(
+                                        leadingContent = { Icon(Icons.Outlined.Palette, contentDescription = null) },
+                                        headlineContent = { Text("Material You") },
+                                        supportingContent = { Text("Use dynamic system colors") },
+                                        trailingContent = {
+                                            Switch(
+                                                checked = useMaterialYou,
+                                                onCheckedChange = { viewModel.setUseMaterialYou(it) },
+                                                thumbContent = {
+                                                    Icon(
+                                                        imageVector = if (useMaterialYou) Icons.Outlined.Check else Icons.Outlined.Close,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(SwitchDefaults.IconSize)
+                                                    )
+                                                }
+                                            )
+                                        },
+                                        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                                    )
+
+                                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+
+                                    ListItem(
+                                        leadingContent = { Icon(Icons.Outlined.Contrast, contentDescription = null) },
+                                        headlineContent = { Text("AMOLED Black") },
+                                        supportingContent = { Text("Use pitch black background in dark mode") },
+                                        trailingContent = {
+                                            Switch(
+                                                checked = useAmoledBlack,
+                                                onCheckedChange = { viewModel.setUseAmoledBlack(it) },
+                                                enabled = isCurrentlyDark,
+                                                thumbContent = {
+                                                    Icon(
+                                                        imageVector = if (useAmoledBlack) Icons.Outlined.Check else Icons.Outlined.Close,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(SwitchDefaults.IconSize)
+                                                    )
+                                                }
+                                            )
+                                        },
+                                        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                                    )
+
+                                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+
+                                    ListItem(
+                                        leadingContent = { Icon(Icons.Outlined.Fullscreen, contentDescription = null) },
+                                        headlineContent = { Text("Full Screen Mode") },
+                                        supportingContent = { Text("Hide status bar and navigation bar to maximize content area") },
+                                        trailingContent = {
+                                            Switch(
+                                                checked = useFullScreen,
+                                                onCheckedChange = { viewModel.setUseFullScreen(it) },
+                                                thumbContent = {
+                                                    Icon(
+                                                        imageVector = if (useFullScreen) Icons.Outlined.Check else Icons.Outlined.Close,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(SwitchDefaults.IconSize)
+                                                    )
+                                                }
+                                            )
+                                        },
+                                        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                                    )
+                                }
+
+                                SettingsGroup(title = "Layout & Navigation") {
+                                    ListItem(
+                                        leadingContent = { Icon(Icons.Outlined.Menu, contentDescription = null) },
+                                        headlineContent = { Text("Full-Width Dock") },
+                                        supportingContent = { Text("Use standard edge-to-edge dock instead of floating pill") },
+                                        trailingContent = {
+                                            val isDockFullWidth = dockStyle == com.inferno.gallery.data.DockStyle.FULL_WIDTH
+                                            Switch(
+                                                checked = isDockFullWidth, 
+                                                onCheckedChange = { isChecked ->
+                                                    viewModel.setDockStyle(if (isChecked) com.inferno.gallery.data.DockStyle.FULL_WIDTH else com.inferno.gallery.data.DockStyle.PILL)
+                                                },
+                                                thumbContent = {
+                                                    Icon(
+                                                        imageVector = if (isDockFullWidth) Icons.Outlined.Check else Icons.Outlined.Close,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(SwitchDefaults.IconSize)
+                                                    )
+                                                }
+                                            )
+                                        },
+                                        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                                    )
+
+                                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+
+                                    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                                        Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                                            Text(text = "Grid Items per Row: $gridCellsCount", style = MaterialTheme.typography.bodyLarge)
+                                        }
+                                        androidx.compose.material3.Slider(
+                                            value = gridCellsCount.toFloat(),
+                                            onValueChange = { galleryViewModel.setGridCellsCount(it.toInt()) },
+                                            valueRange = 2f..6f,
+                                            steps = 3
                                         )
-                                )
-                            }
-                            
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = if (indexed == total) "Indexing complete" else "Progress",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Text(
-                                    text = "$indexed / $total images (${(progressFloat * 100).toInt()}%)",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                        }
-                    }
+                                    }
 
-                    // Button Row
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        if (isRunning) {
-                            Button(
-                                onClick = { viewModel.stopOcrIndexing() },
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = MaterialTheme.colorScheme.errorContainer,
-                                    contentColor = MaterialTheme.colorScheme.onErrorContainer
-                                ),
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text("Stop Indexing")
+                                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+
+                                    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(text = "Thumbnail Corner Radius", style = MaterialTheme.typography.bodyLarge)
+                                            Surface(
+                                                modifier = Modifier.size(48.dp),
+                                                shape = androidx.compose.foundation.shape.RoundedCornerShape(thumbnailCornerRadius.dp),
+                                                color = MaterialTheme.colorScheme.primaryContainer
+                                            ) {}
+                                        }
+                                        androidx.compose.material3.Slider(
+                                            value = thumbnailCornerRadius,
+                                            onValueChange = { viewModel.setThumbnailCornerRadius(it) },
+                                            valueRange = 0f..24f
+                                        )
+                                    }
+
+                                }
+
+                                SettingsGroup(title = "Media Playback") {
+                                    ListItem(
+                                        leadingContent = { Icon(Icons.Outlined.PlayCircleOutline, contentDescription = null) },
+                                        headlineContent = { Text("Auto-Play Media") },
+                                        supportingContent = { Text("Play GIFs and videos in grid") },
+                                        trailingContent = {
+                                            Switch(
+                                                checked = gridAutoPlay,
+                                                onCheckedChange = { galleryViewModel.toggleGridAutoPlay() },
+                                                thumbContent = {
+                                                    Icon(
+                                                        imageVector = if (gridAutoPlay) Icons.Outlined.Check else Icons.Outlined.Close,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(SwitchDefaults.IconSize)
+                                                    )
+                                                }
+                                            )
+                                        },
+                                        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                                    )
+
+                                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+
+                                    val autoplayWithSound by viewModel.autoplayWithSoundEnabled.collectAsState()
+                                    ListItem(
+                                        leadingContent = { Icon(Icons.AutoMirrored.Outlined.VolumeUp, contentDescription = null) },
+                                        headlineContent = { Text("Autoplay Video with Sound") },
+                                        supportingContent = { Text("Play videos with sound automatically in full screen (muted by default)") },
+                                        trailingContent = {
+                                            Switch(
+                                                checked = autoplayWithSound,
+                                                onCheckedChange = { viewModel.setAutoplayWithSoundEnabled(it) },
+                                                thumbContent = {
+                                                    Icon(
+                                                        imageVector = if (autoplayWithSound) Icons.Outlined.Check else Icons.Outlined.Close,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(SwitchDefaults.IconSize)
+                                                    )
+                                                }
+                                            )
+                                        },
+                                        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                                    )
+
+                                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+
+                                    ListItem(
+                                        leadingContent = { Icon(Icons.Outlined.Delete, contentDescription = null) },
+                                        headlineContent = { Text("Cache Grid Thumbnails") },
+                                        supportingContent = { Text("Pre-cache grid thumbnails for instant, super-smooth scrolling (uses device storage)") },
+                                        trailingContent = {
+                                            Switch(
+                                                checked = cacheThumbnailsEnabled,
+                                                onCheckedChange = { viewModel.setCacheThumbnailsEnabled(it) },
+                                                thumbContent = {
+                                                    Icon(
+                                                        imageVector = if (cacheThumbnailsEnabled) Icons.Outlined.Check else Icons.Outlined.Close,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(SwitchDefaults.IconSize)
+                                                    )
+                                                }
+                                            )
+                                        },
+                                        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                                     )
+
+                                     HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+
+                                     ListItem(
+                                         leadingContent = { Icon(Icons.Outlined.BrightnessHigh, contentDescription = null) },
+                                         headlineContent = { Text("Maximize Fullscreen Brightness") },
+                                         supportingContent = { Text("Temporarily maximize screen brightness when viewing media in full screen") },
+                                         trailingContent = {
+                                             Switch(
+                                                 checked = maxBrightnessEnabled,
+                                                 onCheckedChange = { viewModel.setMaxBrightnessEnabled(it) },
+                                                 thumbContent = {
+                                                     Icon(
+                                                         imageVector = if (maxBrightnessEnabled) Icons.Outlined.Check else Icons.Outlined.Close,
+                                                         contentDescription = null,
+                                                         modifier = Modifier.size(SwitchDefaults.IconSize)
+                                                     )
+                                                 }
+                                             )
+                                         },
+                                         colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                                    )
+                                }
                             }
-                        } else {
-                            FilledTonalButton(
-                                onClick = { viewModel.startOcrIndexing() },
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text("Start Indexing")
+                            "Cloud Backup" -> {
+                                SettingsGroup(title = "Telegram Cloud Backup") {
+                                    val testResult by viewModel.connectionTestState.collectAsState()
+                                    val hasChanges = primaryTokenInput != (savedTokens.getOrNull(0) ?: "") || 
+                                                     secondaryTokenInput != (savedTokens.getOrNull(1) ?: "") || 
+                                                     localChatId != savedChatId
+
+                                    LaunchedEffect(testResult) {
+                                        val result = testResult
+                                        if (result is ConnectionTestResult.Migrated) {
+                                            localChatId = result.newChatId
+                                        }
+                                    }
+
+                                    val credentialsExpanded = remember { mutableStateOf(false) }
+
+                                    Column(modifier = Modifier.fillMaxWidth()) {
+                                        ListItem(
+                                            leadingContent = { Icon(Icons.Outlined.Lock, contentDescription = null) },
+                                            headlineContent = { Text("API Credentials Setup") },
+                                            supportingContent = { Text("Configure bot tokens and chat ID") },
+                                            trailingContent = {
+                                                Icon(
+                                                    imageVector = if (credentialsExpanded.value) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                                                    contentDescription = if (credentialsExpanded.value) "Collapse" else "Expand"
+                                                )
+                                            },
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clickable { credentialsExpanded.value = !credentialsExpanded.value },
+                                            colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                                        )
+
+                                        androidx.compose.animation.AnimatedVisibility(
+                                            visible = credentialsExpanded.value
+                                        ) {
+                                            Column(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                                                    .background(
+                                                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
+                                                        shape = MaterialTheme.shapes.large
+                                                    )
+                                                    .padding(16.dp),
+                                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                                            ) {
+                                                androidx.compose.material3.OutlinedTextField(
+                                                    value = primaryTokenInput,
+                                                    onValueChange = { 
+                                                        primaryTokenInput = it
+                                                        viewModel.clearConnectionTestResult()
+                                                    },
+                                                    label = { Text("Primary Bot Token (Required)") },
+                                                    placeholder = { Text("123456:ABC-DEF...") },
+                                                    singleLine = true,
+                                                    leadingIcon = { Icon(Icons.Outlined.Lock, contentDescription = null) },
+                                                    trailingIcon = {
+                                                        val image = if (passwordVisiblePrimary) Icons.Filled.Visibility else Icons.Filled.VisibilityOff
+                                                        IconButton(onClick = { passwordVisiblePrimary = !passwordVisiblePrimary }) {
+                                                            Icon(imageVector = image, contentDescription = null)
+                                                        }
+                                                    },
+                                                    visualTransformation = if (passwordVisiblePrimary) VisualTransformation.None else PasswordVisualTransformation(),
+                                                    modifier = Modifier.fillMaxWidth()
+                                                )
+
+                                                androidx.compose.material3.OutlinedTextField(
+                                                    value = secondaryTokenInput,
+                                                    onValueChange = { 
+                                                        secondaryTokenInput = it
+                                                        viewModel.clearConnectionTestResult()
+                                                    },
+                                                    label = { Text("Secondary Bot Token (Optional)") },
+                                                    placeholder = { Text("654321:XYZ-UVW...") },
+                                                    supportingText = { Text("Configures dual-bot concurrent media uploading to speed up backups.") },
+                                                    singleLine = true,
+                                                    leadingIcon = { Icon(Icons.Outlined.Lock, contentDescription = null) },
+                                                    trailingIcon = {
+                                                        val image = if (passwordVisibleSecondary) Icons.Filled.Visibility else Icons.Filled.VisibilityOff
+                                                        IconButton(onClick = { passwordVisibleSecondary = !passwordVisibleSecondary }) {
+                                                            Icon(imageVector = image, contentDescription = null)
+                                                        }
+                                                    },
+                                                    visualTransformation = if (passwordVisibleSecondary) VisualTransformation.None else PasswordVisualTransformation(),
+                                                    modifier = Modifier.fillMaxWidth()
+                                                )
+
+                                                androidx.compose.material3.OutlinedTextField(
+                                                    value = localChatId,
+                                                    onValueChange = { 
+                                                        localChatId = it
+                                                        viewModel.clearConnectionTestResult()
+                                                    },
+                                                    label = { Text("Telegram Channel / Chat ID") },
+                                                    placeholder = { Text("-100XXXXXXXXXX") },
+                                                    singleLine = true,
+                                                    leadingIcon = { Icon(androidx.compose.material.icons.Icons.AutoMirrored.Outlined.Send, contentDescription = null) },
+                                                    modifier = Modifier.fillMaxWidth()
+                                                )
+
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Button(
+                                                        onClick = { 
+                                                            val tokens = listOfNotNull(
+                                                                primaryTokenInput.trim().takeIf { it.isNotEmpty() },
+                                                                secondaryTokenInput.trim().takeIf { it.isNotEmpty() }
+                                                            )
+                                                            viewModel.saveTelegramCredentials(tokens, localChatId)
+                                                        },
+                                                        enabled = hasChanges && primaryTokenInput.isNotBlank() && localChatId.isNotBlank(),
+                                                        modifier = Modifier.weight(1f)
+                                                    ) {
+                                                        Text("Save Credentials")
+                                                    }
+
+                                                    FilledTonalButton(
+                                                        onClick = { 
+                                                            viewModel.testTelegramConnection(primaryTokenInput.trim(), localChatId.trim()) 
+                                                        },
+                                                        enabled = testResult != ConnectionTestResult.Testing && primaryTokenInput.isNotBlank() && localChatId.isNotBlank(),
+                                                        modifier = Modifier.weight(1f)
+                                                    ) {
+                                                        Text("Test Connection")
+                                                    }
+                                                }
+
+                                                if (testResult != null) {
+                                                    Row(
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        horizontalArrangement = Arrangement.Start,
+                                                        verticalAlignment = Alignment.CenterVertically
+                                                    ) {
+                                                        when (val res = testResult) {
+                                                            ConnectionTestResult.Testing -> {
+                                                                com.inferno.gallery.ui.components.WavyProgressIndicator(
+                                                                    modifier = Modifier.size(width = 32.dp, height = 20.dp),
+                                                                    strokeWidth = 2.dp,
+                                                                    amplitude = 3.dp,
+                                                                    frequency = 1.5f
+                                                                )
+                                                                Spacer(Modifier.width(8.dp))
+                                                                Text("Testing connection…", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                            }
+                                                            ConnectionTestResult.Success -> {
+                                                                Icon(
+                                                                    imageVector = Icons.Outlined.Check,
+                                                                    contentDescription = "Success",
+                                                                    tint = MaterialTheme.colorScheme.primary,
+                                                                    modifier = Modifier.size(20.dp)
+                                                                )
+                                                                Spacer(Modifier.width(4.dp))
+                                                                Text("Success! Connection verified.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                                                            }
+                                                            is ConnectionTestResult.Migrated -> {
+                                                                Icon(
+                                                                    imageVector = Icons.Outlined.Check,
+                                                                    contentDescription = "Success",
+                                                                    tint = MaterialTheme.colorScheme.primary,
+                                                                    modifier = Modifier.size(20.dp)
+                                                                )
+                                                                Spacer(Modifier.width(4.dp))
+                                                                Text("Group upgraded to supergroup! Stored ID updated.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                                                            }
+                                                            is ConnectionTestResult.Error -> {
+                                                                Icon(
+                                                                    imageVector = Icons.Outlined.Close,
+                                                                    contentDescription = "Error",
+                                                                    tint = MaterialTheme.colorScheme.error,
+                                                                    modifier = Modifier.size(20.dp)
+                                                                )
+                                                                Spacer(Modifier.width(4.dp))
+                                                                Text("Failed: ${res.message}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+                                                            }
+                                                            else -> {}
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+
+                                    val localContext = androidx.compose.ui.platform.LocalContext.current
+                                    ListItem(
+                                        leadingContent = { Icon(Icons.Outlined.Cloud, contentDescription = null) },
+                                        headlineContent = { Text("Restore from Cloud") },
+                                        supportingContent = { Text("Fetch sync manifest and restore database entries") },
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                viewModel.restoreFromManifest(localContext)
+                                            },
+                                        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                                    )
+
+                                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+
+                                    ListItem(
+                                        leadingContent = { Icon(Icons.Outlined.Cloud, contentDescription = null) },
+                                        headlineContent = { Text("Automated Background Backup") },
+                                        supportingContent = { Text("Backup new media in background based on criteria") },
+                                        trailingContent = {
+                                            Switch(
+                                                checked = backupEnabled,
+                                                onCheckedChange = { viewModel.setTelegramBackupEnabled(it) },
+                                                thumbContent = {
+                                                    Icon(
+                                                        imageVector = if (backupEnabled) Icons.Outlined.Check else Icons.Outlined.Close,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(SwitchDefaults.IconSize)
+                                                    )
+                                                }
+                                            )
+                                        },
+                                        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                                    )
+                                }
+
+                                SettingsGroup(title = "Background Sync Settings") {
+                                    val wifiOnly by viewModel.telegramAutoBackupWifiOnly.collectAsState()
+                                    val batteryPause by viewModel.telegramAutoBackupBatteryLowPause.collectAsState()
+
+                                    ListItem(
+                                        leadingContent = { Icon(Icons.Outlined.Folder, contentDescription = null) },
+                                        headlineContent = { Text("Choose Backup Folders") },
+                                        supportingContent = {
+                                            Text(
+                                                if (selectedFolders.isEmpty()) "No folders selected (Nothing will backup)"
+                                                else selectedFolders.joinToString(", ")
+                                            )
+                                        },
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable { showFolderDialog.value = true },
+                                        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                                    )
+
+                                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+
+                                    ListItem(
+                                        leadingContent = { Icon(Icons.Outlined.Wifi, contentDescription = null) },
+                                        headlineContent = { Text("Wi-Fi Only") },
+                                        supportingContent = { Text("Backup only when connected to an unmetered Wi-Fi network") },
+                                        trailingContent = {
+                                            Switch(
+                                                checked = wifiOnly,
+                                                onCheckedChange = { viewModel.setTelegramAutoBackupWifiOnly(it) },
+                                                thumbContent = {
+                                                    Icon(
+                                                        imageVector = if (wifiOnly) Icons.Outlined.Check else Icons.Outlined.Close,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(SwitchDefaults.IconSize)
+                                                    )
+                                                }
+                                            )
+                                        },
+                                        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                                    )
+
+                                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+
+                                    ListItem(
+                                        leadingContent = { Icon(Icons.Outlined.BatteryChargingFull, contentDescription = null) },
+                                        headlineContent = { Text("Battery Saver Pause") },
+                                        supportingContent = { Text("Pause backup if battery is less than 35% (unless charging)") },
+                                        trailingContent = {
+                                            Switch(
+                                                checked = batteryPause,
+                                                onCheckedChange = { viewModel.setTelegramAutoBackupBatteryLowPause(it) },
+                                                thumbContent = {
+                                                    Icon(
+                                                        imageVector = if (batteryPause) Icons.Outlined.Check else Icons.Outlined.Close,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(SwitchDefaults.IconSize)
+                                                    )
+                                                }
+                                            )
+                                        },
+                                        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                                    )
+                                }
                             }
-                            androidx.compose.material3.OutlinedButton(
-                                onClick = { viewModel.rebuildOcrIndex() },
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text("Rebuild Index")
+                            "Smart Search & OCR" -> {
+                                SettingsGroup(title = "Local Text Search (OCR)") {
+                                    val dbIndexed = totalImagesCount - unindexedOcrImagesCount
+                                    val isRunning = ocrProgressState.isIndexing
+                                    val indexed = if (isRunning) ocrProgressState.progress else dbIndexed
+                                    val total = if (isRunning) ocrProgressState.total else totalImagesCount
+
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(16.dp),
+                                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Outlined.Search,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(24.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(12.dp))
+                                            Text(
+                                                text = "Text (OCR) Indexing",
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.SemiBold,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                            
+                                            val badgeColor = if (isRunning) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
+                                            val badgeTextColor = if (isRunning) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                                            val badgeText = if (isRunning) "Indexing" else "Idle"
+                                            
+                                            Surface(
+                                                color = badgeColor,
+                                                contentColor = badgeTextColor,
+                                                shape = MaterialTheme.shapes.extraSmall,
+                                                modifier = Modifier.padding(start = 8.dp)
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                                ) {
+                                                    if (isRunning) {
+                                                        com.inferno.gallery.ui.components.WavyProgressIndicator(
+                                                            modifier = Modifier.size(width = 16.dp, height = 10.dp),
+                                                            strokeWidth = 1.5.dp,
+                                                            amplitude = 2.dp,
+                                                            frequency = 1.2f,
+                                                            color = badgeTextColor
+                                                        )
+                                                    }
+                                                    Text(
+                                                        text = badgeText,
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        fontWeight = FontWeight.Bold
+                                                    )
+                                                }
+                                            }
+                                        }
+
+                                        Text(
+                                            text = "Index photos locally to search for text printed on them.",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+
+                                        if (total > 0) {
+                                            val progressFloat = (indexed.toFloat() / total.toFloat()).coerceIn(0f, 1f)
+                                            Column(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                                            ) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .height(10.dp)
+                                                        .background(
+                                                            color = MaterialTheme.colorScheme.surfaceVariant,
+                                                            shape = CircleShape
+                                                        )
+                                                ) {
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .fillMaxWidth(progressFloat)
+                                                            .fillMaxHeight()
+                                                            .background(
+                                                                color = MaterialTheme.colorScheme.primary,
+                                                                shape = CircleShape
+                                                            )
+                                                    )
+                                                }
+                                                
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    val currentImageName = ocrProgressState.currentImageName
+                                                    Text(
+                                                        text = if (isRunning && !currentImageName.isNullOrBlank()) "Scanning: $currentImageName" 
+                                                               else if (indexed == total) "Indexing complete" 
+                                                               else "Progress",
+                                                        style = MaterialTheme.typography.labelMedium,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                        modifier = Modifier.weight(1f),
+                                                        maxLines = 1,
+                                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                                    )
+                                                    Text(
+                                                        text = "$indexed / $total images (${(progressFloat * 100).toInt()}%)",
+                                                        style = MaterialTheme.typography.labelMedium,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = MaterialTheme.colorScheme.primary
+                                                    )
+                                                }
+                                            }
+                                        }
+
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            if (isRunning) {
+                                                Button(
+                                                    onClick = { viewModel.stopOcrIndexing() },
+                                                    colors = ButtonDefaults.buttonColors(
+                                                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                                                        contentColor = MaterialTheme.colorScheme.onErrorContainer
+                                                    ),
+                                                    modifier = Modifier.weight(1f)
+                                                ) {
+                                                    Text("Stop Indexing")
+                                                }
+                                            } else {
+                                                FilledTonalButton(
+                                                    onClick = { viewModel.startOcrIndexing() },
+                                                    modifier = Modifier.weight(1f)
+                                                ) {
+                                                    Text("Start Indexing")
+                                                }
+                                                androidx.compose.material3.OutlinedButton(
+                                                    onClick = { viewModel.rebuildOcrIndex() },
+                                                    modifier = Modifier.weight(1f)
+                                                ) {
+                                                    Text("Rebuild Index")
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                SettingsGroup(title = "Local Semantic Search (AI)") {
+                                    val isDownloading = modelDownloadWorkInfo?.state == WorkInfo.State.RUNNING || modelDownloadWorkInfo?.state == WorkInfo.State.ENQUEUED
+                                    val downloadProgress = modelDownloadWorkInfo?.progress?.getInt("progress", 0) ?: 0
+                                    val isIndexing = clipProgressState.isIndexing
+                                    val unindexedCount = unindexedSmartSearchCount
+                                    val indexedCount = maxOf(0, totalImagesCount - unindexedCount)
+                                    val displayIndexed = if (isIndexing) clipProgressState.progress else indexedCount
+                                    val displayTotal = if (isIndexing) clipProgressState.total else totalImagesCount
+                                    val smartCurrentImageName = clipProgressState.currentImageName
+
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(16.dp),
+                                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Outlined.AutoAwesome,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(24.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(12.dp))
+                                            Text(
+                                                text = "Smart Search (Semantic)",
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.SemiBold,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                            
+                                            val badgeColor = if (isIndexing) {
+                                                MaterialTheme.colorScheme.primaryContainer
+                                            } else if (isDownloading) {
+                                                MaterialTheme.colorScheme.secondaryContainer
+                                            } else if (smartSearchModelDownloaded) {
+                                                MaterialTheme.colorScheme.tertiaryContainer
+                                            } else {
+                                                MaterialTheme.colorScheme.surfaceVariant
+                                            }
+                                            
+                                            val badgeTextColor = if (isIndexing) {
+                                                MaterialTheme.colorScheme.onPrimaryContainer
+                                            } else if (isDownloading) {
+                                                MaterialTheme.colorScheme.onSecondaryContainer
+                                            } else if (smartSearchModelDownloaded) {
+                                                MaterialTheme.colorScheme.onTertiaryContainer
+                                            } else {
+                                                MaterialTheme.colorScheme.onSurfaceVariant
+                                            }
+                                            
+                                            val badgeText = if (isIndexing) {
+                                                "Indexing"
+                                            } else if (isDownloading) {
+                                                "Downloading"
+                                            } else if (smartSearchModelDownloaded) {
+                                                "Ready"
+                                            } else {
+                                                "No Model"
+                                            }
+
+                                            Surface(
+                                                color = badgeColor,
+                                                contentColor = badgeTextColor,
+                                                shape = MaterialTheme.shapes.extraSmall,
+                                                modifier = Modifier.padding(start = 8.dp)
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                                ) {
+                                                    if (isDownloading || isIndexing) {
+                                                        com.inferno.gallery.ui.components.WavyProgressIndicator(
+                                                            modifier = Modifier.size(width = 16.dp, height = 10.dp),
+                                                            strokeWidth = 1.5.dp,
+                                                            amplitude = 2.dp,
+                                                            frequency = 1.2f,
+                                                            color = badgeTextColor
+                                                        )
+                                                    }
+                                                    Text(
+                                                        text = badgeText,
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        fontWeight = FontWeight.Bold
+                                                    )
+                                                }
+                                            }
+                                        }
+
+                                        Text(
+                                            text = "Search inside your photos locally by semantic concepts (e.g. 'sunset', 'cat in grass') using AI vector embeddings.",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+
+                                        if (!smartSearchModelDownloaded) {
+                                            Column(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .background(
+                                                        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f),
+                                                        shape = MaterialTheme.shapes.large
+                                                    )
+                                                    .padding(16.dp),
+                                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                Text(
+                                                    text = "AI Search model files must be downloaded first (~100MB). Downloads run in background and can be paused.",
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                                                )
+                                                
+                                                if (isDownloading) {
+                                                    LinearProgressIndicator(
+                                                        progress = { downloadProgress / 100f },
+                                                        modifier = Modifier.fillMaxWidth()
+                                                    )
+                                                    Text(
+                                                        text = "Downloading model: $downloadProgress%",
+                                                        style = MaterialTheme.typography.labelMedium,
+                                                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                                                    )
+                                                } else {
+                                                    Button(
+                                                        onClick = { viewModel.startModelDownload() },
+                                                        modifier = Modifier.fillMaxWidth()
+                                                    ) {
+                                                        Text("Download AI Model Files")
+                                                    }
+                                                }
+                                            }
+                                        } else {
+                                            ListItem(
+                                                leadingContent = { Icon(Icons.Outlined.Cloud, contentDescription = null) },
+                                                headlineContent = { Text("Auto Index New Images") },
+                                                supportingContent = { Text("Automatically generate embeddings for new photos added to gallery") },
+                                                trailingContent = {
+                                                    Switch(
+                                                        checked = smartSearchAutoIndex,
+                                                        onCheckedChange = { viewModel.setSmartSearchAutoIndex(it) },
+                                                        thumbContent = {
+                                                            Icon(
+                                                                imageVector = if (smartSearchAutoIndex) Icons.Outlined.Check else Icons.Outlined.Close,
+                                                                contentDescription = null,
+                                                                modifier = Modifier.size(SwitchDefaults.IconSize)
+                                                            )
+                                                        }
+                                                    )
+                                                },
+                                                colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                                                modifier = Modifier.padding(horizontal = 0.dp)
+                                            )
+
+                                            val thresholdString = when {
+                                                smartSearchThreshold < 0.16f -> "Relaxed (Shows more results, matches weaker concepts)"
+                                                smartSearchThreshold > 0.25f -> "Strict (Shows fewer results, matches exact concepts only)"
+                                                else -> "Balanced (Recommended, default)"
+                                            }
+                                            
+                                            Column(
+                                                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Text(
+                                                        text = "Search Strictness",
+                                                        style = MaterialTheme.typography.bodyLarge,
+                                                        fontWeight = FontWeight.Medium
+                                                    )
+                                                    Text(
+                                                        text = String.format("%.2f", smartSearchThreshold),
+                                                        style = MaterialTheme.typography.titleMedium,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = MaterialTheme.colorScheme.primary
+                                                    )
+                                                }
+                                                Text(
+                                                    text = thresholdString,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                                Slider(
+                                                    value = smartSearchThreshold,
+                                                    onValueChange = { viewModel.setSmartSearchThreshold(it) },
+                                                    valueRange = 0.1f..0.35f
+                                                )
+                                            }
+
+                                            HorizontalDivider(
+                                                modifier = Modifier.padding(vertical = 8.dp),
+                                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                                            )
+
+                                            // Smart Search Indexing Progress
+                                            val isIndexing = clipProgressState.isIndexing
+                                            val unindexedCount = unindexedSmartSearchCount
+                                            val indexedCount = maxOf(0, totalImagesCount - unindexedCount)
+                                            val displayIndexed = if (isIndexing) clipProgressState.progress else indexedCount
+                                            val displayTotal = if (isIndexing) clipProgressState.total else totalImagesCount
+                                            val smartCurrentImageName = clipProgressState.currentImageName
+
+                                            Column(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Text(
+                                                        text = "AI Embedding Generation",
+                                                        style = MaterialTheme.typography.titleMedium,
+                                                        fontWeight = FontWeight.SemiBold,
+                                                        modifier = Modifier.weight(1f)
+                                                    )
+                                                    
+                                                    val badgeColor = if (isIndexing) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
+                                                    val badgeTextColor = if (isIndexing) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                                                    val badgeText = if (isIndexing) "Indexing" else "Idle"
+                                                    
+                                                    Surface(
+                                                        color = badgeColor,
+                                                        contentColor = badgeTextColor,
+                                                        shape = MaterialTheme.shapes.extraSmall
+                                                    ) {
+                                                        Row(
+                                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                                            verticalAlignment = Alignment.CenterVertically,
+                                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                                        ) {
+                                                            if (isIndexing) {
+                                                                com.inferno.gallery.ui.components.WavyProgressIndicator(
+                                                                    modifier = Modifier.size(width = 16.dp, height = 10.dp),
+                                                                    strokeWidth = 1.5.dp,
+                                                                    amplitude = 2.dp,
+                                                                    frequency = 1.2f,
+                                                                    color = badgeTextColor
+                                                                )
+                                                            }
+                                                            Text(
+                                                                text = badgeText,
+                                                                style = MaterialTheme.typography.labelSmall,
+                                                                fontWeight = FontWeight.Bold
+                                                            )
+                                                        }
+                                                    }
+                                                }
+
+                                                if (displayTotal > 0) {
+                                                    val progressFloat = (displayIndexed.toFloat() / displayTotal.toFloat()).coerceIn(0f, 1f)
+                                                    Column(
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                                                    ) {
+                                                        Box(
+                                                            modifier = Modifier
+                                                                .fillMaxWidth()
+                                                                .height(10.dp)
+                                                                .background(
+                                                                    color = MaterialTheme.colorScheme.surfaceVariant,
+                                                                    shape = CircleShape
+                                                                )
+                                                        ) {
+                                                            Box(
+                                                                modifier = Modifier
+                                                                    .fillMaxWidth(progressFloat)
+                                                                    .fillMaxHeight()
+                                                                    .background(
+                                                                        color = MaterialTheme.colorScheme.primary,
+                                                                        shape = CircleShape
+                                                                    )
+                                                            )
+                                                        }
+                                                        
+                                                        Row(
+                                                            modifier = Modifier.fillMaxWidth(),
+                                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                                            verticalAlignment = Alignment.CenterVertically
+                                                        ) {
+                                                            Text(
+                                                                text = if (isIndexing && !smartCurrentImageName.isNullOrBlank()) "Scanning: $smartCurrentImageName" 
+                                                                       else if (displayIndexed == displayTotal) "AI indexing complete" 
+                                                                       else "Progress",
+                                                                style = MaterialTheme.typography.labelMedium,
+                                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                                modifier = Modifier.weight(1f),
+                                                                maxLines = 1,
+                                                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                                            )
+                                                            Text(
+                                                                text = "$displayIndexed / $displayTotal images (${(progressFloat * 100).toInt()}%)",
+                                                                style = MaterialTheme.typography.labelMedium,
+                                                                fontWeight = FontWeight.Bold,
+                                                                color = MaterialTheme.colorScheme.primary
+                                                            )
+                                                        }
+                                                    }
+                                                }
+
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                ) {
+                                                    if (isIndexing) {
+                                                        Button(
+                                                            onClick = { viewModel.stopSmartSearchIndexing() },
+                                                            colors = ButtonDefaults.buttonColors(
+                                                                containerColor = MaterialTheme.colorScheme.errorContainer,
+                                                                contentColor = MaterialTheme.colorScheme.onErrorContainer
+                                                            ),
+                                                            modifier = Modifier.weight(1f)
+                                                        ) {
+                                                            Text("Stop Indexing")
+                                                        }
+                                                    } else {
+                                                        FilledTonalButton(
+                                                            onClick = { viewModel.startSmartSearchIndexing() },
+                                                            modifier = Modifier.weight(1f)
+                                                        ) {
+                                                            Text("Start Indexing")
+                                                        }
+                                                        androidx.compose.material3.OutlinedButton(
+                                                            onClick = { showClearIndexConfirm = true },
+                                                            modifier = Modifier.weight(1f)
+                                                        ) {
+                                                            Text("Clear Index")
+                                                        }
+                                                    }
+                                                }
+                                                if (!isIndexing) {
+                                                    androidx.compose.material3.OutlinedButton(
+                                                        onClick = { showDeleteModelConfirm = true },
+                                                        colors = ButtonDefaults.outlinedButtonColors(
+                                                            contentColor = MaterialTheme.colorScheme.error
+                                                        ),
+                                                        modifier = Modifier.fillMaxWidth()
+                                                    ) {
+                                                        Text("Delete AI Model Files")
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
+                        Spacer(modifier = Modifier.height(32.dp))
                     }
                 }
-
-                HorizontalDivider(
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
-                )
-
-                ListItem(
-                    leadingContent = { Icon(Icons.Outlined.Face, contentDescription = null) },
-                    headlineContent = { Text("Face Clustering") },
-                    supportingContent = { Text("Group photos by people locally") },
-                    trailingContent = {
-                        Switch(
-                            checked = false,
-                            onCheckedChange = null,
-                            enabled = false,
-                            thumbContent = {
-                                Icon(Icons.Outlined.Close, contentDescription = null, modifier = Modifier.size(SwitchDefaults.IconSize))
-                            }
-                        )
-                    },
-                    colors = ListItemDefaults.colors(containerColor = Color.Transparent)
-                )
             }
-            
-            Spacer(modifier = Modifier.height(32.dp))
         }
     }
 }
@@ -982,22 +1553,104 @@ fun SettingsGroup(
             modifier = Modifier.padding(start = 12.dp, bottom = 8.dp)
         )
         Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .border(
-                    width = 1.dp,
-                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-                    shape = MaterialTheme.shapes.extraLarge
-                ),
-            shape = MaterialTheme.shapes.extraLarge,
-            color = MaterialTheme.colorScheme.surfaceContainerLow,
-            tonalElevation = 1.dp
+            modifier = Modifier.fillMaxWidth(),
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 0.dp
         ) {
             Column(
                 modifier = Modifier.padding(vertical = 8.dp)
             ) {
                 content()
             }
+        }
+    }
+}
+
+@Composable
+fun CategoryCard(
+    title: String,
+    subtitle: String,
+    icon: ImageVector,
+    onClick: () -> Unit
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.97f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessHigh
+        ),
+        label = "CategoryCardScale"
+    )
+
+    Card(
+        onClick = onClick,
+        interactionSource = interactionSource,
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface,
+            contentColor = MaterialTheme.colorScheme.onSurface
+        ),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(all = 16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .background(
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        shape = MaterialTheme.shapes.large
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+            
+            Spacer(modifier = Modifier.width(16.dp))
+            
+            Column(
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.5.sp
+                    )
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            
+            Icon(
+                imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(24.dp)
+            )
         }
     }
 }
