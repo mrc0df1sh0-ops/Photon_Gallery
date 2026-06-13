@@ -44,6 +44,8 @@ import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -66,8 +68,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.CloudDone
+import androidx.compose.material.icons.outlined.CloudDownload
 import androidx.compose.material.icons.outlined.CloudUpload
 import androidx.compose.material.icons.outlined.CloudOff
+import androidx.compose.material.icons.outlined.Sync
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -172,6 +178,27 @@ fun GalleryScreen(
     val thumbnailCornerRadius by viewModel.thumbnailCornerRadius.collectAsState()
     val backupStatuses by viewModel.backupStatuses.collectAsState()
     val lazyGridState = rememberLazyGridState()
+
+    LaunchedEffect(lazyGridState) {
+        var previousIndex = 0
+        var previousScrollOffset = 0
+        snapshotFlow { lazyGridState.firstVisibleItemIndex to lazyGridState.firstVisibleItemScrollOffset }
+            .collectLatest { (index, offset) ->
+                if (index > previousIndex) {
+                    viewModel.setScrollDockVisible(false)
+                } else if (index < previousIndex) {
+                    viewModel.setScrollDockVisible(true)
+                } else {
+                    if (offset > previousScrollOffset + 15) {
+                        viewModel.setScrollDockVisible(false)
+                    } else if (offset < previousScrollOffset - 15) {
+                        viewModel.setScrollDockVisible(true)
+                    }
+                }
+                previousIndex = index
+                previousScrollOffset = offset
+            }
+    }
     val totalItems = pagedMedia.itemCount
     val isScrollInProgress = lazyGridState.isScrollInProgress
     val context = LocalContext.current
@@ -193,6 +220,12 @@ fun GalleryScreen(
         }
     }
 
+    val onMediaLongClick = remember(viewModel) {
+        { item: GalleryItem ->
+            viewModel.toggleSelection(item.uri.toString())
+        }
+    }
+
     Box(modifier = Modifier.fillMaxSize().onGloballyPositioned { boxHeight = it.size.height.toFloat() }) {
 
             LazyVerticalGrid(
@@ -203,57 +236,8 @@ fun GalleryScreen(
         horizontalArrangement = Arrangement.spacedBy(2.dp),
         modifier = modifier
             .fillMaxSize()
-            .padding(horizontal = 4.dp)
+            .padding(horizontal = 2.dp)
             .gridZoomGestureModifier(gridCellsCount, viewModel::setGridCellsCount, isSelectionMode)
-            .pointerInput(lazyGridState) {
-                var initialItemUri: String? = null
-                var dragStarted = false
-                var startOffset = Offset.Zero
-
-                detectDragGesturesAfterLongPress(
-                    onDragStart = { offset ->
-                        startOffset = offset
-                        dragStarted = false
-                        val x = offset.x.toInt()
-                        val y = offset.y.toInt()
-                        
-                        val item = lazyGridState.layoutInfo.visibleItemsInfo.firstOrNull { itemInfo ->
-                            x in itemInfo.offset.x..(itemInfo.offset.x + itemInfo.size.width) &&
-                            y in itemInfo.offset.y..(itemInfo.offset.y + itemInfo.size.height)
-                        }
-                        item?.let {
-                            val uri = it.key as? String
-                            if (uri != null && !uri.startsWith("header_")) {
-                                viewModel.toggleSelection(uri)
-                                initialItemUri = uri
-                            }
-                        }
-                    },
-                    onDrag = { change, _ ->
-                        val distance = (change.position - startOffset).getDistance()
-                        if (distance > 40f) {
-                            dragStarted = true
-                        }
-
-                        if (dragStarted) {
-                            val x = change.position.x.toInt()
-                            val y = change.position.y.toInt()
-                            
-                            val inset = 30
-                            val item = lazyGridState.layoutInfo.visibleItemsInfo.firstOrNull { itemInfo ->
-                                x in (itemInfo.offset.x + inset)..(itemInfo.offset.x + itemInfo.size.width - inset) &&
-                                y in (itemInfo.offset.y + inset)..(itemInfo.offset.y + itemInfo.size.height - inset)
-                            }
-                            item?.let {
-                                val uri = it.key as? String
-                                if (uri != null && !uri.startsWith("header_") && uri != initialItemUri) {
-                                    viewModel.addSelection(uri) 
-                                }
-                            }
-                        }
-                    }
-                )
-            }
     ) {
         if (viewMode == ViewMode.Immersive) {
             items(
@@ -276,6 +260,7 @@ fun GalleryScreen(
                         sharedTransitionScope = sharedTransitionScope,
                         animatedVisibilityScope = animatedVisibilityScope,
                         onClick = onMediaClick,
+                        onLongClick = onMediaLongClick,
                         modifier = Modifier,
                         isSelected = selectedUris.contains(item.uri.toString()),
                         gridAutoPlay = gridAutoPlay,
@@ -317,6 +302,7 @@ fun GalleryScreen(
                         sharedTransitionScope = sharedTransitionScope,
                         animatedVisibilityScope = animatedVisibilityScope,
                         onClick = onMediaClick,
+                        onLongClick = onMediaLongClick,
                         modifier = Modifier,
                         isSelected = selectedUris.contains(item.uri.toString()),
                         gridAutoPlay = gridAutoPlay,
@@ -333,7 +319,9 @@ fun GalleryScreen(
         FastScroller(
             lazyGridState = lazyGridState,
             totalItems = totalItems,
-            images = emptyList(), // TODO: FastScroller needs update for Paging3
+            images = remember(pagedMedia.itemSnapshotList) {
+                pagedMedia.itemSnapshotList.mapNotNull { (it as? GalleryListItem.Item)?.galleryItem }
+            },
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .padding(
@@ -344,13 +332,14 @@ fun GalleryScreen(
     }
 }
 
-@OptIn(ExperimentalSharedTransitionApi::class)
+@OptIn(ExperimentalSharedTransitionApi::class, ExperimentalFoundationApi::class)
 @Composable
 fun GalleryGridItem(
     item: GalleryItem,
     sharedTransitionScope: SharedTransitionScope,
     animatedVisibilityScope: AnimatedVisibilityScope,
     onClick: (GalleryItem) -> Unit,
+    onLongClick: (GalleryItem) -> Unit = {},
     modifier: Modifier = Modifier,
     isSelected: Boolean = false,
     gridAutoPlay: Boolean = true,
@@ -370,14 +359,18 @@ fun GalleryGridItem(
         }
     }
 
-    val request = remember<ImageRequest>(resolvedUri, gridAutoPlay) {
+    val settings = remember { com.inferno.gallery.data.SettingsRepository(context) }
+    val cacheThumbnailsEnabled by settings.cacheThumbnailsEnabledFlow.collectAsState(initial = true)
+
+    val request = remember<ImageRequest>(resolvedUri, gridAutoPlay, cacheThumbnailsEnabled) {
+        val cachePolicy = if (cacheThumbnailsEnabled) CachePolicy.ENABLED else CachePolicy.DISABLED
         ImageRequest.Builder(context)
             .data(resolvedUri)
             .size(384, 384)
             .memoryCacheKey("photo_${resolvedUri}_384")
-            .precision(Precision.INEXACT)
+            .precision(Precision.EXACT)
             .memoryCachePolicy(CachePolicy.ENABLED)
-            .diskCachePolicy(CachePolicy.ENABLED)
+            .diskCachePolicy(cachePolicy)
             .networkCachePolicy(CachePolicy.ENABLED)
             .crossfade(false)
             .apply {
@@ -395,9 +388,16 @@ fun GalleryGridItem(
         "photo_${item.uri}"
     }
 
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val targetScale = when {
+        isSelected -> 0.90f
+        isPressed -> 0.97f
+        else -> 1f
+    }
     val scale by animateFloatAsState(
-        targetValue = if (isSelected) 0.85f else 1f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow),
+        targetValue = targetScale,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessHigh),
         label = "scale"
     )
     
@@ -431,22 +431,31 @@ fun GalleryGridItem(
         val skeletonColor = if (isSkeletonVisible) MaterialTheme.colorScheme.surfaceContainerHigh else Color.Transparent
 
         with(sharedTransitionScope) {
+            val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
             val imageModifier = Modifier
                 .aspectRatio(1f)
                 .clip(androidx.compose.foundation.shape.RoundedCornerShape(thumbnailCornerRadius.dp))
                 .background(skeletonColor)
-                .clickable { onClick(item) }
+                .combinedClickable(
+                    interactionSource = interactionSource,
+                    indication = null,
+                    onClick = { onClick(item) },
+                    onLongClick = {
+                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                        onLongClick(item)
+                    }
+                )
 
             val finalModifier = imageModifier.sharedBounds(
                 sharedContentState = rememberSharedContentState(key = sharedKey),
                 animatedVisibilityScope = animatedVisibilityScope,
                 enter = fadeIn(),
                 exit = fadeOut(),
-
+                resizeMode = SharedTransitionScope.ResizeMode.scaleToBounds(),
                 boundsTransform = { _, _ ->
                     spring(
                         dampingRatio = Spring.DampingRatioNoBouncy,
-                        stiffness = Spring.StiffnessMediumLow
+                        stiffness = Spring.StiffnessMedium
                     )
                 }
             )
@@ -545,16 +554,55 @@ fun GalleryGridItem(
             }
         }
 
-        if (backupStatus == "SUCCESS" && !isSelected) {
-            Icon(
-                imageVector = Icons.Outlined.CloudDone,
-                contentDescription = "Uploaded",
-                tint = Color.White,
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(8.dp)
-                    .size(20.dp)
-            )
+        val isPending = backupStatus == "PENDING"
+        val isBackedUp = backupStatus == "SUCCESS" || item.telegramFileId != null || item.telegramThumbFileId != null
+        val localExists = remember(item.path) { java.io.File(item.path).exists() }
+
+        if (!isSelected) {
+            if (isPending) {
+                var rotationTarget by remember { mutableFloatStateOf(0f) }
+                val rotation by animateFloatAsState(
+                    targetValue = rotationTarget,
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioNoBouncy,
+                        stiffness = Spring.StiffnessVeryLow
+                    ),
+                    label = "syncRotation"
+                )
+
+                LaunchedEffect(Unit) {
+                    while (true) {
+                        rotationTarget += 360f
+                        delay(1200)
+                    }
+                }
+
+                Icon(
+                    imageVector = Icons.Outlined.Sync,
+                    contentDescription = "Backup in progress",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .graphicsLayer(rotationZ = rotation)
+                        .padding(8.dp)
+                        .size(20.dp)
+                )
+            } else if (isBackedUp) {
+                val isCloudOnly = !localExists
+                val icon = if (isCloudOnly) Icons.Outlined.CloudDownload else Icons.Outlined.CloudDone
+                val tint = if (isCloudOnly) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary
+                val contentDesc = if (isCloudOnly) "Cloud only" else "Backed up"
+                
+                Icon(
+                    imageVector = icon,
+                    contentDescription = contentDesc,
+                    tint = tint,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(8.dp)
+                        .size(20.dp)
+                )
+            }
         }
 
         val ext = remember(item.name) { item.name.substringAfterLast('.', "").lowercase() }
@@ -571,7 +619,7 @@ fun GalleryGridItem(
                 contentColor = MaterialTheme.colorScheme.onSurface,
                 shape = androidx.compose.foundation.shape.RoundedCornerShape(4.dp),
                 modifier = Modifier
-                    .align(Alignment.BottomEnd)
+                    .align(Alignment.BottomStart)
                     .padding(6.dp)
             ) {
                 Text(
