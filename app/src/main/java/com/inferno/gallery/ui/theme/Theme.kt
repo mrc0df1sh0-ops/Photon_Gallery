@@ -168,7 +168,7 @@ fun PhotonGalleryTheme(
         colorScheme = colorScheme,
         shapes = AppShapes,
         typography = AppTypography,
-        motionScheme = MotionScheme.expressive(),
+        motionScheme = MotionScheme.standard(),
         content = content,
     )
 }
