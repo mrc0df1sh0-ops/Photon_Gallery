@@ -39,6 +39,24 @@ class GalleryApplication : Application(), SingletonImageLoader.Factory {
                     .build()
                 WorkManager.getInstance(this@GalleryApplication).enqueueUniqueWork("OcrIndexWorker", androidx.work.ExistingWorkPolicy.KEEP, ocrIndexRequest)
             }
+
+            val autoCleanEnabled = settingsRepo.autoCleanTrashEnabledFlow.first()
+            if (autoCleanEnabled) {
+                val days = settingsRepo.autoCleanTrashDaysFlow.first()
+                val constraints = androidx.work.Constraints.Builder()
+                    .setRequiresBatteryNotLow(false)
+                    .build()
+                val workRequest = androidx.work.PeriodicWorkRequestBuilder<com.inferno.gallery.workers.AutoCleanTrashWorker>(
+                    24, java.util.concurrent.TimeUnit.HOURS
+                )
+                    .setConstraints(constraints)
+                    .build()
+                WorkManager.getInstance(this@GalleryApplication).enqueueUniquePeriodicWork(
+                    "AutoCleanTrashWorker",
+                    androidx.work.ExistingPeriodicWorkPolicy.UPDATE,
+                    workRequest
+                )
+            }
         }
     }
 
