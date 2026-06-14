@@ -289,71 +289,90 @@ fun CollageScreen(
                     if (isSaving) {
                         com.inferno.gallery.ui.components.WavyProgressIndicator(modifier = Modifier.size(64.dp))
                     } else {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .aspectRatio(ratioValue)
-                                .background(selectedBgColor, RoundedCornerShape(cornerRadius.dp))
-                                .clip(RoundedCornerShape(cornerRadius.dp))
-                                .padding(spacing.dp)
+                        BoxWithConstraints(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
                         ) {
-                            val currentLayout = presets.getOrNull(selectedLayoutIndex) ?: presets[0]
-                            BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-                                val parentWidth = maxWidth
-                                val parentHeight = maxHeight
-                                currentLayout.bounds.forEachIndexed { index, rect ->
-                                    val slot = slotStates.getOrNull(index) ?: return@forEachIndexed
-                                    val left = parentWidth * rect.left
-                                    val top = parentHeight * rect.top
-                                    val width = parentWidth * (rect.right - rect.left)
-                                    val height = parentHeight * (rect.bottom - rect.top)
-                                    Box(
-                                        modifier = Modifier
-                                            .offset(x = left, y = top)
-                                            .size(width = width, height = height)
-                                            .padding(spacing.dp / 2)
-                                            .clip(RoundedCornerShape(cornerRadius.dp))
-                                            .background(Color(0xFF222222))
-                                            .border(
-                                                width = if (selectedSlotIndex == index) 3.dp else 0.dp,
-                                                color = if (selectedSlotIndex == index) MaterialTheme.colorScheme.primary else Color.Transparent,
-                                                shape = RoundedCornerShape(cornerRadius.dp)
-                                            )
-                                            .clickable {
-                                                selectedSlotIndex = if (selectedSlotIndex == index) -1 else index
-                                            }
-                                    ) {
-                                        AsyncImage(
-                                            model = ImageRequest.Builder(LocalContext.current)
-                                                .data(slot.uri)
-                                                .build(),
-                                            contentDescription = null,
-                                            contentScale = ContentScale.Crop,
+                            val parentWidth = maxWidth
+                            val parentHeight = maxHeight
+                            val parentRatio = parentWidth.value / parentHeight.value
+                            val (canvasWidth, canvasHeight) = if (parentRatio > ratioValue) {
+                                Pair(parentHeight * ratioValue, parentHeight)
+                            } else {
+                                Pair(parentWidth, parentWidth / ratioValue)
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .size(width = canvasWidth, height = canvasHeight)
+                                    .background(selectedBgColor, RoundedCornerShape(cornerRadius.dp))
+                                    .clip(RoundedCornerShape(cornerRadius.dp))
+                                    .padding(spacing.dp)
+                            ) {
+                                val currentLayout = presets.getOrNull(selectedLayoutIndex) ?: presets[0]
+                                BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                                    val innerWidth = maxWidth
+                                    val innerHeight = maxHeight
+                                    currentLayout.bounds.forEachIndexed { index, rect ->
+                                        val slot = slotStates.getOrNull(index) ?: return@forEachIndexed
+                                        val left = innerWidth * rect.left
+                                        val top = innerHeight * rect.top
+                                        val width = innerWidth * (rect.right - rect.left)
+                                        val height = innerHeight * (rect.bottom - rect.top)
+                                        Box(
                                             modifier = Modifier
-                                                .fillMaxSize()
-                                                .pointerInput(index) {
-                                                    detectTransformGestures { _, pan, zoom, _ ->
-                                                        val updated = slotStates.toMutableList()
-                                                        val curr = updated[index]
-                                                        val newScale = (curr.scale * zoom).coerceIn(1f, 10f)
-                                                        val newOffsetX = curr.offsetX + (pan.x / size.width.toFloat())
-                                                        val newOffsetY = curr.offsetY + (pan.y / size.height.toFloat())
-                                                        updated[index] = curr.copy(
-                                                            scale = newScale,
-                                                            offsetX = newOffsetX,
-                                                            offsetY = newOffsetY
-                                                        )
-                                                        slotStates = updated
+                                                .offset(x = left, y = top)
+                                                .size(width = width, height = height)
+                                                .padding(spacing.dp / 2)
+                                                .clip(RoundedCornerShape(cornerRadius.dp))
+                                                .background(Color(0xFF222222))
+                                                .border(
+                                                    width = if (selectedSlotIndex == index) 3.dp else 0.dp,
+                                                    color = if (selectedSlotIndex == index) MaterialTheme.colorScheme.primary else Color.Transparent,
+                                                    shape = RoundedCornerShape(cornerRadius.dp)
+                                                )
+                                                .clickable {
+                                                    selectedSlotIndex = if (selectedSlotIndex == index) -1 else index
+                                                }
+                                        ) {
+                                            AsyncImage(
+                                                model = ImageRequest.Builder(LocalContext.current)
+                                                    .data(slot.uri)
+                                                    .build(),
+                                                contentDescription = null,
+                                                contentScale = ContentScale.Fit,
+                                                modifier = Modifier
+                                                    .fillMaxSize()
+                                                    .run {
+                                                        if (selectedSlotIndex == index) {
+                                                            pointerInput(index) {
+                                                                detectTransformGestures { _, pan, zoom, _ ->
+                                                                    val updated = slotStates.toMutableList()
+                                                                    val curr = updated[index]
+                                                                    val newScale = (curr.scale * zoom).coerceIn(1f, 10f)
+                                                                    val newOffsetX = curr.offsetX + (pan.x / size.width.toFloat())
+                                                                    val newOffsetY = curr.offsetY + (pan.y / size.height.toFloat())
+                                                                    updated[index] = curr.copy(
+                                                                        scale = newScale,
+                                                                        offsetX = newOffsetX,
+                                                                        offsetY = newOffsetY
+                                                                    )
+                                                                    slotStates = updated
+                                                                }
+                                                            }
+                                                        } else {
+                                                            this
+                                                        }
                                                     }
-                                                }
-                                                .graphicsLayer {
-                                                    rotationZ = slot.rotation.toFloat()
-                                                    scaleX = (if (slot.flipHorizontal) -1f else 1f) * slot.scale
-                                                    scaleY = (if (slot.flipVertical) -1f else 1f) * slot.scale
-                                                    translationX = slot.offsetX * size.width
-                                                    translationY = slot.offsetY * size.height
-                                                }
-                                        )
+                                                    .graphicsLayer {
+                                                        rotationZ = slot.rotation.toFloat()
+                                                        scaleX = (if (slot.flipHorizontal) -1f else 1f) * slot.scale
+                                                        scaleY = (if (slot.flipVertical) -1f else 1f) * slot.scale
+                                                        translationX = slot.offsetX * size.width
+                                                        translationY = slot.offsetY * size.height
+                                                    }
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -789,6 +808,38 @@ fun LocalGalleryChooser(
 
 // ── Bitmap save logic ─────────────────────────────────────────────────────────
 
+private fun calculateInSampleSize(options: BitmapFactory.Options, reqWidth: Int, reqHeight: Int): Int {
+    val height = options.outHeight
+    val width = options.outWidth
+    var inSampleSize = 1
+    if (height > reqHeight || width > reqWidth) {
+        val halfHeight = height / 2
+        val halfWidth = width / 2
+        while (halfHeight / inSampleSize >= reqHeight && halfWidth / inSampleSize >= reqWidth) {
+            inSampleSize *= 2
+        }
+    }
+    return inSampleSize
+}
+
+private fun decodeSampledBitmap(context: Context, uri: Uri, reqWidth: Int, reqHeight: Int): Bitmap? {
+    return try {
+        val options = BitmapFactory.Options().apply {
+            inJustDecodeBounds = true
+        }
+        context.contentResolver.openInputStream(uri)?.use { stream ->
+            BitmapFactory.decodeStream(stream, null, options)
+        }
+        options.inSampleSize = calculateInSampleSize(options, reqWidth, reqHeight)
+        options.inJustDecodeBounds = false
+        context.contentResolver.openInputStream(uri)?.use { stream ->
+            BitmapFactory.decodeStream(stream, null, options)
+        }
+    } catch (e: Exception) {
+        null
+    }
+}
+
 private suspend fun saveCollageToDevice(
     context: Context,
     slotStates: List<SlotState>,
@@ -824,14 +875,7 @@ private suspend fun saveCollageToDevice(
         canvas.save()
         canvas.clipPath(path)
 
-        var src: Bitmap? = null
-        try {
-            context.contentResolver.openInputStream(slot.uri)?.use { stream ->
-                src = BitmapFactory.decodeStream(stream)
-            }
-        } catch (e: Exception) { e.printStackTrace() }
-
-        val decoded = src
+        val decoded = decodeSampledBitmap(context, slot.uri, w.roundToInt(), h.roundToInt())
         if (decoded != null) {
             val matrix = Matrix()
             val flipX = if (slot.flipHorizontal) -1f else 1f
@@ -842,7 +886,7 @@ private suspend fun saveCollageToDevice(
             val transformed = Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, matrix, true)
             val srcW = transformed.width.toFloat()
             val srcH = transformed.height.toFloat()
-            val scale = maxOf(w / srcW, h / srcH)
+            val scale = minOf(w / srcW, h / srcH)
             val dx = (w - srcW * scale) / 2f
             val dy = (h - srcH * scale) / 2f
             val drawMatrix = Matrix()
@@ -866,11 +910,12 @@ private suspend fun saveCollageToDevice(
     }
     val resolver = context.contentResolver
     val outputUri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
-    if (outputUri != null) {
-        resolver.openOutputStream(outputUri)?.use { stream ->
-            bitmap.compress(Bitmap.CompressFormat.JPEG, 95, stream)
+        ?: throw Exception("Failed to create MediaStore entry")
+    resolver.openOutputStream(outputUri)?.use { stream ->
+        if (!bitmap.compress(Bitmap.CompressFormat.JPEG, 95, stream)) {
+            throw Exception("Failed to compress bitmap to output stream")
         }
-    }
+    } ?: throw Exception("Failed to open output stream")
     bitmap.recycle()
 
     val syncWorkRequest = OneTimeWorkRequestBuilder<MediaSyncWorker>().build()
