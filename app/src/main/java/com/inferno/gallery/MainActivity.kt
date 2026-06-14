@@ -31,6 +31,29 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
+        
+        // Force display to its peak supported refresh rate (90Hz, 120Hz, etc.) for fluid scrolling
+        try {
+            val peakRefreshRate = display?.supportedModes
+                ?.map { it.refreshRate }
+                ?.maxOrNull() ?: 60f
+            if (peakRefreshRate > 60f) {
+                val layoutParams = window.attributes
+                try {
+                    val minField = layoutParams.javaClass.getField("preferredMinDisplayRefreshRate")
+                    val maxField = layoutParams.javaClass.getField("preferredMaxDisplayRefreshRate")
+                    minField.set(layoutParams, peakRefreshRate)
+                    maxField.set(layoutParams, peakRefreshRate)
+                    window.attributes = layoutParams
+                } catch (noSuchField: NoSuchFieldException) {
+                    // Fallback for older devices/APIs if fields don't exist
+                    android.util.Log.w("MainActivity", "preferredMinDisplayRefreshRate fields not found on this SDK version")
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "Failed to force peak refresh rate", e)
+        }
+
         enableEdgeToEdge()
 
         setContent {
