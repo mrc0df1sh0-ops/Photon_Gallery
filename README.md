@@ -8,7 +8,7 @@
   <a href="https://github.com/Bn5prS/Photon_Gallery/stargazers"><img src="https://img.shields.io/github/stars/Bn5prS/Photon_Gallery?style=flat&logo=github&color=blue" alt="GitHub Stars" /></a>
   <a href="https://github.com/Bn5prS/Photon_Gallery/releases"><img src="https://img.shields.io/github/downloads/Bn5prS/Photon_Gallery/total?style=flat&logo=github&color=green" alt="Downloads" /></a>
   <a href="https://github.com/Bn5prS/Photon_Gallery/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-GPLv3-blue.svg?style=flat" alt="License" /></a>
-  <a href="https://github.com/Bn5prS/Photon_Gallery"><img src="https://profile-counter.glitch.me/Bn5prS-Photon_Gallery/count.svg" alt="Views" /></a>
+  <a href="https://github.com/Bn5prS/Photon_Gallery"><img src="https://hits.dwyl.com/Bn5prS/Photon_Gallery.svg" alt="Views" /></a>
   <a href="https://github.com/Bn5prS/Photon_Gallery"><img src="https://img.shields.io/github/repo-size/Bn5prS/Photon_Gallery?style=flat&color=orange" alt="Repo Size" /></a>
 </p>
 
