@@ -37,13 +37,13 @@
 
 ## Screenshots
 
-| Home Grid View | Smart Search Results |
-| :---: | :---: |
-| <img src="screenshots/home.jpg" width="360" alt="Home Grid View" /> | <img src="screenshots/search.jpg" width="360" alt="Smart Search" /> |
+| Hero View | Main Gallery Grid | Smart Search |
+| :---: | :---: | :---: |
+| <img src="screenshots/01-hero.png" width="240" alt="Hero View" /> | <img src="screenshots/02-device-bottom.png" width="240" alt="Main Gallery Grid" /> | <img src="screenshots/03-device-top.png" width="240" alt="Smart Search" /> |
 
-| Telegram Cloud Backup | Advanced Settings |
+| Cloud Sync | Advanced Settings |
 | :---: | :---: |
-| <img src="screenshots/cloud.jpg" width="360" alt="Telegram Backup" /> | <img src="screenshots/settings.jpg" width="360" alt="Settings" /> |
+| <img src="screenshots/04-two-devices.png" width="240" alt="Cloud Sync" /> | <img src="screenshots/05-no-device.png" width="240" alt="Advanced Settings" /> |
 
 ---
 
