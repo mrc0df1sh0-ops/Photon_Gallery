@@ -79,9 +79,7 @@ import androidx.compose.material.icons.outlined.BrightnessHigh
 import androidx.compose.material3.Slider
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.ScrollableTabRow
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
+
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.fillMaxSize
