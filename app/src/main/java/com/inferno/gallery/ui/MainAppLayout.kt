@@ -1,8 +1,14 @@
 package com.inferno.gallery.ui
 
 import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -59,6 +65,8 @@ import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.material.icons.outlined.DateRange
 import androidx.compose.material.icons.outlined.GridView
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.SwapVert
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -140,293 +148,6 @@ import java.io.File
 import androidx.compose.runtime.rememberCoroutineScope
 import com.inferno.gallery.data.SettingsRepository
 
-private fun hasStoragePermissions(context: android.content.Context): Boolean {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-        if (Environment.isExternalStorageManager()) {
-            return true
-        }
-    }
-    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        val readImages = ContextCompat.checkSelfPermission(
-            context,
-            Manifest.permission.READ_MEDIA_IMAGES
-        ) == PackageManager.PERMISSION_GRANTED
-        val readVideos = ContextCompat.checkSelfPermission(
-            context,
-            Manifest.permission.READ_MEDIA_VIDEO
-        ) == PackageManager.PERMISSION_GRANTED
-        readImages && readVideos
-    } else {
-        ContextCompat.checkSelfPermission(
-            context,
-            Manifest.permission.READ_EXTERNAL_STORAGE
-        ) == PackageManager.PERMISSION_GRANTED
-    }
-}
-
-@Composable
-fun PermissionOnboardingScreen(
-    photosGranted: Boolean,
-    videosGranted: Boolean,
-    allFilesGranted: Boolean,
-    onGrantMediaClick: () -> Unit,
-    onGrantAllFilesClick: () -> Unit,
-    onContinueClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val isDark = isSystemInDarkTheme()
-    val colors = if (isDark) {
-        listOf(
-            MaterialTheme.colorScheme.surfaceContainerLowest,
-            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.08f),
-            MaterialTheme.colorScheme.surfaceContainerHigh
-        )
-    } else {
-        listOf(
-            MaterialTheme.colorScheme.surfaceContainerLowest,
-            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.12f),
-            MaterialTheme.colorScheme.surfaceContainer
-        )
-    }
-    val backgroundBrush = Brush.verticalGradient(colors)
-
-    val allGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        photosGranted && videosGranted && allFilesGranted
-    } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-        photosGranted && allFilesGranted
-    } else {
-        photosGranted
-    }
-
-    var animateIcon by remember { mutableStateOf(false) }
-    LaunchedEffect(allGranted) {
-        if (allGranted) {
-            while (true) {
-                animateIcon = !animateIcon
-                kotlinx.coroutines.delay(2000)
-            }
-        }
-    }
-    val iconScale by animateFloatAsState(
-        targetValue = if (allGranted && animateIcon) 1.06f else 1.0f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessLow
-        ),
-        label = "iconScale"
-    )
-
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .background(backgroundBrush),
-        contentAlignment = Alignment.Center
-    ) {
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth(0.92f)
-                .padding(vertical = 16.dp),
-            shape = RoundedCornerShape(36.dp),
-            color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.85f),
-            border = androidx.compose.foundation.BorderStroke(
-                width = 1.dp,
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
-            ),
-            shadowElevation = 8.dp
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 28.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(80.dp)
-                        .graphicsLayer(scaleX = iconScale, scaleY = iconScale)
-                        .background(
-                            color = if (allGranted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primaryContainer,
-                            shape = RoundedCornerShape(24.dp)
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = if (allGranted) Icons.Outlined.Check else Icons.Outlined.Image,
-                        contentDescription = null,
-                        tint = if (allGranted) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onPrimaryContainer,
-                        modifier = Modifier.size(36.dp)
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Text(
-                    text = "Storage Access Required",
-                    style = MaterialTheme.typography.headlineMedium.copy(
-                        fontWeight = FontWeight.ExtraBold,
-                        letterSpacing = 0.5.sp
-                    ),
-                    textAlign = TextAlign.Center,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Text(
-                    text = "Please grant the following permissions to enable local media organization and AI indexing features.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    textAlign = TextAlign.Center,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 8.dp)
-                )
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    PermissionRowItem(
-                        title = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) "Photos Access" else "Storage Access",
-                        subtitle = "Required to display images",
-                        isGranted = photosGranted,
-                        icon = Icons.Outlined.Image,
-                        onClick = onGrantMediaClick
-                    )
-
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                        PermissionRowItem(
-                            title = "Videos Access",
-                            subtitle = "Required to index and play video files",
-                            isGranted = videosGranted,
-                            icon = Icons.Outlined.PhotoAlbum,
-                            onClick = onGrantMediaClick
-                        )
-                    }
-
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                        PermissionRowItem(
-                            title = "All Files Access",
-                            subtitle = "Required to organize directories privately",
-                            isGranted = allFilesGranted,
-                            icon = Icons.Outlined.Folder,
-                            onClick = onGrantAllFilesClick
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(32.dp))
-
-                Button(
-                    onClick = onContinueClick,
-                    enabled = allGranted,
-                    shape = RoundedCornerShape(28.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary,
-                        disabledContainerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
-                        disabledContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                    ),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp)
-                ) {
-                    Text(
-                        text = if (allGranted) "Continue to Gallery" else "Grant All Permissions to Continue",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun PermissionRowItem(
-    title: String,
-    subtitle: String,
-    isGranted: Boolean,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    onClick: () -> Unit
-) {
-    Surface(
-        shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        modifier = Modifier.fillMaxWidth().clickable(enabled = !isGranted) { onClick() }
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .background(
-                        color = if (isGranted) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceContainerHigh,
-                        shape = RoundedCornerShape(12.dp)
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = if (isGranted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(22.dp)
-                )
-            }
-
-            Spacer(modifier = Modifier.width(16.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            Spacer(modifier = Modifier.width(8.dp))
-
-            if (isGranted) {
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary,
-                    modifier = Modifier.height(28.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(Icons.Outlined.Check, contentDescription = null, modifier = Modifier.size(14.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Granted", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold))
-                    }
-                }
-            } else {
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                    modifier = Modifier.height(28.dp).clickable { onClick() }
-                ) {
-                    Box(
-                        modifier = Modifier.padding(horizontal = 12.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("Grant", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold))
-                    }
-                }
-            }
-        }
-    }
-}
-
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class, ExperimentalSharedTransitionApi::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun MainAppLayout(
@@ -434,6 +155,7 @@ fun MainAppLayout(
     animatedVisibilityScope: AnimatedVisibilityScope,
     onPhotoClick: (String, String?, String?) -> Unit,
     onCreateCollage: (List<String>) -> Unit = {},
+    onCreateStitch: (List<String>) -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: GalleryViewModel = viewModel()
 ) {
@@ -655,11 +377,25 @@ fun MainAppLayout(
                                 IconButton(onClick = { viewModel.clearSelection() }) {
                                     Icon(Icons.Outlined.Close, contentDescription = "Clear selection")
                                 }
-                                Text(
-                                    "${selectedUris.size} Selected",
-                                    style = MaterialTheme.typography.titleLarge,
+                                AnimatedContent(
+                                    targetState = selectedUris.size,
+                                    transitionSpec = {
+                                        if (targetState > initialState) {
+                                            (slideInVertically { -it } + fadeIn()) togetherWith
+                                                    (slideOutVertically { it } + fadeOut())
+                                        } else {
+                                            (slideInVertically { it } + fadeIn()) togetherWith
+                                                    (slideOutVertically { -it } + fadeOut())
+                                        }
+                                    },
+                                    label = "selectionCount",
                                     modifier = Modifier.padding(start = 16.dp).weight(1f)
-                                )
+                                ) { count ->
+                                    Text(
+                                        "$count Selected",
+                                        style = MaterialTheme.typography.titleLarge
+                                    )
+                                }
                                 IconButton(onClick = { viewModel.toggleSelectAll() }) {
                                     Icon(
                                         imageVector = Icons.Outlined.LibraryAddCheck,
@@ -1385,33 +1121,64 @@ fun MainAppLayout(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     val isCreateEnabled = selectedUris.size in 1..8
-                    Button(
-                        onClick = { 
-                            if (isCreateEnabled) {
-                                onCreateCollage(selectedUris.toList())
-                            } else {
-                                android.widget.Toast.makeText(
-                                    context,
-                                    "Collage creation supports up to 8 images",
-                                    android.widget.Toast.LENGTH_SHORT
-                                ).show()
-                            }
-                        },
-                        shape = RoundedCornerShape(50),
-                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (isCreateEnabled) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
-                            contentColor = if (isCreateEnabled) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                        ),
-                        modifier = Modifier.height(48.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.GridView,
-                            contentDescription = "Create Collage",
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Text("Create", fontWeight = FontWeight.SemiBold)
+                    val isStitchEnabled = selectedUris.size >= 2
+                    var createMenuExpanded by remember { mutableStateOf(false) }
+                    Box {
+                        Button(
+                            onClick = { createMenuExpanded = true },
+                            shape = RoundedCornerShape(50),
+                            elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                            ),
+                            modifier = Modifier.height(48.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Add,
+                                contentDescription = "Create",
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text("Create", fontWeight = FontWeight.SemiBold)
+                        }
+                        DropdownMenu(
+                            expanded = createMenuExpanded,
+                            onDismissRequest = { createMenuExpanded = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Collage") },
+                                leadingIcon = { Icon(Icons.Outlined.GridView, contentDescription = null) },
+                                onClick = {
+                                    createMenuExpanded = false
+                                    if (isCreateEnabled) {
+                                        onCreateCollage(selectedUris.toList())
+                                    } else {
+                                        android.widget.Toast.makeText(
+                                            context,
+                                            "Collage supports up to 8 images",
+                                            android.widget.Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Stitch") },
+                                leadingIcon = { Icon(Icons.Outlined.SwapVert, contentDescription = null) },
+                                onClick = {
+                                    createMenuExpanded = false
+                                    if (isStitchEnabled) {
+                                        onCreateStitch(selectedUris.toList())
+                                    } else {
+                                        android.widget.Toast.makeText(
+                                            context,
+                                            "Select at least 2 images to stitch",
+                                            android.widget.Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+                                }
+                            )
+                        }
                     }
                     Box {
                     CustomSplitButton(
@@ -1648,319 +1415,3 @@ fun MainAppLayout(
     }
 }
 }
-
-
-@Composable
-fun CustomSplitButton(
-    leadingIcon: @Composable () -> Unit,
-    leadingText: String,
-    onLeadingClick: () -> Unit,
-    onTrailingClick: () -> Unit,
-    trailingIcon: @Composable () -> Unit = { Icon(Icons.Outlined.ArrowDropDown, contentDescription = null) },
-    containerColor: Color = MaterialTheme.colorScheme.primaryContainer,
-    contentColor: Color = MaterialTheme.colorScheme.onPrimaryContainer
-) {
-    Surface(
-        shape = CircleShape,
-        color = containerColor,
-        contentColor = contentColor,
-        shadowElevation = 4.dp
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.height(56.dp)
-        ) {
-            // Leading
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .clickable { onLeadingClick() }
-                    .padding(start = 20.dp, end = 16.dp)
-                    .fillMaxHeight()
-            ) {
-                leadingIcon()
-                Spacer(Modifier.width(12.dp))
-                Text(leadingText, fontWeight = FontWeight.SemiBold)
-            }
-            
-            // Divider
-            Box(
-                modifier = Modifier
-                    .width(1.dp)
-                    .height(32.dp)
-                    .background(MaterialTheme.colorScheme.outlineVariant)
-            )
-            
-            // Trailing
-            Box(
-                modifier = Modifier
-                    .clickable { onTrailingClick() }
-                    .padding(horizontal = 16.dp)
-                    .fillMaxHeight(),
-                contentAlignment = Alignment.Center
-            ) {
-                trailingIcon()
-            }
-        }
-    }
-}
-
-@Composable
-private fun QuickFilterRow(
-    selectedFilter: Int,
-    onFilterSelected: (Int) -> Unit,
-    sortOrder: SortOrder,
-    onSortOrderSelected: (SortOrder) -> Unit
-) {
-    var showSortMenu by remember { mutableStateOf(false) }
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        androidx.compose.foundation.lazy.LazyRow(
-            modifier = Modifier.weight(1f),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            item {
-                CustomFilterChip(
-                    text = "All",
-                    icon = Icons.Outlined.Image,
-                    selected = selectedFilter == 0,
-                    onClick = { onFilterSelected(0) }
-                )
-            }
-            item {
-                CustomFilterChip(
-                    text = "Camera",
-                    icon = Icons.Outlined.CameraAlt,
-                    selected = selectedFilter == 1,
-                    onClick = { onFilterSelected(1) }
-                )
-            }
-        }
-        
-        Box {
-            androidx.compose.material3.IconButton(
-                onClick = { showSortMenu = true }
-            ) {
-                androidx.compose.material3.Icon(
-                    imageVector = Icons.AutoMirrored.Outlined.Sort,
-                    contentDescription = "Sort",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            DropdownMenu(
-                expanded = showSortMenu,
-                onDismissRequest = { showSortMenu = false },
-                shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
-                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-            ) {
-                DropdownMenuItem(
-                    text = { Text("Newest to Oldest") },
-                    trailingIcon = {
-                        androidx.compose.material3.RadioButton(
-                            selected = sortOrder == SortOrder.NewToOld,
-                            onClick = null
-                        )
-                    },
-                    onClick = { onSortOrderSelected(SortOrder.NewToOld); showSortMenu = false }
-                )
-                DropdownMenuItem(
-                    text = { Text("Oldest to Newest") },
-                    trailingIcon = {
-                        androidx.compose.material3.RadioButton(
-                            selected = sortOrder == SortOrder.OldToNew,
-                            onClick = null
-                        )
-                    },
-                    onClick = { onSortOrderSelected(SortOrder.OldToNew); showSortMenu = false }
-                )
-                DropdownMenuItem(
-                    text = { Text("Largest to Smallest") },
-                    trailingIcon = {
-                        androidx.compose.material3.RadioButton(
-                            selected = sortOrder == SortOrder.BigToSmall,
-                            onClick = null
-                        )
-                    },
-                    onClick = { onSortOrderSelected(SortOrder.BigToSmall); showSortMenu = false }
-                )
-                DropdownMenuItem(
-                    text = { Text("Smallest to Largest") },
-                    trailingIcon = {
-                        androidx.compose.material3.RadioButton(
-                            selected = sortOrder == SortOrder.SmallToBig,
-                            onClick = null
-                        )
-                    },
-                    onClick = { onSortOrderSelected(SortOrder.SmallToBig); showSortMenu = false }
-                )
-                DropdownMenuItem(
-                    text = { Text("A to Z") },
-                    trailingIcon = {
-                        androidx.compose.material3.RadioButton(
-                            selected = sortOrder == SortOrder.NameAsc,
-                            onClick = null
-                        )
-                    },
-                    onClick = { onSortOrderSelected(SortOrder.NameAsc); showSortMenu = false }
-                )
-            }
-        }
-    }
-}
-
-
-@Composable
-private fun CustomFilterChip(
-    text: String,
-    icon: ImageVector? = null,
-    selected: Boolean,
-    onClick: () -> Unit
-) {
-    val containerColor = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerHighest
-    val contentColor = if (selected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
-
-    Surface(
-        shape = CircleShape,
-        color = containerColor,
-        contentColor = contentColor,
-        modifier = Modifier
-            .height(24.dp)
-            .clip(CircleShape)
-            .expressiveClick(onClick)
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-        ) {
-            if (icon != null) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = text,
-                    modifier = Modifier.size(14.dp)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-            }
-            Text(
-                text = text,
-                fontSize = 12.sp,
-                style = MaterialTheme.typography.labelMedium
-            )
-        }
-    }
-}
-
-@Composable
-private fun DockItem(
-    icon: @Composable () -> Unit,
-    label: String,
-    isSelected: Boolean,
-    onClick: () -> Unit
-) {
-    val interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
-    val isPressed by interactionSource.collectIsPressedAsState()
-    val touchScale by animateFloatAsState(
-        targetValue = if (isPressed) 0.97f else 1f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioNoBouncy,
-            stiffness = Spring.StiffnessHigh
-        ),
-        label = "dockItemScale"
-    )
-
-    val pillColor by animateColorAsState(
-        targetValue = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioNoBouncy,
-            stiffness = Spring.StiffnessHigh
-        ),
-        label = "pillColor"
-    )
-    
-    val contentColor by animateColorAsState(
-        targetValue = if (isSelected) {
-            MaterialTheme.colorScheme.onPrimary
-        } else {
-            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-        },
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioNoBouncy,
-            stiffness = Spring.StiffnessHigh
-        ),
-        label = "contentColor"
-    )
-
-    Box(
-        modifier = Modifier
-            .scale(touchScale)
-            .clip(CircleShape)
-            .background(pillColor)
-            .clickable(
-                interactionSource = interactionSource,
-                indication = null,
-                onClick = onClick
-            )
-            .padding(horizontal = 14.dp, vertical = 8.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
-        ) {
-            androidx.compose.runtime.CompositionLocalProvider(
-                androidx.compose.material3.LocalContentColor provides contentColor
-            ) {
-                icon()
-                
-                AnimatedVisibility(
-                    visible = isSelected,
-                    enter = fadeIn() + expandHorizontally(),
-                    exit = fadeOut() + shrinkHorizontally()
-                ) {
-                    Row {
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = label,
-                            style = MaterialTheme.typography.labelMedium,
-                            fontSize = 11.sp,
-                            lineHeight = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-
-private fun getTabRouteIndex(route: String?): Int {
-    return when (route) {
-        "photos" -> 0
-        "albums", "album/{bucketName}" -> 1
-        "search" -> 2
-        "settings" -> 3
-        else -> 0
-    }
-}
-
-private fun getEnterTransition(initialRoute: String?, targetRoute: String?): androidx.compose.animation.EnterTransition {
-    return androidx.compose.animation.fadeIn(
-        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessHigh)
-    )
-}
-
-private fun getExitTransition(initialRoute: String?, targetRoute: String?): androidx.compose.animation.ExitTransition {
-    return androidx.compose.animation.fadeOut(
-        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessHigh)
-    )
-}
-
-
-

@@ -73,14 +73,20 @@ fun NavigationGraph(
                         navController.navigate(route)
                     },
                     onCreateCollage = { uriStrings ->
-                        // Join with | separator (safer than comma for content URIs),
-                        // then double-encode so navArgs parser doesn't choke on URI chars
                         val joined = uriStrings.joinToString("|")
                         val encoded = android.util.Base64.encodeToString(
                             joined.toByteArray(Charsets.UTF_8),
                             android.util.Base64.URL_SAFE or android.util.Base64.NO_WRAP
                         )
                         navController.navigate("collage?uris=$encoded")
+                    },
+                    onCreateStitch = { uriStrings ->
+                        val joined = uriStrings.joinToString("|")
+                        val encoded = android.util.Base64.encodeToString(
+                            joined.toByteArray(Charsets.UTF_8),
+                            android.util.Base64.URL_SAFE or android.util.Base64.NO_WRAP
+                        )
+                        navController.navigate("stitch?uris=$encoded")
                     },
                     viewModel = galleryViewModel
                 )
@@ -130,6 +136,25 @@ fun NavigationGraph(
                 } catch (e: Exception) { "" }
                 val uris = joined.split("|").filter { it.isNotBlank() }
                 CollageScreen(
+                    initialUris = uris,
+                    onBack = { navController.popBackStack() }
+                )
+            }
+            composable(
+                route = "stitch?uris={uris}",
+                arguments = listOf(
+                    navArgument("uris") { type = NavType.StringType }
+                )
+            ) { backStackEntry ->
+                val encoded = backStackEntry.arguments?.getString("uris") ?: ""
+                val joined = try {
+                    String(
+                        android.util.Base64.decode(encoded, android.util.Base64.URL_SAFE or android.util.Base64.NO_WRAP),
+                        Charsets.UTF_8
+                    )
+                } catch (e: Exception) { "" }
+                val uris = joined.split("|").filter { it.isNotBlank() }
+                StitchScreen(
                     initialUris = uris,
                     onBack = { navController.popBackStack() }
                 )
