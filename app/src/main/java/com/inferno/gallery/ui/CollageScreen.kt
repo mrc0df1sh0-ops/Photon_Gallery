@@ -32,7 +32,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
-import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -54,7 +54,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
-import coil3.request.crossfade
+
 import com.inferno.gallery.data.db.CoreMediaEntity
 import com.inferno.gallery.data.db.DatabaseProvider
 import com.inferno.gallery.workers.MediaSyncWorker
@@ -223,7 +223,7 @@ fun CollageScreen(
             containerColor = Color(0xFF121212),
             topBar = {
                 CenterAlignedTopAppBar(
-                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                    colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = Color(0xFF1E1E1E),
                         titleContentColor = Color.White,
                         navigationIconContentColor = Color.White,
@@ -449,19 +449,13 @@ fun CollageScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color(0xFF1A1A1A))
+                        .background(MaterialTheme.colorScheme.surfaceContainerLow)
                         .padding(bottom = 8.dp)
                 ) {
-                    TabRow(
+                    @OptIn(ExperimentalMaterial3ExpressiveApi::class)
+                    SecondaryTabRow(
                         selectedTabIndex = activeTab.ordinal,
-                        containerColor = Color(0xFF1E1E1E),
-                        contentColor = Color.White,
-                        indicator = { tabPositions ->
-                            TabRowDefaults.SecondaryIndicator(
-                                Modifier.tabIndicatorOffset(tabPositions[activeTab.ordinal]),
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        }
+                        containerColor = MaterialTheme.colorScheme.surfaceContainer
                     ) {
                         EditTab.values().forEach { tab ->
                             Tab(
@@ -783,7 +777,6 @@ fun LocalGalleryChooser(
                                     .precision(coil3.size.Precision.EXACT)
                                     .memoryCachePolicy(coil3.request.CachePolicy.ENABLED)
                                     .diskCachePolicy(coil3.request.CachePolicy.ENABLED)
-                                    .crossfade(true)
                                     .build(),
                                 contentDescription = null,
                                 contentScale = ContentScale.Crop,
