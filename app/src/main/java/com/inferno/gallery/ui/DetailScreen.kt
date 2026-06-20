@@ -23,6 +23,8 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.togetherWith
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -48,6 +50,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
@@ -941,8 +944,8 @@ fun DetailScreen(
             // Minimap Overlay — top-right corner
             AnimatedVisibility(
                 visible = scale.floatValue >= 5f,
-                enter = fadeIn(),
-                exit = fadeOut(),
+                enter = fadeIn(spring(stiffness = Spring.StiffnessMedium)),
+                exit = fadeOut(spring(stiffness = Spring.StiffnessMedium)),
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .statusBarsPadding()
@@ -1333,9 +1336,10 @@ fun CustomShareSheet(items: List<GalleryItem>, initialIndex: Int, onDismiss: () 
     val coroutineScope = rememberCoroutineScope()
 
     // Read the strip-metadata preference asynchronously via produceState (Compose-idiomatic)
+    val galleryViewModel: GalleryViewModel = viewModel()
     val stripMetadata by produceState(initialValue = false) {
         value = withContext(Dispatchers.IO) {
-            SettingsRepository(context).stripMetadataOnShareFlow.first()
+            galleryViewModel.settingsRepository.stripMetadataOnShareFlow.first()
         }
     }
 
@@ -1348,7 +1352,22 @@ fun CustomShareSheet(items: List<GalleryItem>, initialIndex: Int, onDismiss: () 
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = MaterialTheme.colorScheme.surfaceContainerHigh) {
         Column(modifier = Modifier.fillMaxWidth().padding(bottom = 32.dp)) {
             // Header
-            Text("${selectedUris.size} selected", style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold), modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp))
+            AnimatedContent(
+                targetState = selectedUris.size,
+                transitionSpec = {
+                    if (targetState > initialState) {
+                        (slideInVertically { -it } + fadeIn()) togetherWith
+                                (slideOutVertically { it } + fadeOut())
+                    } else {
+                        (slideInVertically { it } + fadeIn()) togetherWith
+                                (slideOutVertically { -it } + fadeOut())
+                    }
+                },
+                label = "shareCount",
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)
+            ) { count ->
+                Text("$count selected", style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold))
+            }
 
             // Image Multi-Select Carousel
             LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -1527,45 +1546,80 @@ fun formatSizeToMB(sizeBytes: Long): String {
 fun ExifInfoCard(galleryItem: GalleryItem?, exifData: ExifData?, modifier: Modifier = Modifier) {
     if (galleryItem == null) return
     Surface(
-        modifier = modifier.width(280.dp),
-        shape = RoundedCornerShape(16.dp),
+        modifier = modifier.widthIn(min = 280.dp, max = 340.dp),
+        shape = RoundedCornerShape(20.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         contentColor = MaterialTheme.colorScheme.onSurface
     ) {
         Column(
-            modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            InfoRow(label = "Name", value = galleryItem.name)
-            InfoRow(label = "Time", value = formatExifDate(galleryItem.dateModified * 1000L))
-            InfoRow(label = "Size", value = "${formatSizeToMB(galleryItem.size)}   ${exifData?.resolution ?: ""}".trim())
-            
-            val device = exifData?.model ?: "Unknown Device"
+            // File Name — full wrap
+            InfoBlock(label = "Name", value = galleryItem.name)
+
+            // Time + Size row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                InfoBlock(
+                    label = "Modified",
+                    value = formatExifDate(galleryItem.dateModified * 1000L),
+                    modifier = Modifier.weight(1f)
+                )
+                InfoBlock(
+                    label = "Size",
+                    value = formatSizeToMB(galleryItem.size),
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            // Resolution + Device row
+            val resolution = exifData?.resolution
+            val device = exifData?.model
+            if (resolution != null || device != null) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    if (resolution != null) {
+                        InfoBlock(label = "Resolution", value = resolution, modifier = Modifier.weight(1f))
+                    }
+                    if (device != null) {
+                        InfoBlock(label = "Device", value = device, modifier = Modifier.weight(1f))
+                    }
+                }
+            }
+
+            // Camera parameters
             val paramsParts = listOfNotNull(exifData?.focalLength, exifData?.shutterSpeed, exifData?.iso, exifData?.aperture).filter { it.isNotBlank() }
-            val builtParamsString = if (paramsParts.isNotEmpty()) paramsParts.joinToString(" • ") else "Unknown Parameters"
-            InfoColumn(label = "Parameters", deviceName = device, params = builtParamsString)
-            
-            InfoRow(label = "Path", value = galleryItem.path)
+            if (paramsParts.isNotEmpty()) {
+                InfoBlock(label = "Parameters", value = paramsParts.joinToString("  •  "))
+            }
+
+            // Path — full wrap
+            InfoBlock(label = "Path", value = galleryItem.path)
         }
     }
 }
 
 @Composable
-private fun InfoRow(label: String, value: String) {
-    Row { 
-        Text(text = label, color = Color.Gray, fontSize = 11.sp, modifier = Modifier.width(80.dp))
-        Text(text = value, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) 
-    }
-}
-
-@Composable
-private fun InfoColumn(label: String, deviceName: String, params: String) {
-    Row { 
-        Text(text = label, color = Color.Gray, fontSize = 11.sp, modifier = Modifier.width(80.dp))
-        Column(modifier = Modifier.weight(1f)) { 
-            Text(text = deviceName, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-            Spacer(Modifier.height(4.dp))
-            Text(text = params, color = Color.LightGray, fontSize = 11.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) 
-        } 
+private fun InfoBlock(label: String, value: String, modifier: Modifier = Modifier) {
+    Column(modifier = modifier) {
+        Text(
+            text = label.uppercase(),
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 0.8.sp
+            ),
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(Modifier.height(2.dp))
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+            color = MaterialTheme.colorScheme.onSurface
+        )
     }
 }
