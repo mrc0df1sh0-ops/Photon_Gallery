@@ -110,6 +110,7 @@ import androidx.compose.material3.TextButton
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.DisposableEffect
@@ -191,8 +192,10 @@ fun PermissionOnboardingScreen(
 
     val allGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
         photosGranted && videosGranted && allFilesGranted
-    } else {
+    } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
         photosGranted && allFilesGranted
+    } else {
+        photosGranted
     }
 
     var animateIcon by remember { mutableStateOf(false) }
@@ -463,7 +466,9 @@ fun MainAppLayout(
 
     fun checkPhotosPermission(): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            ContextCompat.checkSelfPermission(context, Manifest.permission.READ_MEDIA_IMAGES) == PackageManager.PERMISSION_GRANTED
+            ContextCompat.checkSelfPermission(context, Manifest.permission.READ_MEDIA_IMAGES) == PackageManager.PERMISSION_GRANTED ||
+            (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE &&
+             ContextCompat.checkSelfPermission(context, Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED) == PackageManager.PERMISSION_GRANTED)
         } else {
             ContextCompat.checkSelfPermission(context, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
         }
@@ -471,7 +476,9 @@ fun MainAppLayout(
 
     fun checkVideosPermission(): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            ContextCompat.checkSelfPermission(context, Manifest.permission.READ_MEDIA_VIDEO) == PackageManager.PERMISSION_GRANTED
+            ContextCompat.checkSelfPermission(context, Manifest.permission.READ_MEDIA_VIDEO) == PackageManager.PERMISSION_GRANTED ||
+            (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE &&
+             ContextCompat.checkSelfPermission(context, Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED) == PackageManager.PERMISSION_GRANTED)
         } else {
             ContextCompat.checkSelfPermission(context, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
         }
@@ -488,6 +495,7 @@ fun MainAppLayout(
     var photosGranted by remember { mutableStateOf(checkPhotosPermission()) }
     var videosGranted by remember { mutableStateOf(checkVideosPermission()) }
     var allFilesGranted by remember { mutableStateOf(checkAllFilesPermission()) }
+    var hasRequestedMediaOnce by remember { mutableStateOf(false) }
 
     fun updatePermissionStates() {
         photosGranted = checkPhotosPermission()
@@ -559,24 +567,57 @@ fun MainAppLayout(
         }
     }
 
-    val hasRequiredPermissions = photosGranted && videosGranted
-    if (!onboardingCompleted && !hasRequiredPermissions) {
+    val hasRequiredPermissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        photosGranted && videosGranted && allFilesGranted
+    } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        photosGranted && allFilesGranted
+    } else {
+        photosGranted
+    }
+    if (!onboardingCompleted || !hasRequiredPermissions) {
         PermissionOnboardingScreen(
             photosGranted = photosGranted,
             videosGranted = videosGranted,
             allFilesGranted = allFilesGranted,
             onGrantMediaClick = {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    permissionLauncher.launch(
-                        arrayOf(
-                            Manifest.permission.READ_MEDIA_IMAGES,
-                            Manifest.permission.READ_MEDIA_VIDEO
-                        )
-                    )
+                val activity = context as? android.app.Activity
+                val showRationale = activity?.let {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        androidx.core.app.ActivityCompat.shouldShowRequestPermissionRationale(it, Manifest.permission.READ_MEDIA_IMAGES) ||
+                        androidx.core.app.ActivityCompat.shouldShowRequestPermissionRationale(it, Manifest.permission.READ_MEDIA_VIDEO)
+                    } else {
+                        androidx.core.app.ActivityCompat.shouldShowRequestPermissionRationale(it, Manifest.permission.READ_EXTERNAL_STORAGE)
+                    }
+                } ?: true
+
+                if (hasRequestedMediaOnce && !photosGranted && !showRationale) {
+                    Toast.makeText(context, "Permissions permanently denied. Opening settings...", Toast.LENGTH_LONG).show()
+                    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                        data = Uri.fromParts("package", context.packageName, null)
+                    }
+                    intentLauncher.launch(intent)
                 } else {
-                    permissionLauncher.launch(
-                        arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
-                    )
+                    hasRequestedMediaOnce = true
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                        permissionLauncher.launch(
+                            arrayOf(
+                                Manifest.permission.READ_MEDIA_IMAGES,
+                                Manifest.permission.READ_MEDIA_VIDEO,
+                                Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED
+                            )
+                        )
+                    } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        permissionLauncher.launch(
+                            arrayOf(
+                                Manifest.permission.READ_MEDIA_IMAGES,
+                                Manifest.permission.READ_MEDIA_VIDEO
+                            )
+                        )
+                    } else {
+                        permissionLauncher.launch(
+                            arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
+                        )
+                    }
                 }
             },
             onGrantAllFilesClick = {

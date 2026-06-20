@@ -123,6 +123,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
 import android.os.Build
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.produceState
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.Dispatchers
@@ -199,6 +200,14 @@ fun DetailScreen(
     )
 
     val currentItem = galleryItems.getOrNull(pagerState.currentPage)
+    var isLocalFileMissing by remember(currentItem) { mutableStateOf(false) }
+    LaunchedEffect(currentItem) {
+        if (currentItem != null) {
+            isLocalFileMissing = withContext(Dispatchers.IO) {
+                !java.io.File(currentItem.path).exists()
+            }
+        }
+    }
     val resolvedCurrentUri by produceState<Uri?>(initialValue = currentItem?.uri, key1 = currentItem) {
         val uri = currentItem?.uri
         if (uri != null) {
@@ -518,11 +527,13 @@ fun DetailScreen(
             key = { page -> galleryItems.getOrNull(page)?.uri?.toString() ?: page.toString() }
         ) { page ->
             val item = galleryItems.getOrNull(page) ?: return@HorizontalPager
-            val resolvedUri = remember(item) {
-                if (item.telegramFileId != null && !java.io.File(item.path).exists()) {
-                    Uri.parse("telegram://${item.telegramFileId}")
-                } else {
-                    item.uri
+            val resolvedUri by produceState(initialValue = item.uri, key1 = item) {
+                value = withContext(Dispatchers.IO) {
+                    if (item.telegramFileId != null && !java.io.File(item.path).exists()) {
+                        Uri.parse("telegram://${item.telegramFileId}")
+                    } else {
+                        item.uri
+                    }
                 }
             }
 
@@ -1166,7 +1177,6 @@ fun DetailScreen(
                                                 showInfoCard = !showInfoCard
                                             }
                                         )
-                                        val isLocalFileMissing = !java.io.File(currentItem.path).exists()
                                         if (isLocalFileMissing && currentItem.telegramFileId != null) {
                                             androidx.compose.material3.DropdownMenuItem(
                                                 text = { Text("Download to Device") },

@@ -4,6 +4,7 @@
 
     <!-- Media permissions: API 33+ uses granular media permissions -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />
 
     <!-- Fallback for API 31-32 (our minSdk is 31) -->
     <uses-permission

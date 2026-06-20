@@ -28,7 +28,6 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
@@ -357,13 +356,21 @@ fun GalleryGridItem(
     isScrollInProgress: Boolean = false
 ) {
     val context = LocalContext.current
-    val resolvedUri = remember(item) {
-        if (item.telegramThumbFileId != null && !java.io.File(item.path).exists()) {
-            Uri.parse("telegram://${item.telegramThumbFileId}")
-        } else if (item.telegramFileId != null && !java.io.File(item.path).exists()) {
-            Uri.parse("telegram://${item.telegramFileId}")
-        } else {
-            item.uri
+    val resolvedUri by produceState(initialValue = item.uri, key1 = item) {
+        value = withContext(Dispatchers.IO) {
+            if (item.telegramThumbFileId != null && !java.io.File(item.path).exists()) {
+                Uri.parse("telegram://${item.telegramThumbFileId}")
+            } else if (item.telegramFileId != null && !java.io.File(item.path).exists()) {
+                Uri.parse("telegram://${item.telegramFileId}")
+            } else {
+                item.uri
+            }
+        }
+    }
+
+    val localExists by produceState(initialValue = true, key1 = item.path) {
+        value = withContext(Dispatchers.IO) {
+            java.io.File(item.path).exists()
         }
     }
 
@@ -564,7 +571,6 @@ fun GalleryGridItem(
 
         val isPending = backupStatus == "PENDING"
         val isBackedUp = backupStatus == "SUCCESS" || item.telegramFileId != null || item.telegramThumbFileId != null
-        val localExists = remember(item.path) { java.io.File(item.path).exists() }
 
         if (!isSelected) {
             if (isPending) {

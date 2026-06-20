@@ -54,6 +54,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
+import coil3.request.crossfade
 import com.inferno.gallery.data.db.CoreMediaEntity
 import com.inferno.gallery.data.db.DatabaseProvider
 import com.inferno.gallery.workers.MediaSyncWorker
@@ -221,8 +222,8 @@ fun CollageScreen(
             modifier = Modifier.fillMaxSize(),
             containerColor = Color(0xFF121212),
             topBar = {
-                TopAppBar(
-                    colors = TopAppBarDefaults.topAppBarColors(
+                CenterAlignedTopAppBar(
+                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                         containerColor = Color(0xFF1E1E1E),
                         titleContentColor = Color.White,
                         navigationIconContentColor = Color.White,
@@ -776,7 +777,14 @@ fun LocalGalleryChooser(
                                 }
                         ) {
                             AsyncImage(
-                                model = ImageRequest.Builder(LocalContext.current).data(uri).build(),
+                                model = ImageRequest.Builder(LocalContext.current)
+                                    .data(uri)
+                                    .size(300, 300)
+                                    .precision(coil3.size.Precision.EXACT)
+                                    .memoryCachePolicy(coil3.request.CachePolicy.ENABLED)
+                                    .diskCachePolicy(coil3.request.CachePolicy.ENABLED)
+                                    .crossfade(true)
+                                    .build(),
                                 contentDescription = null,
                                 contentScale = ContentScale.Crop,
                                 modifier = Modifier.fillMaxSize()
