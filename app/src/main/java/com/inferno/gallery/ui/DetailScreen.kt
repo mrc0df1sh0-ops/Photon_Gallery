@@ -16,6 +16,7 @@ import androidx.compose.material3.HorizontalFloatingToolbar
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -34,6 +35,7 @@ import androidx.compose.foundation.gestures.calculateCentroidSize
 import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.layout.Arrangement
@@ -60,7 +62,6 @@ import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.outlined.Cloud
-import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material3.FilledIconButton
@@ -122,7 +123,6 @@ import kotlinx.coroutines.launch
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
 import android.os.Build
-import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.produceState
 import kotlinx.coroutines.flow.first
@@ -131,7 +131,6 @@ import kotlinx.coroutines.withContext
 import com.inferno.gallery.data.db.DatabaseProvider
 import com.inferno.gallery.data.SettingsRepository
 import androidx.core.content.FileProvider
-import kotlinx.coroutines.launch
 import java.io.File
 
 
@@ -153,7 +152,7 @@ fun DetailScreen(
     }
 
     val context = LocalContext.current
-    val settingsRepo = remember { SettingsRepository(context) }
+    val settingsRepo = viewModel.settingsRepository
     val confirmDeleteEnabled by settingsRepo.confirmDeleteEnabledFlow.collectAsState(initial = true)
     val activity = context as? android.app.Activity
     val window = activity?.window
@@ -514,16 +513,75 @@ fun DetailScreen(
     }
 
 
+    // ── Swipe-to-dismiss state ─────────────────────────────────────────────
+    // Vertical drag offset (px). When the user drags the image downward at
+    // 1× zoom, this translates the pager and fades the black scrim.
+    val dismissOffsetY = remember { Animatable(0f) }
+    val dismissProgress = (kotlin.math.abs(dismissOffsetY.value) / 600f).coerceIn(0f, 1f)
+    val bgAlpha = 1f - dismissProgress          // scrim fades out
+    val dismissScale = 1f - dismissProgress * 0.15f // subtle shrink
+
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black),
+            .background(Color.Black.copy(alpha = bgAlpha)),
         contentAlignment = Alignment.Center
     ) {
         HorizontalPager(
             state = pagerState,
-            userScrollEnabled = currentScale <= 1.05f,
-            modifier = Modifier.fillMaxSize(),
+            userScrollEnabled = currentScale <= 1.05f && dismissOffsetY.value == 0f,
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    translationY = dismissOffsetY.value
+                    scaleX = dismissScale
+                    scaleY = dismissScale
+                }
+                .pointerInput(currentScale) {
+                    // Swipe-to-dismiss: only when not zoomed in.
+                    if (currentScale > 1.05f) return@pointerInput
+                    val dismissThreshold = 200f
+                    val velocityThreshold = 800f
+                    detectVerticalDragGestures(
+                        onDragStart = {},
+                        onDragEnd = {
+                            coroutineScope.launch {
+                                val current = dismissOffsetY.value
+                                val velocity = dismissOffsetY.velocity
+                                if (kotlin.math.abs(current) > dismissThreshold ||
+                                    kotlin.math.abs(velocity) > velocityThreshold
+                                ) {
+                                    // Commit dismiss — trigger existing back transition
+                                    onBack()
+                                } else {
+                                    // Snap back with spring
+                                    dismissOffsetY.animateTo(
+                                        0f,
+                                        animationSpec = spring(
+                                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                                            stiffness = Spring.StiffnessMedium
+                                        )
+                                    )
+                                }
+                            }
+                        },
+                        onDragCancel = {
+                            coroutineScope.launch {
+                                dismissOffsetY.animateTo(
+                                    0f,
+                                    animationSpec = spring(
+                                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                                        stiffness = Spring.StiffnessMedium
+                                    )
+                                )
+                            }
+                        }
+                    ) { _, dragAmount ->
+                        coroutineScope.launch {
+                            dismissOffsetY.snapTo(dismissOffsetY.value + dragAmount)
+                        }
+                    }
+                },
             key = { page -> galleryItems.getOrNull(page)?.uri?.toString() ?: page.toString() }
         ) { page ->
             val item = galleryItems.getOrNull(page) ?: return@HorizontalPager
@@ -949,11 +1007,47 @@ fun DetailScreen(
         }
         }
 
+        // ── Photo counter pill (e.g. "23 / 487") ──────────────────────────────
+        // Appears on page change, auto-hides after 2 seconds.
+        var showCounter by remember { mutableStateOf(true) }
+        LaunchedEffect(pagerState.currentPage) {
+            showCounter = true
+            kotlinx.coroutines.delay(2000)
+            showCounter = false
+        }
+        AnimatedVisibility(
+            visible = showCounter && galleryItems.size > 1,
+            enter = fadeIn(spring(stiffness = Spring.StiffnessMedium)) +
+                    scaleIn(spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium), initialScale = 0.8f),
+            exit  = fadeOut(spring(stiffness = Spring.StiffnessMedium)) +
+                    scaleOut(spring(stiffness = Spring.StiffnessMedium), targetScale = 0.8f),
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .statusBarsPadding()
+                .padding(top = 8.dp)
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = Color.Black.copy(alpha = 0.55f),
+                contentColor = Color.White,
+            ) {
+                Text(
+                    text = "${pagerState.currentPage + 1} / ${galleryItems.size}",
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        fontWeight = FontWeight.SemiBold
+                    ),
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+                )
+            }
+        }
+
         // UI Overlay
         AnimatedVisibility(
             visible = showUi,
-            enter = fadeIn(),
-            exit = fadeOut(),
+            enter = fadeIn(spring(stiffness = Spring.StiffnessMedium)) +
+                    slideInVertically(spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium)) { -it },
+            exit  = fadeOut(spring(stiffness = Spring.StiffnessMedium)) +
+                    slideOutVertically(spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium)) { -it },
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
@@ -980,27 +1074,15 @@ fun DetailScreen(
                         contentDescription = "Go back"
                     )
                 }
-
-                androidx.compose.foundation.layout.Spacer(modifier = Modifier.width(12.dp))
-
-                Text(
-                    text = currentItem?.name ?: "",
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        fontWeight = FontWeight.SemiBold,
-                        fontFamily = FontFamily.SansSerif
-                    ),
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
-                )
             }
         }
 
         AnimatedVisibility(
             visible = showInfoCard,
-            enter = fadeIn() + scaleIn(),
-            exit = fadeOut() + scaleOut(),
+            enter = fadeIn(spring(stiffness = Spring.StiffnessMedium)) +
+                    scaleIn(spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium), initialScale = 0.85f),
+            exit  = fadeOut(spring(stiffness = Spring.StiffnessMedium)) +
+                    scaleOut(spring(stiffness = Spring.StiffnessMedium), targetScale = 0.85f),
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .statusBarsPadding()
@@ -1014,8 +1096,10 @@ fun DetailScreen(
 
         AnimatedVisibility(
             visible = showUi,
-            enter = fadeIn() + slideInVertically(initialOffsetY = { it }),
-            exit = fadeOut() + slideOutVertically(targetOffsetY = { it }),
+            enter = fadeIn(spring(stiffness = Spring.StiffnessMedium)) +
+                    slideInVertically(spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium)) { it },
+            exit  = fadeOut(spring(stiffness = Spring.StiffnessMedium)) +
+                    slideOutVertically(spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium)) { it },
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .navigationBarsPadding()
@@ -1081,9 +1165,23 @@ fun DetailScreen(
                                 Icon(Icons.Outlined.Share, contentDescription = "Share") 
                             }
                             val isFavorite = currentItem?.id?.let { favoriteIds.contains(it) } ?: false
+                            // Heart pop: triggers a scale bounce when toggling to favorite
+                            var heartBounce by remember { mutableStateOf(false) }
+                            val heartScale by animateFloatAsState(
+                                targetValue = if (heartBounce) 1.45f else 1f,
+                                animationSpec = spring(
+                                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                                    stiffness = Spring.StiffnessMedium
+                                ),
+                                label = "heartScale",
+                                finishedListener = { if (heartBounce) heartBounce = false }
+                            )
+                            val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
                             IconButton(
                                 onClick = {
                                     if (currentItem != null) {
+                                        heartBounce = true
+                                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
                                         viewModel.toggleFavorite(currentItem.id)
                                     }
                                 }
@@ -1091,7 +1189,11 @@ fun DetailScreen(
                                 Icon(
                                     imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
                                     contentDescription = "Favorite",
-                                    tint = if (isFavorite) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+                                    tint = if (isFavorite) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.graphicsLayer {
+                                        scaleX = heartScale
+                                        scaleY = heartScale
+                                    }
                                 )
                             }
                             IconButton(
