@@ -108,7 +108,7 @@ enum class SearchMode { SMART, FTS }
 class GalleryViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository = LocalMediaRepository(application.contentResolver)
-    private val settingsRepository = SettingsRepository(application)
+    val settingsRepository = SettingsRepository(application)
     private val favoritesManager = FavoritesManager(application)
     private val database = DatabaseProvider.getDatabase(application)
 
@@ -577,6 +577,12 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
         initialValue = 0f
+    )
+
+    val cacheThumbnailsEnabled: StateFlow<Boolean> = settingsRepository.cacheThumbnailsEnabledFlow.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = true
     )
 
     fun setThumbnailCornerRadius(radius: Float) {
