@@ -307,12 +307,24 @@ fun AlbumsScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "More albums",
-                        style = MaterialTheme.typography.titleLarge.copy(
-                            fontWeight = FontWeight.Bold
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .width(3.dp)
+                                .height(20.dp)
+                                .clip(MaterialTheme.shapes.small)
+                                .background(MaterialTheme.colorScheme.primary)
                         )
-                    )
+                        Text(
+                            text = "More albums",
+                            style = MaterialTheme.typography.titleLarge.copy(
+                                fontWeight = FontWeight.Bold
+                            )
+                        )
+                    }
                     Box {
                         androidx.compose.material3.IconButton(
                             onClick = { showSortMenu = true },
@@ -529,7 +541,7 @@ fun AlbumCard(
             .data(bucket.coverUri)
             .size(Size(300, 300))
             .precision(Precision.EXACT)
-            .crossfade(false)
+            .crossfade(100)
             .memoryCachePolicy(CachePolicy.ENABLED)
             .diskCachePolicy(CachePolicy.ENABLED)
             .apply {
