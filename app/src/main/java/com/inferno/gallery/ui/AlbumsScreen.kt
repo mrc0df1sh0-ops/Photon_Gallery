@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.Icon
 import androidx.compose.foundation.background
 import androidx.compose.material3.carousel.HorizontalUncontainedCarousel
 import androidx.compose.material3.carousel.rememberCarouselState
@@ -54,6 +55,7 @@ import coil3.compose.AsyncImage
 import coil3.request.CachePolicy
 import coil3.request.ImageRequest
 import coil3.request.crossfade
+
 import coil3.size.Precision
 import coil3.size.Size
 import com.inferno.gallery.ui.theme.AppShapes
@@ -201,7 +203,6 @@ fun AlbumsScreen(
                                         .data(item.uri)
                                         .size(300, 300)
                                         .precision(Precision.EXACT)
-                                        .crossfade(true)
                                         .apply {
                                             if (!gridAutoPlay) {
                                                 repeatCount(0)
@@ -231,6 +232,40 @@ fun AlbumsScreen(
                                     )
                                 }
                             }
+                        }
+                    }
+                }
+            }
+        } else {
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                Surface(
+                    shape = MaterialTheme.shapes.extraLarge,
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(20.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.FavoriteBorder,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(28.dp)
+                        )
+                        Column {
+                            Text(
+                                text = "No favorites yet",
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
+                            )
+                            Text(
+                                text = "Tap ❤\uFE0F on any photo to save it here.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
                 }
@@ -408,7 +443,7 @@ fun CollageCover(
                 .data(uri)
                 .size(150, 150)
                 .precision(Precision.EXACT)
-                .crossfade(150)
+                .crossfade(100)
                 .memoryCachePolicy(CachePolicy.ENABLED)
                 .diskCachePolicy(CachePolicy.ENABLED)
                 .apply {
@@ -494,7 +529,7 @@ fun AlbumCard(
             .data(bucket.coverUri)
             .size(Size(300, 300))
             .precision(Precision.EXACT)
-            .crossfade(150)
+            .crossfade(false)
             .memoryCachePolicy(CachePolicy.ENABLED)
             .diskCachePolicy(CachePolicy.ENABLED)
             .apply {

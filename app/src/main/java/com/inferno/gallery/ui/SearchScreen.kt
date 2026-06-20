@@ -87,7 +87,7 @@ fun SearchScreen(
                         }
                     },
                     placeholder = {
-                        Text("Search text in photos…")
+                        Text("Search by text, scene, or content…")
                     }
                 )
             },
@@ -289,25 +289,17 @@ private fun SearchResultsList(
     LaunchedEffect(lazyGridState) {
         var previousIndex = 0
         var previousScrollOffset = 0
+        // Only emit when index or offset changes — no Triple, no collectLatest
         snapshotFlow {
-            Triple(
-                lazyGridState.firstVisibleItemIndex,
-                lazyGridState.firstVisibleItemScrollOffset,
-                lazyGridState.isScrollInProgress
-            )
+            lazyGridState.firstVisibleItemIndex to lazyGridState.firstVisibleItemScrollOffset
         }
-        .collectLatest { (index, offset, isScrollInProgress) ->
-            if (isScrollInProgress) {
-                if (index > previousIndex) {
-                    viewModel.setScrollDockVisible(false)
-                } else if (index < previousIndex) {
-                    viewModel.setScrollDockVisible(true)
-                } else {
-                    if (offset > previousScrollOffset + 15) {
-                        viewModel.setScrollDockVisible(false)
-                    } else if (offset < previousScrollOffset - 15) {
-                        viewModel.setScrollDockVisible(true)
-                    }
+        .collect { (index, offset) ->
+            if (lazyGridState.isScrollInProgress) {
+                when {
+                    index > previousIndex          -> viewModel.setScrollDockVisible(false)
+                    index < previousIndex          -> viewModel.setScrollDockVisible(true)
+                    offset > previousScrollOffset + 15 -> viewModel.setScrollDockVisible(false)
+                    offset < previousScrollOffset - 15 -> viewModel.setScrollDockVisible(true)
                 }
             }
             previousIndex = index
