@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.asPaddingValues
@@ -79,6 +80,7 @@ import androidx.compose.material3.HorizontalFloatingToolbar
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Text
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -813,8 +815,8 @@ fun MainAppLayout(
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
             AnimatedVisibility(
                 visible = isSelectionMode,
-                enter = slideInVertically(initialOffsetY = { it }) + androidx.compose.animation.fadeIn(),
-                exit = slideOutVertically(targetOffsetY = { it }) + androidx.compose.animation.fadeOut(),
+                enter = slideInVertically(spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium)) { it } + fadeIn(spring(stiffness = Spring.StiffnessMedium)),
+                exit = slideOutVertically(spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium)) { it } + fadeOut(spring(stiffness = Spring.StiffnessMedium)),
                 modifier = Modifier
                     .padding(bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 16.dp)
             ) {
@@ -824,8 +826,7 @@ fun MainAppLayout(
             var showSmartDeleteDialog by remember { mutableStateOf(false) }
             var showCloudDeleteDialog by remember { mutableStateOf(false) }
             var showMultiDeleteConfirmDialog by remember { mutableStateOf(false) }
-            val settingsRepo = remember { SettingsRepository(context) }
-            val confirmDeleteEnabled by settingsRepo.confirmDeleteEnabledFlow.collectAsState(initial = true)
+            val confirmDeleteEnabled by viewModel.settingsRepository.confirmDeleteEnabledFlow.collectAsState(initial = true)
             
             val cloudMediaIds by viewModel.cloudMediaIds.collectAsState()
             val selectedIds = remember(selectedUris) {
@@ -841,15 +842,29 @@ fun MainAppLayout(
             if (showMoveSheet) {
                 androidx.compose.material3.ModalBottomSheet(
                     onDismissRequest = { showMoveSheet = false },
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
                 ) {
                     val albums by viewModel.allAlbums.collectAsState()
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(16.dp)
+                            .padding(horizontal = 24.dp)
+                            .padding(bottom = 24.dp)
                     ) {
-                        Text("Move to Album", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(bottom = 16.dp))
-                        androidx.compose.foundation.lazy.LazyColumn {
+                        Text(
+                            "Move to Album",
+                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold),
+                            modifier = Modifier.padding(bottom = 4.dp)
+                        )
+                        Text(
+                            "${selectedUris.size} items · ${albums.size} albums",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(bottom = 16.dp)
+                        )
+                        androidx.compose.foundation.lazy.LazyColumn(
+                            modifier = Modifier.heightIn(max = 400.dp)
+                        ) {
                             items(albums.size) { index ->
                                 val album = albums[index]
                                 Row(
@@ -859,12 +874,43 @@ fun MainAppLayout(
                                             showMoveSheet = false
                                             viewModel.moveSelectedMedia(album.bucketName)
                                         }
-                                        .padding(vertical = 12.dp, horizontal = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                                        .padding(vertical = 14.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(16.dp)
                                 ) {
-                                    Icon(Icons.Outlined.PhotoAlbum, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                                    Spacer(modifier = Modifier.width(16.dp))
-                                    Text(album.bucketName, style = MaterialTheme.typography.bodyLarge)
+                                    Box(
+                                        modifier = Modifier
+                                            .size(40.dp)
+                                            .background(
+                                                color = MaterialTheme.colorScheme.primaryContainer,
+                                                shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
+                                            ),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            Icons.Outlined.Folder,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            album.bucketName,
+                                            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
+                                        )
+                                        Text(
+                                            "${album.itemCount} items",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                                if (index < albums.size - 1) {
+                                    HorizontalDivider(
+                                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
+                                        modifier = Modifier.padding(start = 56.dp)
+                                    )
                                 }
                             }
                         }
@@ -875,15 +921,29 @@ fun MainAppLayout(
             if (showCopySheet) {
                 androidx.compose.material3.ModalBottomSheet(
                     onDismissRequest = { showCopySheet = false },
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
                 ) {
                     val albums by viewModel.allAlbums.collectAsState()
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(16.dp)
+                            .padding(horizontal = 24.dp)
+                            .padding(bottom = 24.dp)
                     ) {
-                        Text("Copy to Album", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(bottom = 16.dp))
-                        androidx.compose.foundation.lazy.LazyColumn {
+                        Text(
+                            "Copy to Album",
+                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold),
+                            modifier = Modifier.padding(bottom = 4.dp)
+                        )
+                        Text(
+                            "${selectedUris.size} items · ${albums.size} albums",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(bottom = 16.dp)
+                        )
+                        androidx.compose.foundation.lazy.LazyColumn(
+                            modifier = Modifier.heightIn(max = 400.dp)
+                        ) {
                             items(albums.size) { index ->
                                 val album = albums[index]
                                 Row(
@@ -893,12 +953,43 @@ fun MainAppLayout(
                                             showCopySheet = false
                                             viewModel.copySelectedMedia(album.bucketName)
                                         }
-                                        .padding(vertical = 12.dp, horizontal = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                                        .padding(vertical = 14.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(16.dp)
                                 ) {
-                                    Icon(Icons.Outlined.PhotoAlbum, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                                    Spacer(modifier = Modifier.width(16.dp))
-                                    Text(album.bucketName, style = MaterialTheme.typography.bodyLarge)
+                                    Box(
+                                        modifier = Modifier
+                                            .size(40.dp)
+                                            .background(
+                                                color = MaterialTheme.colorScheme.primaryContainer,
+                                                shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
+                                            ),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            Icons.Outlined.Folder,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            album.bucketName,
+                                            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
+                                        )
+                                        Text(
+                                            "${album.itemCount} items",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                                if (index < albums.size - 1) {
+                                    HorizontalDivider(
+                                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
+                                        modifier = Modifier.padding(start = 56.dp)
+                                    )
                                 }
                             }
                         }
@@ -1188,7 +1279,7 @@ fun MainAppLayout(
                             if (selectedUris.isNotEmpty()) {
                                 coroutineScope.launch {
                                     val stripMetadata = withContext(Dispatchers.IO) {
-                                        SettingsRepository(context).stripMetadataOnShareFlow.first()
+                                        viewModel.settingsRepository.stripMetadataOnShareFlow.first()
                                     }
                                     val urisToShare: List<Uri> = if (stripMetadata) {
                                         withContext(Dispatchers.IO) {
