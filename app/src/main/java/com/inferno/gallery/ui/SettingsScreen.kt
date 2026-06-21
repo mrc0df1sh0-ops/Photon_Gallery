@@ -137,7 +137,9 @@ fun SettingsScreen(
     viewModel: SettingsViewModel = viewModel(),
     galleryViewModel: GalleryViewModel = viewModel(),
     onBackClick: () -> Unit = {},
-    onNavigateToVault: () -> Unit = {}
+    onNavigateToVault: () -> Unit = {},
+    activeSection: String? = null,
+    onActiveSectionChange: (String?) -> Unit = {}
 ) {
     val themeMode by viewModel.themeMode.collectAsState()
     val useMaterialYou by viewModel.useMaterialYou.collectAsState()
@@ -176,7 +178,7 @@ fun SettingsScreen(
     var passwordVisiblePrimary by remember { mutableStateOf(false) }
     var passwordVisibleSecondary by remember { mutableStateOf(false) }
 
-    var activeSection by remember { mutableStateOf<String?>(null) }
+
     var primaryTokenInput by remember(savedTokens) { mutableStateOf(savedTokens.getOrNull(0) ?: "") }
     var secondaryTokenInput by remember(savedTokens) { mutableStateOf(savedTokens.getOrNull(1) ?: "") }
     var localChatId by remember(savedChatId) { mutableStateOf(savedChatId) }
@@ -274,44 +276,15 @@ fun SettingsScreen(
         )
     }
 
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-        topBar = {
-            Surface(color = MaterialTheme.colorScheme.surfaceContainerLow) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .statusBarsPadding()
-                        .height(64.dp)
-                        .padding(horizontal = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(
-                        onClick = {
-                            if (activeSection != null) {
-                                activeSection = null
-                            } else {
-                                onBackClick()
-                            }
-                        }
-                    ) {
-                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
-                    }
-                    Text(
-                        text = activeSection ?: "Settings",
-                        style = MaterialTheme.typography.titleLarge,
-                        modifier = Modifier.padding(start = 16.dp).weight(1f)
-                    )
-                }
-            }
-        }
-    ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .padding(innerPadding)
-                .padding(contentPadding)
-                .fillMaxSize()
-        ) {
+    androidx.activity.compose.BackHandler(enabled = activeSection != null) {
+        onActiveSectionChange(null)
+    }
+
+    Column(
+        modifier = Modifier
+            .padding(contentPadding)
+            .fillMaxSize()
+    ) {
             AnimatedContent(
                 targetState = activeSection,
                 transitionSpec = {
@@ -343,37 +316,37 @@ fun SettingsScreen(
                             title = "About",
                             subtitle = "App information, updates, and licenses",
                             icon = Icons.Outlined.Info,
-                            onClick = { activeSection = "About" }
+                            onClick = { onActiveSectionChange("About") }
                         )
                         CategoryCard(
                             title = "General",
                             subtitle = "App preferences and customizations",
                             icon = Icons.Outlined.Settings,
-                            onClick = { activeSection = "General" }
+                            onClick = { onActiveSectionChange("General") }
                         )
                         CategoryCard(
                             title = "Privacy & Security",
                             subtitle = "Fine grained control over your data",
                             icon = Icons.Outlined.Shield,
-                            onClick = { activeSection = "Privacy & Security" }
+                            onClick = { onActiveSectionChange("Privacy & Security") }
                         )
                         CategoryCard(
                             title = "Look & Feel",
                             subtitle = "Autoplay preferences and playback options",
                             icon = Icons.Outlined.Palette,
-                            onClick = { activeSection = "Look & Feel" }
+                            onClick = { onActiveSectionChange("Look & Feel") }
                         )
                         CategoryCard(
                             title = "Layout & Navigation",
                             subtitle = "Customize app dock, grid size, and shapes",
                             icon = Icons.Outlined.Tune,
-                            onClick = { activeSection = "Layout & Navigation" }
+                            onClick = { onActiveSectionChange("Layout & Navigation") }
                         )
                         CategoryCard(
                             title = "Cloud Backup",
                             subtitle = "Telegram cloud and backup options",
                             icon = Icons.Outlined.Cloud,
-                            onClick = { activeSection = "Cloud Backup" }
+                            onClick = { onActiveSectionChange("Cloud Backup") }
                         )
                         CategoryCard(
                             title = "Private Space",
@@ -394,13 +367,13 @@ fun SettingsScreen(
                             title = "Excluded Folders",
                             subtitle = "Hide folders from the main gallery",
                             icon = Icons.Outlined.FolderOff,
-                            onClick = { activeSection = "Excluded Folders" }
+                            onClick = { onActiveSectionChange("Excluded Folders") }
                         )
                         CategoryCard(
                             title = "Smart Search & OCR",
                             subtitle = "Local text search and semantic search options",
                             icon = Icons.Outlined.AutoAwesome,
-                            onClick = { activeSection = "Smart Search & OCR" }
+                            onClick = { onActiveSectionChange("Smart Search & OCR") }
                         )
                     }
                 } else {
@@ -2206,7 +2179,7 @@ fun SettingsScreen(
                                         ListItem(
                                             leadingContent = { Icon(Icons.Outlined.Info, contentDescription = null) },
                                             headlineContent = { Text("Version") },
-                                            supportingContent = { Text("v1.0.0 (Material 3 Expressive)") },
+                                            supportingContent = { Text("v2.0.0 (Material 3 Expressive)") },
                                             colors = ListItemDefaults.colors(containerColor = Color.Transparent)
                                         )
                                         
@@ -2234,7 +2207,6 @@ fun SettingsScreen(
                 }
             }
         }
-    }
 }
 
 @Composable
