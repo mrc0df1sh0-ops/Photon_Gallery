@@ -50,7 +50,7 @@ import androidx.compose.material.icons.automirrored.outlined.Sort
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material.icons.outlined.Shield
-import androidx.compose.material.icons.outlined.CloudUpload
+import androidx.compose.material.icons.outlined.Cloud
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.ArrowDropDown
 import androidx.compose.material.icons.automirrored.outlined.DriveFileMove
@@ -176,6 +176,7 @@ fun MainAppLayout(
     var showMenu by remember { mutableStateOf(false) }
     var showCreateAlbumDialog by remember { mutableStateOf(false) }
     var newAlbumName by remember { mutableStateOf("") }
+    var settingsActiveSection by remember { mutableStateOf<String?>(null) }
     val navBackStackEntry by nestedNavController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
     val isScrollDockVisible by viewModel.isScrollDockVisible.collectAsState()
@@ -367,16 +368,15 @@ fun MainAppLayout(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
         topBar = {
-            if (currentRoute != "settings") {
-                Column(
-                    modifier = Modifier
-                        .background(MaterialTheme.colorScheme.surfaceContainerLow)
-                        .statusBarsPadding()
-                ) {
+            Column(
+                modifier = Modifier
+                    .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                    .statusBarsPadding()
+            ) {
                     if (isSelectionMode) {
                         Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh) {
                             Row(
-                                modifier = Modifier.fillMaxWidth().height(72.dp).padding(horizontal = 4.dp),
+                                modifier = Modifier.fillMaxWidth().height(72.dp).padding(horizontal = 8.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 IconButton(onClick = { viewModel.clearSelection() }) {
@@ -398,7 +398,7 @@ fun MainAppLayout(
                                 ) { count ->
                                     Text(
                                         "$count Selected",
-                                        style = MaterialTheme.typography.titleLarge
+                                        style = MaterialTheme.typography.titleMedium
                                     )
                                 }
                                 IconButton(onClick = { viewModel.toggleSelectAll() }) {
@@ -412,7 +412,7 @@ fun MainAppLayout(
                     } else if (currentRoute == "album/{bucketName}") {
                         Surface(color = MaterialTheme.colorScheme.surfaceContainerLow) {
                             Row(
-                                modifier = Modifier.fillMaxWidth().height(72.dp).padding(horizontal = 4.dp),
+                                modifier = Modifier.fillMaxWidth().height(72.dp).padding(horizontal = 8.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 IconButton(onClick = { nestedNavController.popBackStack() }) {
@@ -425,6 +425,28 @@ fun MainAppLayout(
                                 }
                                 Text(
                                     friendlyTitle,
+                                    style = MaterialTheme.typography.titleLarge,
+                                    modifier = Modifier.padding(start = 16.dp).weight(1f)
+                                )
+                            }
+                        }
+                    } else if (currentRoute == "settings") {
+                        Surface(color = MaterialTheme.colorScheme.surfaceContainerLow) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().height(72.dp).padding(horizontal = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                IconButton(onClick = {
+                                    if (settingsActiveSection != null) {
+                                        settingsActiveSection = null
+                                    } else {
+                                        nestedNavController.popBackStack()
+                                    }
+                                }) {
+                                    Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
+                                }
+                                Text(
+                                    settingsActiveSection ?: "Settings",
                                     style = MaterialTheme.typography.titleLarge,
                                     modifier = Modifier.padding(start = 16.dp).weight(1f)
                                 )
@@ -453,15 +475,72 @@ fun MainAppLayout(
                                 )
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     if (currentRoute == "photos") {
-                                        IconButton(onClick = { nestedNavController.navigate("search") {
-                                            popUpTo("photos") { inclusive = false }
-                                            launchSingleTop = true
-                                        } }) {
-                                            Icon(
-                                                imageVector = Icons.Outlined.Search,
-                                                contentDescription = "Search",
-                                                tint = MaterialTheme.colorScheme.onSurface
-                                            )
+                                        var showPhotoSortMenu by remember { mutableStateOf(false) }
+                                        Box {
+                                            IconButton(onClick = { showPhotoSortMenu = true }) {
+                                                Icon(
+                                                    imageVector = Icons.AutoMirrored.Outlined.Sort,
+                                                    contentDescription = "Sort",
+                                                    tint = MaterialTheme.colorScheme.onSurface
+                                                )
+                                            }
+                                            DropdownMenu(
+                                                expanded = showPhotoSortMenu,
+                                                onDismissRequest = { showPhotoSortMenu = false },
+                                                shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+                                                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                                            ) {
+                                                DropdownMenuItem(
+                                                    text = { Text("Newest to Oldest") },
+                                                    trailingIcon = {
+                                                        androidx.compose.material3.RadioButton(
+                                                            selected = sortOrder == SortOrder.NewToOld,
+                                                            onClick = null
+                                                        )
+                                                    },
+                                                    onClick = { viewModel.setSortOrder(SortOrder.NewToOld); showPhotoSortMenu = false }
+                                                )
+                                                DropdownMenuItem(
+                                                    text = { Text("Oldest to Newest") },
+                                                    trailingIcon = {
+                                                        androidx.compose.material3.RadioButton(
+                                                            selected = sortOrder == SortOrder.OldToNew,
+                                                            onClick = null
+                                                        )
+                                                    },
+                                                    onClick = { viewModel.setSortOrder(SortOrder.OldToNew); showPhotoSortMenu = false }
+                                                )
+                                                DropdownMenuItem(
+                                                    text = { Text("Largest to Smallest") },
+                                                    trailingIcon = {
+                                                        androidx.compose.material3.RadioButton(
+                                                            selected = sortOrder == SortOrder.BigToSmall,
+                                                            onClick = null
+                                                        )
+                                                    },
+                                                    onClick = { viewModel.setSortOrder(SortOrder.BigToSmall); showPhotoSortMenu = false }
+                                                )
+                                                DropdownMenuItem(
+                                                    text = { Text("Smallest to Largest") },
+                                                    trailingIcon = {
+                                                        androidx.compose.material3.RadioButton(
+                                                            selected = sortOrder == SortOrder.SmallToBig,
+                                                            onClick = null
+                                                        )
+                                                    },
+                                                    onClick = { viewModel.setSortOrder(SortOrder.SmallToBig); showPhotoSortMenu = false }
+                                                )
+                                                DropdownMenuItem(
+                                                    text = { Text("A to Z") },
+                                                    trailingIcon = {
+                                                        androidx.compose.material3.RadioButton(
+                                                            selected = sortOrder == SortOrder.NameAsc,
+                                                            onClick = null
+                                                        )
+                                                    },
+                                                    onClick = { viewModel.setSortOrder(SortOrder.NameAsc); showPhotoSortMenu = false }
+                                                )
+                                            }
                                         }
                                     }
                                     if (currentRoute == "albums") {
@@ -537,11 +616,8 @@ fun MainAppLayout(
                     if (currentRoute == "photos" && !isSelectionMode) {
                         QuickFilterRow(
                             selectedFilter = selectedFilter,
-                            onFilterSelected = { viewModel.setFilter(it) },
-                            sortOrder = sortOrder,
-                            onSortOrderSelected = { viewModel.setSortOrder(it) }
+                            onFilterSelected = { viewModel.setFilter(it) }
                         )
-                    }
                 }
             }
         },
@@ -562,17 +638,17 @@ fun MainAppLayout(
                     ) {
                         HorizontalFloatingToolbar(
                             expanded = true,
-                            modifier = Modifier.fillMaxWidth(0.765f)
+                            modifier = Modifier.fillMaxWidth(0.80f)
                         ) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 13.dp, vertical = 0.dp),
-                                horizontalArrangement = Arrangement.SpaceEvenly,
+                                    .padding(horizontal = 10.dp, vertical = 0.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 DockItem(
-                                    icon = { Icon(Icons.Outlined.Image, contentDescription = "Photos", modifier = Modifier.size(19.dp)) },
+                                    icon = { Icon(Icons.Outlined.Image, contentDescription = "Photos", modifier = Modifier.size(20.dp)) },
                                     label = "Photos",
                                     isSelected = currentRoute == "photos",
                                     onClick = { nestedNavController.navigate("photos") {
@@ -582,7 +658,7 @@ fun MainAppLayout(
                                     } }
                                 )
                                 DockItem(
-                                    icon = { Icon(Icons.Outlined.PhotoAlbum, contentDescription = "Albums", modifier = Modifier.size(19.dp)) },
+                                    icon = { Icon(Icons.Outlined.PhotoAlbum, contentDescription = "Albums", modifier = Modifier.size(20.dp)) },
                                     label = "Albums",
                                     isSelected = currentRoute?.startsWith("album") == true,
                                     onClick = { nestedNavController.navigate("albums") {
@@ -592,20 +668,20 @@ fun MainAppLayout(
                                     } }
                                 )
                                 DockItem(
-                                    icon = { MagicSearchIcon(modifier = Modifier.size(19.dp)) },
-                                    label = "Search",
-                                    isSelected = currentRoute == "search",
-                                    onClick = { nestedNavController.navigate("search") {
+                                    icon = { Icon(Icons.Outlined.Cloud, contentDescription = "Cloud", modifier = Modifier.size(20.dp)) },
+                                    label = "Cloud",
+                                    isSelected = currentRoute == "cloud",
+                                    onClick = { nestedNavController.navigate("cloud") {
                                         popUpTo("photos") { saveState = true }
                                         launchSingleTop = true
                                         restoreState = true
                                     } }
                                 )
                                 DockItem(
-                                    icon = { Icon(Icons.Outlined.CloudUpload, contentDescription = "Cloud", modifier = Modifier.size(19.dp)) },
-                                    label = "Cloud",
-                                    isSelected = currentRoute == "cloud",
-                                    onClick = { nestedNavController.navigate("cloud") {
+                                    icon = { MagicSearchIcon(modifier = Modifier.size(20.dp)) },
+                                    label = "Search",
+                                    isSelected = currentRoute == "search",
+                                    onClick = { nestedNavController.navigate("search") {
                                         popUpTo("photos") { saveState = true }
                                         launchSingleTop = true
                                         restoreState = true
@@ -615,53 +691,56 @@ fun MainAppLayout(
                         }
                     }
                 } else {
-                    androidx.compose.foundation.layout.Column(
+                    androidx.compose.material3.Surface(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .background(MaterialTheme.colorScheme.surfaceContainer)
-                            .navigationBarsPadding()
+                            .fillMaxWidth(),
+                        color = MaterialTheme.colorScheme.surfaceContainer,
+                        tonalElevation = 0.dp
                     ) {
-                        NavigationBar(
-                            modifier = Modifier.height(60.dp),
-                            containerColor = Color.Transparent,
-                            tonalElevation = 0.dp,
-                            windowInsets = androidx.compose.foundation.layout.WindowInsets(0.dp)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .navigationBarsPadding()
+                                .height(60.dp)
+                                .padding(horizontal = 12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            NavigationBarItem(
-                                icon = { Icon(Icons.Outlined.Image, contentDescription = "Photos") },
-                                label = { Text("Photos") },
-                                selected = currentRoute == "photos",
+                            DockItem(
+                                icon = { Icon(Icons.Outlined.Image, contentDescription = "Photos", modifier = Modifier.size(20.dp)) },
+                                label = "Photos",
+                                isSelected = currentRoute == "photos",
                                 onClick = { nestedNavController.navigate("photos") {
                                     popUpTo("photos") { saveState = true }
                                     launchSingleTop = true
                                     restoreState = true
                                 } }
                             )
-                            NavigationBarItem(
-                                icon = { Icon(Icons.Outlined.PhotoAlbum, contentDescription = "Albums") },
-                                label = { Text("Albums") },
-                                selected = currentRoute?.startsWith("album") == true,
+                            DockItem(
+                                icon = { Icon(Icons.Outlined.PhotoAlbum, contentDescription = "Albums", modifier = Modifier.size(20.dp)) },
+                                label = "Albums",
+                                isSelected = currentRoute?.startsWith("album") == true,
                                 onClick = { nestedNavController.navigate("albums") {
                                     popUpTo("photos") { saveState = true }
                                     launchSingleTop = true
                                     restoreState = true
                                 } }
                             )
-                            NavigationBarItem(
-                                icon = { MagicSearchIcon(modifier = Modifier.size(24.dp)) },
-                                label = { Text("Search") },
-                                selected = currentRoute == "search",
-                                onClick = { nestedNavController.navigate("search") {
+                            DockItem(
+                                icon = { Icon(Icons.Outlined.Cloud, contentDescription = "Cloud", modifier = Modifier.size(20.dp)) },
+                                label = "Cloud",
+                                isSelected = currentRoute == "cloud",
+                                onClick = { nestedNavController.navigate("cloud") {
                                     popUpTo("photos") { saveState = true }
                                     launchSingleTop = true
                                     restoreState = true
                                 } }
                             )
-                            NavigationBarItem(
-                                icon = { Icon(Icons.Outlined.CloudUpload, contentDescription = "Cloud") },
-                                label = { Text("Cloud") },
-                                selected = currentRoute == "cloud",
-                                onClick = { nestedNavController.navigate("cloud") {
+                            DockItem(
+                                icon = { MagicSearchIcon(modifier = Modifier.size(20.dp)) },
+                                label = "Search",
+                                isSelected = currentRoute == "search",
+                                onClick = { nestedNavController.navigate("search") {
                                     popUpTo("photos") { saveState = true }
                                     launchSingleTop = true
                                     restoreState = true
@@ -813,7 +892,9 @@ fun MainAppLayout(
                     contentPadding = innerPadding,
                     galleryViewModel = viewModel,
                     onBackClick = { nestedNavController.popBackStack() },
-                    onNavigateToVault = onNavigateToVault
+                    onNavigateToVault = onNavigateToVault,
+                    activeSection = settingsActiveSection,
+                    onActiveSectionChange = { settingsActiveSection = it }
                 )
             }
             composable("cloud") {
@@ -1437,7 +1518,7 @@ fun MainAppLayout(
                                 if (hasUnbackedUp) {
                                     DropdownMenuItem(
                                         text = { Text("Backup to Cloud") },
-                                        leadingIcon = { Icon(Icons.Outlined.CloudUpload, contentDescription = null) },
+                                        leadingIcon = { Icon(Icons.Outlined.Cloud, contentDescription = null) },
                                         onClick = { moreMenuExpanded = false; viewModel.backupSelectedMedia() }
                                     )
                                 }
