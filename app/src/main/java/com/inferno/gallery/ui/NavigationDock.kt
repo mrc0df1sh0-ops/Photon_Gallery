@@ -44,18 +44,16 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 @Composable
 fun QuickFilterRow(
     selectedFilter: Int,
-    onFilterSelected: (Int) -> Unit,
-    sortOrder: SortOrder,
-    onSortOrderSelected: (SortOrder) -> Unit
+    onFilterSelected: (Int) -> Unit
 ) {
-    var showSortMenu by remember { mutableStateOf(false) }
-
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -81,75 +79,6 @@ fun QuickFilterRow(
                     icon = Icons.Outlined.CameraAlt,
                     selected = selectedFilter == 1,
                     onClick = { onFilterSelected(1) }
-                )
-            }
-        }
-        
-        Box {
-            androidx.compose.material3.IconButton(
-                onClick = { showSortMenu = true }
-            ) {
-                androidx.compose.material3.Icon(
-                    imageVector = Icons.AutoMirrored.Outlined.Sort,
-                    contentDescription = "Sort",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            DropdownMenu(
-                expanded = showSortMenu,
-                onDismissRequest = { showSortMenu = false },
-                shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
-                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-            ) {
-                DropdownMenuItem(
-                    text = { Text("Newest to Oldest") },
-                    trailingIcon = {
-                        androidx.compose.material3.RadioButton(
-                            selected = sortOrder == SortOrder.NewToOld,
-                            onClick = null
-                        )
-                    },
-                    onClick = { onSortOrderSelected(SortOrder.NewToOld); showSortMenu = false }
-                )
-                DropdownMenuItem(
-                    text = { Text("Oldest to Newest") },
-                    trailingIcon = {
-                        androidx.compose.material3.RadioButton(
-                            selected = sortOrder == SortOrder.OldToNew,
-                            onClick = null
-                        )
-                    },
-                    onClick = { onSortOrderSelected(SortOrder.OldToNew); showSortMenu = false }
-                )
-                DropdownMenuItem(
-                    text = { Text("Largest to Smallest") },
-                    trailingIcon = {
-                        androidx.compose.material3.RadioButton(
-                            selected = sortOrder == SortOrder.BigToSmall,
-                            onClick = null
-                        )
-                    },
-                    onClick = { onSortOrderSelected(SortOrder.BigToSmall); showSortMenu = false }
-                )
-                DropdownMenuItem(
-                    text = { Text("Smallest to Largest") },
-                    trailingIcon = {
-                        androidx.compose.material3.RadioButton(
-                            selected = sortOrder == SortOrder.SmallToBig,
-                            onClick = null
-                        )
-                    },
-                    onClick = { onSortOrderSelected(SortOrder.SmallToBig); showSortMenu = false }
-                )
-                DropdownMenuItem(
-                    text = { Text("A to Z") },
-                    trailingIcon = {
-                        androidx.compose.material3.RadioButton(
-                            selected = sortOrder == SortOrder.NameAsc,
-                            onClick = null
-                        )
-                    },
-                    onClick = { onSortOrderSelected(SortOrder.NameAsc); showSortMenu = false }
                 )
             }
         }
@@ -206,10 +135,11 @@ fun DockItem(
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
+    val haptic = LocalHapticFeedback.current
     val touchScale by animateFloatAsState(
-        targetValue = if (isPressed) 0.97f else 1f,
+        targetValue = if (isPressed) 0.92f else 1f,
         animationSpec = spring(
-            dampingRatio = Spring.DampingRatioNoBouncy,
+            dampingRatio = Spring.DampingRatioMediumBouncy,
             stiffness = Spring.StiffnessHigh
         ),
         label = "dockItemScale"
@@ -245,7 +175,10 @@ fun DockItem(
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
-                onClick = onClick
+                onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onClick()
+                }
             )
             .padding(horizontal = 14.dp, vertical = 8.dp),
         contentAlignment = Alignment.Center
@@ -286,8 +219,9 @@ fun getTabRouteIndex(route: String?): Int {
     return when (route) {
         "photos" -> 0
         "albums", "album/{bucketName}" -> 1
-        "search" -> 2
-        "settings" -> 3
+        "cloud" -> 2
+        "search" -> 3
+        "settings" -> 4
         else -> 0
     }
 }
