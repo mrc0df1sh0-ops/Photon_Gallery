@@ -823,6 +823,7 @@ fun MainAppLayout(
             var expanded by remember { mutableStateOf(false) }
             var showMoveSheet by remember { mutableStateOf(false) }
             var showCopySheet by remember { mutableStateOf(false) }
+            var showShareSheet by remember { mutableStateOf(false) }
             var showSmartDeleteDialog by remember { mutableStateOf(false) }
             var showCloudDeleteDialog by remember { mutableStateOf(false) }
             var showMultiDeleteConfirmDialog by remember { mutableStateOf(false) }
@@ -839,6 +840,13 @@ fun MainAppLayout(
                 selectedIds.isNotEmpty() && selectedIds.any { id -> cloudMediaIds.contains(id) }
             }
             
+            if (showShareSheet) {
+                CustomShareSheet(
+                    uris = selectedUris.map { Uri.parse(it) },
+                    onDismiss = { showShareSheet = false }
+                )
+            }
+
             if (showMoveSheet) {
                 androidx.compose.material3.ModalBottomSheet(
                     onDismissRequest = { showMoveSheet = false },
@@ -1207,225 +1215,126 @@ fun MainAppLayout(
                     }
                 }
             } else {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                val isCreateEnabled = selectedUris.size in 1..8
+                val isStitchEnabled = selectedUris.size >= 2
+                var createMenuExpanded by remember { mutableStateOf(false) }
+                var moreMenuExpanded by remember { mutableStateOf(false) }
+
+                Surface(
+                    shape = RoundedCornerShape(28.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    tonalElevation = 6.dp,
+                    shadowElevation = 8.dp
                 ) {
-                    val isCreateEnabled = selectedUris.size in 1..8
-                    val isStitchEnabled = selectedUris.size >= 2
-                    var createMenuExpanded by remember { mutableStateOf(false) }
-                    Box {
-                        Button(
-                            onClick = { createMenuExpanded = true },
-                            shape = RoundedCornerShape(50),
-                            elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                            ),
-                            modifier = Modifier.height(48.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Outlined.Add,
-                                contentDescription = "Create",
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(Modifier.width(6.dp))
-                            Text("Create", fontWeight = FontWeight.SemiBold)
+                    Row(
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Share
+                        IconButton(onClick = {
+                            if (selectedUris.isNotEmpty()) showShareSheet = true
+                        }) {
+                            Icon(Icons.Outlined.Share, contentDescription = "Share", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
                         }
-                        DropdownMenu(
-                            expanded = createMenuExpanded,
-                            onDismissRequest = { createMenuExpanded = false }
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text("Collage") },
-                                leadingIcon = { Icon(Icons.Outlined.GridView, contentDescription = null) },
-                                onClick = {
-                                    createMenuExpanded = false
-                                    if (isCreateEnabled) {
-                                        onCreateCollage(selectedUris.toList())
-                                    } else {
-                                        android.widget.Toast.makeText(
-                                            context,
-                                            "Collage supports up to 8 images",
-                                            android.widget.Toast.LENGTH_SHORT
-                                        ).show()
-                                    }
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Stitch") },
-                                leadingIcon = { Icon(Icons.Outlined.SwapVert, contentDescription = null) },
-                                onClick = {
-                                    createMenuExpanded = false
-                                    if (isStitchEnabled) {
-                                        onCreateStitch(selectedUris.toList())
-                                    } else {
-                                        android.widget.Toast.makeText(
-                                            context,
-                                            "Select at least 2 images to stitch",
-                                            android.widget.Toast.LENGTH_SHORT
-                                        ).show()
-                                    }
-                                }
-                            )
+
+                        // Copy
+                        IconButton(onClick = { showCopySheet = true }) {
+                            Icon(Icons.Outlined.ContentCopy, contentDescription = "Copy", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
                         }
-                    }
-                    Box {
-                    CustomSplitButton(
-                        leadingIcon = { Icon(Icons.Outlined.Share, contentDescription = null) },
-                        leadingText = "Share",
-                        onLeadingClick = {
-                            if (selectedUris.isNotEmpty()) {
-                                coroutineScope.launch {
-                                    val stripMetadata = withContext(Dispatchers.IO) {
-                                        viewModel.settingsRepository.stripMetadataOnShareFlow.first()
-                                    }
-                                    val urisToShare: List<Uri> = if (stripMetadata) {
-                                        withContext(Dispatchers.IO) {
-                                            val shareDir = File(context.cacheDir, "shared_images").also { it.mkdirs() }
-                                            selectedUris.toList().mapIndexed { idx, uriStr ->
-                                                val uri = Uri.parse(uriStr)
-                                                try {
-                                                    val extension = context.contentResolver.getType(uri)?.substringAfter("/") ?: "jpg"
-                                                    val tempFile = File(shareDir, "share_${System.currentTimeMillis()}_$idx.$extension")
-                                                    context.contentResolver.openInputStream(uri)?.use { input ->
-                                                        tempFile.outputStream().use { output -> input.copyTo(output) }
-                                                    }
-                                                    val exif = androidx.exifinterface.media.ExifInterface(tempFile.absolutePath)
-                                                    val piiTags = listOf(
-                                                        androidx.exifinterface.media.ExifInterface.TAG_GPS_LATITUDE,
-                                                        androidx.exifinterface.media.ExifInterface.TAG_GPS_LATITUDE_REF,
-                                                        androidx.exifinterface.media.ExifInterface.TAG_GPS_LONGITUDE,
-                                                        androidx.exifinterface.media.ExifInterface.TAG_GPS_LONGITUDE_REF,
-                                                        androidx.exifinterface.media.ExifInterface.TAG_GPS_ALTITUDE,
-                                                        androidx.exifinterface.media.ExifInterface.TAG_GPS_ALTITUDE_REF,
-                                                        androidx.exifinterface.media.ExifInterface.TAG_GPS_TIMESTAMP,
-                                                        androidx.exifinterface.media.ExifInterface.TAG_GPS_DATESTAMP,
-                                                        androidx.exifinterface.media.ExifInterface.TAG_GPS_PROCESSING_METHOD,
-                                                        androidx.exifinterface.media.ExifInterface.TAG_GPS_DEST_BEARING,
-                                                        androidx.exifinterface.media.ExifInterface.TAG_GPS_DEST_DISTANCE,
-                                                        androidx.exifinterface.media.ExifInterface.TAG_GPS_SPEED,
-                                                        androidx.exifinterface.media.ExifInterface.TAG_GPS_TRACK,
-                                                        androidx.exifinterface.media.ExifInterface.TAG_GPS_IMG_DIRECTION,
-                                                        androidx.exifinterface.media.ExifInterface.TAG_MAKE,
-                                                        androidx.exifinterface.media.ExifInterface.TAG_MODEL,
-                                                        androidx.exifinterface.media.ExifInterface.TAG_SOFTWARE,
-                                                        androidx.exifinterface.media.ExifInterface.TAG_ARTIST,
-                                                        androidx.exifinterface.media.ExifInterface.TAG_COPYRIGHT,
-                                                        androidx.exifinterface.media.ExifInterface.TAG_USER_COMMENT,
-                                                        androidx.exifinterface.media.ExifInterface.TAG_DATETIME,
-                                                        androidx.exifinterface.media.ExifInterface.TAG_DATETIME_ORIGINAL,
-                                                        androidx.exifinterface.media.ExifInterface.TAG_DATETIME_DIGITIZED,
-                                                        androidx.exifinterface.media.ExifInterface.TAG_OFFSET_TIME,
-                                                        androidx.exifinterface.media.ExifInterface.TAG_OFFSET_TIME_ORIGINAL
-                                                    )
-                                                    piiTags.forEach { tag -> exif.setAttribute(tag, null) }
-                                                    exif.saveAttributes()
-                                                    FileProvider.getUriForFile(
-                                                        context,
-                                                        "${context.packageName}.fileprovider",
-                                                        tempFile
-                                                    )
-                                                } catch (e: Exception) {
-                                                    android.util.Log.e("MainAppLayout", "Failed to strip metadata for $uriStr", e)
-                                                    uri  // Fallback to original
-                                                }
-                                            }
+
+                        // Move
+                        IconButton(onClick = { showMoveSheet = true }) {
+                            Icon(Icons.AutoMirrored.Outlined.DriveFileMove, contentDescription = "Move", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
+                        }
+
+                        // Create (Collage/Stitch)
+                        Box {
+                            IconButton(onClick = { createMenuExpanded = true }) {
+                                Icon(Icons.Outlined.Add, contentDescription = "Create", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
+                            }
+                            DropdownMenu(
+                                expanded = createMenuExpanded,
+                                onDismissRequest = { createMenuExpanded = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("Collage") },
+                                    leadingIcon = { Icon(Icons.Outlined.GridView, contentDescription = null) },
+                                    onClick = {
+                                        createMenuExpanded = false
+                                        if (isCreateEnabled) {
+                                            onCreateCollage(selectedUris.toList())
+                                        } else {
+                                            android.widget.Toast.makeText(context, "Collage supports up to 8 images", android.widget.Toast.LENGTH_SHORT).show()
                                         }
-                                    } else {
-                                        selectedUris.map { Uri.parse(it) }
                                     }
-                                    val shareIntent = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
-                                        type = "*/*"
-                                        putParcelableArrayListExtra(Intent.EXTRA_STREAM, ArrayList(urisToShare))
-                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Stitch") },
+                                    leadingIcon = { Icon(Icons.Outlined.SwapVert, contentDescription = null) },
+                                    onClick = {
+                                        createMenuExpanded = false
+                                        if (isStitchEnabled) {
+                                            onCreateStitch(selectedUris.toList())
+                                        } else {
+                                            android.widget.Toast.makeText(context, "Select at least 2 images to stitch", android.widget.Toast.LENGTH_SHORT).show()
+                                        }
                                     }
+                                )
+                            }
+                        }
+
+                        // Delete
+                        IconButton(onClick = {
+                            if (hasBackedUp) {
+                                showSmartDeleteDialog = true
+                            } else if (confirmDeleteEnabled) {
+                                showMultiDeleteConfirmDialog = true
+                            } else {
+                                val uris = selectedUris.map { Uri.parse(it) }
+                                if (uris.isNotEmpty()) {
                                     try {
-                                        context.startActivity(Intent.createChooser(shareIntent, "Share Selected Media"))
+                                        val trashIntent = android.provider.MediaStore.createTrashRequest(context.contentResolver, uris, true)
+                                        trashLauncher.launch(androidx.activity.result.IntentSenderRequest.Builder(trashIntent.intentSender).build())
                                     } catch (e: Exception) {
                                         e.printStackTrace()
+                                        android.widget.Toast.makeText(context, "Error: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
                                     }
                                 }
                             }
-                        },
-                        onTrailingClick = { expanded = true }
-                    )
-                    androidx.compose.material3.DropdownMenu(
-                        expanded = expanded,
-                        onDismissRequest = { expanded = false }
-                    ) {
-
-                        DropdownMenuItem(
-                            text = { Text("Move") },
-                            leadingIcon = { Icon(Icons.AutoMirrored.Outlined.DriveFileMove, contentDescription = null) },
-                            onClick = { 
-                                expanded = false
-                                showMoveSheet = true
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Copy to Album") },
-                            leadingIcon = { Icon(Icons.Outlined.ContentCopy, contentDescription = null) },
-                            onClick = { 
-                                expanded = false
-                                showCopySheet = true
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Delete") },
-                            leadingIcon = { Icon(Icons.Outlined.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
-                            onClick = {
-                                expanded = false
-                                if (hasBackedUp) {
-                                    showSmartDeleteDialog = true
-                                } else {
-                                    if (confirmDeleteEnabled) {
-                                        showMultiDeleteConfirmDialog = true
-                                    } else {
-                                        val uris = selectedUris.map { Uri.parse(it) }
-                                        if (uris.isNotEmpty()) {
-                                            try {
-                                                val trashIntent = android.provider.MediaStore.createTrashRequest(
-                                                    context.contentResolver,
-                                                    uris,
-                                                    true
-                                                )
-                                                trashLauncher.launch(
-                                                    androidx.activity.result.IntentSenderRequest.Builder(trashIntent.intentSender).build()
-                                                )
-                                            } catch (e: Exception) {
-                                                e.printStackTrace()
-                                                android.widget.Toast.makeText(context, "Error: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        )
-                        if (hasUnbackedUp) {
-                            DropdownMenuItem(
-                                text = { Text("Backup to Cloud") },
-                                leadingIcon = { Icon(Icons.Outlined.CloudUpload, contentDescription = null) },
-                                onClick = { 
-                                    expanded = false
-                                    viewModel.backupSelectedMedia()
-                                }
-                            )
+                        }) {
+                            Icon(Icons.Outlined.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(22.dp))
                         }
-                        if (hasBackedUp) {
-                            DropdownMenuItem(
-                                text = { Text("Delete from Cloud") },
-                                leadingIcon = { Icon(Icons.Outlined.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
-                                onClick = {
-                                    expanded = false
-                                    showCloudDeleteDialog = true
+
+                        // More (cloud actions)
+                        if (hasUnbackedUp || hasBackedUp) {
+                            Box {
+                                IconButton(onClick = { moreMenuExpanded = true }) {
+                                    Icon(Icons.Outlined.MoreVert, contentDescription = "More", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(22.dp))
                                 }
-                            )
+                                DropdownMenu(
+                                    expanded = moreMenuExpanded,
+                                    onDismissRequest = { moreMenuExpanded = false }
+                                ) {
+                                    if (hasUnbackedUp) {
+                                        DropdownMenuItem(
+                                            text = { Text("Backup to Cloud") },
+                                            leadingIcon = { Icon(Icons.Outlined.CloudUpload, contentDescription = null) },
+                                            onClick = { moreMenuExpanded = false; viewModel.backupSelectedMedia() }
+                                        )
+                                    }
+                                    if (hasBackedUp) {
+                                        DropdownMenuItem(
+                                            text = { Text("Delete from Cloud") },
+                                            leadingIcon = { Icon(Icons.Outlined.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+                                            onClick = { moreMenuExpanded = false; showCloudDeleteDialog = true }
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }
-            }
             }
         }
     }
