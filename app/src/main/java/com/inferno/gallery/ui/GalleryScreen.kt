@@ -74,6 +74,8 @@ import androidx.compose.material.icons.outlined.CloudUpload
 import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material.icons.outlined.Warning
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.runtime.mutableFloatStateOf
@@ -92,6 +94,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -467,7 +470,7 @@ fun GalleryGridItem(
             .memoryCachePolicy(CachePolicy.ENABLED)
             .diskCachePolicy(cachePolicy)
             .networkCachePolicy(CachePolicy.ENABLED)
-            .crossfade(100)
+            .crossfade(false)
             .apply {
                 if (item.isVideo || !gridAutoPlay) {
                     videoFrameMillis(0)
@@ -853,100 +856,148 @@ fun FastScroller(
     var isDragging by remember { mutableStateOf(false) }
     var dragOffset by remember { mutableStateOf(0f) }
     var boxHeight by remember { mutableStateOf(0f) }
-    
+
     val haptic = LocalHapticFeedback.current
     var currentDateString by remember { mutableStateOf("") }
-    
-    val thumbHeight = if (isDragging) 48.dp else 36.dp
-    val thumbWidth = if (isDragging) 8.dp else 4.dp
-    
-    val animatedThumbHeight by animateDpAsState(
-        targetValue = thumbHeight, 
-        animationSpec = spring(stiffness = Spring.StiffnessMediumLow), label = "thumbH"
-    )
-    val animatedThumbWidth by animateDpAsState(
-        targetValue = thumbWidth, 
-        animationSpec = spring(stiffness = Spring.StiffnessMediumLow), label = "thumbW"
-    )
 
     val density = LocalDensity.current
-    val thumbHeightPx = with(density) { 48.dp.toPx() }
-    // Hoist formatter so it is created once, not on every drag frame.
-    val dateFormatter = remember { SimpleDateFormat("MMMM yyyy", Locale.getDefault()) }
+    val pillHeight = with(density) { 56.dp.toPx() }
 
-    // Smoothly animate thumb position when user is NOT dragging (passive scroll tracking)
-    val animatedDragOffset = remember { androidx.compose.animation.core.Animatable(0f) }
-    LaunchedEffect(lazyGridState, boxHeight, isDragging, totalItems) {
+    val dateFormatter = remember { SimpleDateFormat("MMM yyyy", Locale.getDefault()) }
+
+    // Frame-accurate pill position — uses actual layout measurements, zero quantization
+    val passiveOffset by remember(totalItems, boxHeight) {
+        derivedStateOf {
+            if (totalItems <= 0 || boxHeight <= pillHeight) return@derivedStateOf 0f
+            val layoutInfo = lazyGridState.layoutInfo
+            val firstItem = layoutInfo.visibleItemsInfo.firstOrNull()
+                ?: return@derivedStateOf 0f
+            val itemHeight = firstItem.size.height.toFloat().coerceAtLeast(1f)
+            // Pixel-precise: how far the first visible item is scrolled off the top
+            val scrolledPx = -firstItem.offset.y.toFloat()
+            val fraction = scrolledPx / itemHeight
+            val pct = (firstItem.index + fraction) / totalItems
+            (pct * (boxHeight - pillHeight)).coerceIn(0f, boxHeight - pillHeight)
+        }
+    }
+
+    // Update date label during passive scroll
+    LaunchedEffect(lazyGridState) {
         snapshotFlow { lazyGridState.firstVisibleItemIndex }.collectLatest { firstVisible ->
-            if (!isDragging && totalItems > 0 && boxHeight > thumbHeightPx) {
-                val currentPct = firstVisible.toFloat() / totalItems
-                val newOffset = currentPct * (boxHeight - thumbHeightPx)
-                animatedDragOffset.animateTo(
-                    newOffset,
-                    animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium)
-                )
+            if (!isDragging && images.isNotEmpty() && totalItems > 0) {
+                val pct = firstVisible.toFloat() / totalItems
+                val idx = (pct * images.size).toInt().coerceIn(0, images.size - 1)
+                val itemDate = images.getOrNull(idx)?.dateAdded
+                if (itemDate != null) {
+                    currentDateString = dateFormatter.format(Date(itemDate * 1000L))
+                }
             }
         }
     }
-    // Sync the animated value to dragOffset when not dragging
-    val effectiveDragOffset = if (isDragging) dragOffset else animatedDragOffset.value
+
+    val effectiveOffset = if (isDragging) dragOffset else passiveOffset
 
     var targetIndex by remember { mutableStateOf(-1) }
-
     LaunchedEffect(targetIndex) {
         if (targetIndex >= 0) {
-            delay(16)
             lazyGridState.scrollToItem(targetIndex)
         }
     }
 
-    val isVisible = lazyGridState.isScrollInProgress || isDragging
+    // Show during scroll or drag, auto-hide after 1.5s idle
+    var showScroller by remember { mutableStateOf(false) }
+    LaunchedEffect(lazyGridState.isScrollInProgress, isDragging) {
+        if (lazyGridState.isScrollInProgress || isDragging) {
+            showScroller = true
+        } else {
+            delay(1500)
+            showScroller = false
+        }
+    }
 
     AnimatedVisibility(
-        visible = isVisible,
-        enter = fadeIn(spring(stiffness = Spring.StiffnessMedium)) + slideInHorizontally(spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium)) { it },
-        exit = fadeOut(spring(stiffness = Spring.StiffnessMedium)) + slideOutHorizontally(spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium)) { it },
+        visible = showScroller,
+        enter = fadeIn(spring(stiffness = Spring.StiffnessMedium)) +
+                slideInHorizontally(spring(stiffness = Spring.StiffnessMedium)) { it },
+        exit = fadeOut(spring(stiffness = Spring.StiffnessLow)) +
+                slideOutHorizontally(spring(stiffness = Spring.StiffnessLow)) { it },
         modifier = modifier
     ) {
         Box(
             modifier = Modifier
                 .onGloballyPositioned { boxHeight = it.size.height.toFloat() }
                 .fillMaxHeight()
-                .width(48.dp) 
+                .width(36.dp)
         ) {
+            // Date bubble — appears to the left of the pill when dragging
             AnimatedVisibility(
                 visible = isDragging && currentDateString.isNotEmpty(),
-                enter = fadeIn(spring(stiffness = Spring.StiffnessMedium)) + slideInHorizontally(spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium)) { it / 2 },
-                exit = fadeOut(spring(stiffness = Spring.StiffnessMedium)) + slideOutHorizontally(spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium)) { it / 2 },
+                enter = fadeIn(spring(stiffness = Spring.StiffnessHigh)) +
+                        scaleIn(spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium), initialScale = 0.7f),
+                exit = fadeOut(spring(stiffness = Spring.StiffnessMedium)) +
+                        scaleOut(spring(stiffness = Spring.StiffnessMedium), targetScale = 0.7f),
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .offset { IntOffset(with(density) { (-80).dp.roundToPx() }, effectiveDragOffset.roundToInt()) }
+                    .offset {
+                        IntOffset(
+                            with(density) { (-48).dp.roundToPx() },
+                            (effectiveOffset + pillHeight / 2 - with(density) { 16.dp.toPx() }).roundToInt()
+                        )
+                    }
             ) {
                 Surface(
-                    shape = androidx.compose.foundation.shape.CircleShape,
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                    shadowElevation = 4.dp
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.inverseSurface,
+                    contentColor = MaterialTheme.colorScheme.inverseOnSurface,
+                    shadowElevation = 8.dp
                 ) {
                     Text(
                         text = currentDateString,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1
                     )
                 }
             }
 
+            // The pill with arrows
             Box(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .padding(end = 4.dp)
-                    .offset { IntOffset(0, effectiveDragOffset.roundToInt()) }
-                    .size(width = animatedThumbWidth, height = animatedThumbHeight)
-                    .clip(androidx.compose.foundation.shape.CircleShape)
-                    .background(if (isDragging) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant)
-            )
+                    .offset { IntOffset(0, effectiveOffset.roundToInt()) }
+                    .width(28.dp)
+                    .height(56.dp)
+                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(14.dp))
+                    .background(
+                        if (isDragging) MaterialTheme.colorScheme.primary.copy(alpha = 0.9f)
+                        else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.25f)
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.SpaceEvenly,
+                    modifier = Modifier.fillMaxHeight().padding(vertical = 8.dp)
+                ) {
+                    val arrowColor = if (isDragging) MaterialTheme.colorScheme.onPrimary
+                                     else MaterialTheme.colorScheme.surface
+                    Icon(
+                        imageVector = Icons.Filled.KeyboardArrowUp,
+                        contentDescription = null,
+                        tint = arrowColor,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Icon(
+                        imageVector = Icons.Filled.KeyboardArrowDown,
+                        contentDescription = null,
+                        tint = arrowColor,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
 
+            // Invisible drag surface
             Spacer(
                 modifier = Modifier
                     .fillMaxSize()
@@ -954,24 +1005,23 @@ fun FastScroller(
                         detectVerticalDragGestures(
                             onDragStart = { offset ->
                                 isDragging = true
-                                if (boxHeight > thumbHeightPx) {
-                                    dragOffset = offset.y.coerceIn(0f, boxHeight - thumbHeightPx)
+                                if (boxHeight > pillHeight) {
+                                    dragOffset = offset.y.coerceIn(0f, boxHeight - pillHeight)
                                 }
                             },
                             onDragEnd = { isDragging = false },
                             onDragCancel = { isDragging = false }
                         ) { change, dragAmount ->
                             change.consume()
-                            if (boxHeight > thumbHeightPx) {
-                                dragOffset = (dragOffset + dragAmount).coerceIn(0f, boxHeight - thumbHeightPx)
-                                val percentage = dragOffset / (boxHeight - thumbHeightPx)
+                            if (boxHeight > pillHeight) {
+                                dragOffset = (dragOffset + dragAmount).coerceIn(0f, boxHeight - pillHeight)
+                                val percentage = dragOffset / (boxHeight - pillHeight)
                                 targetIndex = (percentage * totalItems).toInt().coerceIn(0, totalItems - 1)
-                                
+
                                 val imagesIndex = (percentage * images.size).toInt().coerceIn(0, maxOf(0, images.size - 1))
                                 val itemDate = images.getOrNull(imagesIndex)?.dateAdded
                                 if (itemDate != null) {
-                                    val date = Date(itemDate * 1000L)
-                                    val newDateString = dateFormatter.format(date)
+                                    val newDateString = dateFormatter.format(Date(itemDate * 1000L))
                                     if (newDateString != currentDateString) {
                                         currentDateString = newDateString
                                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)

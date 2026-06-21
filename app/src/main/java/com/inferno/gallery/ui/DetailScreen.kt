@@ -299,25 +299,7 @@ fun DetailScreen(
         contract = ActivityResultContracts.StartIntentSenderForResult()
     ) { result ->
         if (result.resultCode == android.app.Activity.RESULT_OK) {
-            val deletedPage = pendingDeletePage
-            val currentList = galleryItems
-            
             viewModel.removeMediaOptimistically(pendingDeleteItem?.uri?.toString() ?: return@rememberLauncherForActivityResult)
-            
-            // Navigate to next item if available, otherwise previous
-            if (deletedPage != null && currentList.isNotEmpty()) {
-                val newTargetIndex = when {
-                    deletedPage < currentList.size - 1 -> deletedPage // Next item takes this position
-                    deletedPage > 0 -> deletedPage - 1 // Previous item if at end
-                    else -> 0
-                }
-                if (newTargetIndex < galleryItems.size) {
-                    coroutineScope.launch {
-                        pagerState.animateScrollToPage(newTargetIndex)
-                    }
-                }
-            }
-            // Don't call onBack() - let user stay in viewer
         }
         pendingDeletePage = null
     }
@@ -326,28 +308,16 @@ fun DetailScreen(
         contract = ActivityResultContracts.StartIntentSenderForResult()
     ) { result ->
         if (result.resultCode == android.app.Activity.RESULT_OK) {
-            val deletedPage = pendingDeletePage
-            val currentList = galleryItems
-            
-            // Re-syncing logic: wait for MediaStore ContentObserver to re-add the item
-            // For immediate UI update, we can navigate away from the current item
-            
-            if (deletedPage != null && currentList.isNotEmpty()) {
-                val newTargetIndex = when {
-                    deletedPage < currentList.size - 1 -> deletedPage
-                    deletedPage > 0 -> deletedPage - 1
-                    else -> 0
-                }
-                if (newTargetIndex < galleryItems.size) {
-                    coroutineScope.launch {
-                        pagerState.animateScrollToPage(newTargetIndex)
-                    }
-                } else {
-                    onBack()
-                }
-            }
+            viewModel.removeMediaOptimistically(pendingDeleteItem?.uri?.toString() ?: return@rememberLauncherForActivityResult)
         }
         pendingDeletePage = null
+    }
+
+    // Auto-navigate after delete: if list becomes empty, go back
+    LaunchedEffect(galleryItems.size) {
+        if (galleryItems.isEmpty() && pendingDeleteItem != null) {
+            onBack()
+        }
     }
 
     var showRenameDialog by remember { mutableStateOf(false) }
@@ -644,11 +614,21 @@ fun DetailScreen(
                 val parentWidth = constraints.maxWidth.toFloat()
                 val parentHeight = constraints.maxHeight.toFloat()
                 if (item.isVideo) {
-                    VideoPlayerItem(
-                        uri = resolvedUri,
-                        isCurrentPage = page == pagerState.currentPage,
-                        modifier = Modifier.fillMaxSize()
-                    )
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        VideoPlayerItem(
+                            uri = resolvedUri,
+                            isCurrentPage = page == pagerState.currentPage,
+                            modifier = Modifier.fillMaxSize(),
+                            onTap = {
+                                if (showInfoCard || showUi) {
+                                    showInfoCard = false
+                                    showUi = false
+                                } else {
+                                    showUi = true
+                                }
+                            }
+                        )
+                    }
                 } else {
                     androidx.compose.runtime.LaunchedEffect(activeHighlight, page, pagerState.currentPage, resolvedUri) {
                         if (activeHighlight != null && page == pagerState.currentPage) {
@@ -1056,7 +1036,7 @@ fun DetailScreen(
 
 
 
-        // UI Overlay
+        // UI Overlay — Top bar: back button (left) + info button (right)
         AnimatedVisibility(
             visible = showUi,
             enter = fadeIn(spring(stiffness = Spring.StiffnessMedium)) +
@@ -1067,26 +1047,35 @@ fun DetailScreen(
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
                 .statusBarsPadding()
-                .padding(16.dp)
+                .padding(horizontal = 8.dp, vertical = 8.dp)
         ) {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(24.dp))
-                    .background(MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.8f))
-                    .padding(8.dp),
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 FilledIconButton(
                     onClick = onBack,
                     colors = IconButtonDefaults.filledIconButtonColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        containerColor = Color.Black.copy(alpha = 0.4f),
+                        contentColor = Color.White
                     )
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
                         contentDescription = "Go back"
+                    )
+                }
+                FilledIconButton(
+                    onClick = { showInfoCard = !showInfoCard },
+                    colors = IconButtonDefaults.filledIconButtonColors(
+                        containerColor = if (showInfoCard) MaterialTheme.colorScheme.primaryContainer else Color.Black.copy(alpha = 0.4f),
+                        contentColor = if (showInfoCard) MaterialTheme.colorScheme.onPrimaryContainer else Color.White
+                    )
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Info,
+                        contentDescription = "Info"
                     )
                 }
             }
@@ -1168,13 +1157,7 @@ fun DetailScreen(
                             ) { 
                                 Icon(Icons.Outlined.Delete, contentDescription = "Permanently Delete", tint = MaterialTheme.colorScheme.error) 
                             }
-                            IconButton(
-                                onClick = {
-                                    showInfoCard = !showInfoCard
-                                }
-                            ) {
-                                Icon(Icons.Outlined.Info, contentDescription = "Info")
-                            }
+
                         } else {
                             IconButton(onClick = { showShareSheet = true }) { 
                                 Icon(Icons.Outlined.Share, contentDescription = "Share") 
@@ -1286,14 +1269,7 @@ fun DetailScreen(
                                                 showRenameDialog = true
                                             }
                                         )
-                                        androidx.compose.material3.DropdownMenuItem(
-                                            text = { Text("Info") },
-                                            leadingIcon = { Icon(Icons.Outlined.Info, contentDescription = null) },
-                                            onClick = {
-                                                showMoreMenu = false
-                                                showInfoCard = !showInfoCard
-                                            }
-                                        )
+
                                         if (isLocalFileMissing && currentItem.telegramFileId != null) {
                                             androidx.compose.material3.DropdownMenuItem(
                                                 text = { Text("Download to Device") },
