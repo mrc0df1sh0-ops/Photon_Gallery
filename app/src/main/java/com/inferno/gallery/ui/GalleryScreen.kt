@@ -73,6 +73,7 @@ import androidx.compose.material.icons.outlined.CloudDownload
 import androidx.compose.material.icons.outlined.CloudUpload
 import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material.icons.outlined.Sync
+import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.runtime.mutableFloatStateOf
@@ -236,11 +237,11 @@ fun GalleryScreen(
             columns = GridCells.Fixed(gridCellsCount),
             state = lazyGridState,
         contentPadding = contentPadding,
-        verticalArrangement = Arrangement.spacedBy(2.dp),
-        horizontalArrangement = Arrangement.spacedBy(2.dp),
+        verticalArrangement = Arrangement.spacedBy(1.dp),
+        horizontalArrangement = Arrangement.spacedBy(1.dp),
         modifier = modifier
             .fillMaxSize()
-            .padding(horizontal = 2.dp)
+            .padding(horizontal = 1.dp)
             .gridZoomGestureModifier(gridCellsCount, viewModel::setGridCellsCount, isSelectionMode)
     ) {
         if (viewMode == ViewMode.Immersive) {
@@ -299,17 +300,8 @@ fun GalleryScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(start = 8.dp, end = 8.dp, top = 20.dp, bottom = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Left accent bar
-                        Box(
-                            modifier = Modifier
-                                .width(3.dp)
-                                .height(16.dp)
-                                .clip(androidx.compose.foundation.shape.RoundedCornerShape(2.dp))
-                                .background(MaterialTheme.colorScheme.primary)
-                        )
                         Text(
                             text = listItem.title.uppercase(),
                             style = MaterialTheme.typography.titleSmall.copy(
@@ -666,11 +658,22 @@ fun GalleryGridItem(
             }
         }
 
+        val isFailed = backupStatus == "FAILED"
         val isPending = backupStatus == "PENDING"
         val isBackedUp = backupStatus == "SUCCESS" || item.telegramFileId != null || item.telegramThumbFileId != null
 
         if (!isSelected) {
-            if (isPending) {
+            if (isFailed) {
+                Icon(
+                    imageVector = Icons.Outlined.Warning,
+                    contentDescription = "Backup failed",
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(8.dp)
+                        .size(20.dp)
+                )
+            } else if (isPending) {
                 var rotationTarget by remember { mutableFloatStateOf(0f) }
                 val rotation by animateFloatAsState(
                     targetValue = rotationTarget,

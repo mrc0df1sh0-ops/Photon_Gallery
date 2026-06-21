@@ -14,8 +14,8 @@ class TelegramClient(private val botToken: String, private val chatId: String) {
     
     private val client = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
-        .writeTimeout(60, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
+        .writeTimeout(120, TimeUnit.SECONDS)
+        .readTimeout(120, TimeUnit.SECONDS)
         .build()
 
     /**
@@ -365,9 +365,58 @@ class TelegramClient(private val botToken: String, private val chatId: String) {
             }
         }
     }
+    /**
+     * Calls getUpdates to discover chats where the bot has received messages or been added.
+     * Returns a deduplicated list of detected chats.
+     */
+    @Throws(IOException::class)
+    fun getRecentChatIds(): List<DetectedChat> {
+        val request = Request.Builder()
+            .url("https://api.telegram.org/bot$botToken/getUpdates?limit=100")
+            .header("User-Agent", "PhotonGalleryApp/1.0 (Android; Jetpack Compose)")
+            .build()
+
+        client.newCall(request).execute().use { response ->
+            val bodyString = response.body?.string() ?: ""
+            if (!response.isSuccessful) {
+                throw IOException("getUpdates failed with HTTP ${response.code}")
+            }
+            val json = JSONObject(bodyString)
+            if (!json.optBoolean("ok", false)) {
+                throw IOException("getUpdates API error: ${json.optString("description")}")
+            }
+
+            val results = json.optJSONArray("result") ?: return emptyList()
+            val seen = mutableMapOf<Long, DetectedChat>()
+
+            for (i in 0 until results.length()) {
+                val update = results.getJSONObject(i)
+
+                // Check message.chat
+                val messageChat = update.optJSONObject("message")?.optJSONObject("chat")
+                    ?: update.optJSONObject("my_chat_member")?.optJSONObject("chat")
+                    ?: update.optJSONObject("channel_post")?.optJSONObject("chat")
+
+                if (messageChat != null) {
+                    val chatId = messageChat.getLong("id")
+                    if (!seen.containsKey(chatId)) {
+                        seen[chatId] = DetectedChat(
+                            id = chatId,
+                            title = messageChat.optString("title", "")
+                                .ifBlank { messageChat.optString("first_name", "Private Chat") },
+                            type = messageChat.optString("type", "unknown")
+                        )
+                    }
+                }
+            }
+            return seen.values.toList()
+        }
+    }
 }
 
 data class UploadResult(val fileId: String, val thumbFileId: String, val messageId: Long)
+
+data class DetectedChat(val id: Long, val title: String, val type: String)
 
 class TelegramApiException(val code: Int, val description: String, message: String) : IOException(message)
 

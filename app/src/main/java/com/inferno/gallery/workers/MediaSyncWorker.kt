@@ -71,7 +71,7 @@ class MediaSyncWorker(
                 val autoBackupEnabled = settingsRepo.telegramBackupEnabledFlow.first()
                 if (autoBackupEnabled) {
                     val autoBackupFolders = settingsRepo.telegramAutoBackupFoldersFlow.first()
-                    val toBackup = toInsert.filter { autoBackupFolders.contains(it.bucketName) }
+                    val toBackup = toInsert.filter { autoBackupFolders.contains(it.bucketName) && !it.isVideo }
                     if (toBackup.isNotEmpty()) {
                         Log.d("MediaSyncWorker", "Auto-queueing ${toBackup.size} items for backup...")
                         val backupDao = database.telegramBackupDao()

@@ -25,6 +25,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.CloudUpload
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -58,6 +59,7 @@ fun CloudScreen(
     val isSelectionMode by viewModel.isSelectionMode.collectAsState()
     val telegramConfigured by viewModel.telegramConfigured.collectAsState()
     val systemStatus by viewModel.systemStatus.collectAsState()
+    val failedBackups by viewModel.failedBackups.collectAsState()
     val gridState = rememberLazyGridState()
 
     val galleryItems = remember(cloudMedia) {
@@ -613,6 +615,82 @@ fun CloudScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onErrorContainer
                     )
+                }
+            }
+        }
+
+        // ── Failed Backups Section ─────────────────────────────────────────
+        if (failedBackups.isNotEmpty()) {
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                Card(
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = androidx.compose.material.icons.Icons.Outlined.Warning,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onErrorContainer,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Text(
+                                    text = "${failedBackups.size} backup${if (failedBackups.size != 1) "s" else ""} failed",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                            }
+                            FilledTonalButton(
+                                onClick = { viewModel.retryAllFailedBackups() },
+                                colors = ButtonDefaults.filledTonalButtonColors(
+                                    containerColor = MaterialTheme.colorScheme.error,
+                                    contentColor = MaterialTheme.colorScheme.onError
+                                ),
+                                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
+                                modifier = Modifier.height(32.dp)
+                            ) {
+                                Icon(Icons.Outlined.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Retry All", style = MaterialTheme.typography.labelMedium)
+                            }
+                        }
+                        // Show first few failed file names
+                        val displayItems = failedBackups.take(3)
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            displayItems.forEach { item ->
+                                Text(
+                                    text = "• ${item.name}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.8f),
+                                    maxLines = 1
+                                )
+                            }
+                            if (failedBackups.size > 3) {
+                                Text(
+                                    text = "…and ${failedBackups.size - 3} more",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.6f)
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }

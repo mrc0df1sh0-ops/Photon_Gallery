@@ -7,6 +7,8 @@ import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.ui.draw.alpha
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.launch
 import androidx.compose.material.icons.outlined.HelpOutline
 import com.inferno.gallery.ui.ConnectionTestResult
 import androidx.compose.foundation.layout.Box
@@ -85,6 +87,11 @@ import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.BrightnessHigh
 import androidx.compose.material3.Slider
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
+import androidx.compose.material.icons.automirrored.outlined.ArrowForward
+import com.inferno.gallery.ui.DetectedChatsResult
+import androidx.compose.material3.TextButton
 import androidx.compose.foundation.shape.RoundedCornerShape
 
 import androidx.compose.animation.AnimatedContent
@@ -915,309 +922,568 @@ fun SettingsScreen(
                             "Cloud Backup" -> {
                                 SettingsGroup(title = "Telegram Cloud Backup") {
                                     val testResult by viewModel.connectionTestState.collectAsState()
-                                    val hasChanges = primaryTokenInput != (savedTokens.getOrNull(0) ?: "") || 
-                                                     secondaryTokenInput != (savedTokens.getOrNull(1) ?: "") || 
-                                                     localChatId != savedChatId
+                                    val detectedChatsResult by viewModel.detectedChatsState.collectAsState()
 
                                     LaunchedEffect(testResult) {
                                         val result = testResult
                                         if (result is ConnectionTestResult.Migrated) {
                                             localChatId = result.newChatId
+                                        } else if (result is ConnectionTestResult.AutoCorrected) {
+                                            localChatId = result.correctedChatId
                                         }
                                     }
 
-                                    val credentialsExpanded = remember { mutableStateOf(false) }
+                                    // Token format validation
+                                    val tokenRegex = remember { Regex("^\\d+:[A-Za-z0-9_-]+$") }
+                                    val chatIdRegex = remember { Regex("^-?\\d+$") }
+                                    val isTokenValid = primaryTokenInput.isNotBlank() && tokenRegex.matches(primaryTokenInput.trim())
+                                    val isChatIdValid = localChatId.isNotBlank() && chatIdRegex.matches(localChatId.trim())
+                                    val isConfigured = savedTokens.isNotEmpty() && savedTokens.first().isNotBlank() && savedChatId.isNotBlank()
 
-                                    Column(modifier = Modifier.fillMaxWidth()) {
-                                        ListItem(
-                                            leadingContent = { Icon(Icons.Outlined.Lock, contentDescription = null) },
-                                            headlineContent = { Text("API Credentials Setup") },
-                                            supportingContent = { Text("Configure bot tokens and chat ID") },
-                                            trailingContent = {
-                                                Icon(
-                                                    imageVector = if (credentialsExpanded.value) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
-                                                    contentDescription = if (credentialsExpanded.value) "Collapse" else "Expand"
-                                                )
-                                            },
+                                    var wizardStep by remember { mutableStateOf(if (isConfigured) -1 else 0) } // -1 = summary view
+                                    var showSecondaryToken by remember { mutableStateOf(secondaryTokenInput.isNotBlank()) }
+
+                                    if (wizardStep == -1 && isConfigured) {
+                                        // ── Compact Summary View ──
+                                        Surface(
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .clickable { credentialsExpanded.value = !credentialsExpanded.value },
-                                            colors = ListItemDefaults.colors(containerColor = Color.Transparent)
-                                        )
-
-                                        androidx.compose.animation.AnimatedVisibility(
-                                            visible = credentialsExpanded.value
+                                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                                            shape = MaterialTheme.shapes.large,
+                                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
                                         ) {
-                                            Column(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .padding(horizontal = 16.dp, vertical = 8.dp)
-                                                    .background(
-                                                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
-                                                        shape = MaterialTheme.shapes.large
-                                                    )
-                                                    .padding(16.dp),
-                                                verticalArrangement = Arrangement.spacedBy(12.dp)
-                                            ) {
-                                                androidx.compose.material3.OutlinedTextField(
-                                                    value = primaryTokenInput,
-                                                    onValueChange = { 
-                                                        primaryTokenInput = it
-                                                        viewModel.clearConnectionTestResult()
-                                                    },
-                                                    label = { Text("Primary Bot Token (Required)") },
-                                                    placeholder = { Text("123456:ABC-DEF...") },
-                                                    singleLine = true,
-                                                    leadingIcon = { Icon(Icons.Outlined.Lock, contentDescription = null) },
-                                                    trailingIcon = {
-                                                        val image = if (passwordVisiblePrimary) Icons.Filled.Visibility else Icons.Filled.VisibilityOff
-                                                        IconButton(onClick = { passwordVisiblePrimary = !passwordVisiblePrimary }) {
-                                                            Icon(imageVector = image, contentDescription = null)
-                                                        }
-                                                    },
-                                                    visualTransformation = if (passwordVisiblePrimary) VisualTransformation.None else PasswordVisualTransformation(),
-                                                    modifier = Modifier.fillMaxWidth()
-                                                )
-
-                                                androidx.compose.material3.OutlinedTextField(
-                                                    value = secondaryTokenInput,
-                                                    onValueChange = { 
-                                                        secondaryTokenInput = it
-                                                        viewModel.clearConnectionTestResult()
-                                                    },
-                                                    label = { Text("Secondary Bot Token (Optional)") },
-                                                    placeholder = { Text("654321:XYZ-UVW...") },
-                                                    supportingText = { Text("Configures dual-bot concurrent media uploading to speed up backups.") },
-                                                    singleLine = true,
-                                                    leadingIcon = { Icon(Icons.Outlined.Lock, contentDescription = null) },
-                                                    trailingIcon = {
-                                                        val image = if (passwordVisibleSecondary) Icons.Filled.Visibility else Icons.Filled.VisibilityOff
-                                                        IconButton(onClick = { passwordVisibleSecondary = !passwordVisibleSecondary }) {
-                                                            Icon(imageVector = image, contentDescription = null)
-                                                        }
-                                                    },
-                                                    visualTransformation = if (passwordVisibleSecondary) VisualTransformation.None else PasswordVisualTransformation(),
-                                                    modifier = Modifier.fillMaxWidth()
-                                                )
-
-                                                androidx.compose.material3.OutlinedTextField(
-                                                    value = localChatId,
-                                                    onValueChange = { 
-                                                        localChatId = it
-                                                        viewModel.clearConnectionTestResult()
-                                                    },
-                                                    label = { Text("Telegram Channel / Chat ID") },
-                                                    placeholder = { Text("-100XXXXXXXXXX") },
-                                                    singleLine = true,
-                                                    leadingIcon = { Icon(androidx.compose.material.icons.Icons.AutoMirrored.Outlined.Send, contentDescription = null) },
-                                                    modifier = Modifier.fillMaxWidth()
-                                                )
-
+                                            Column(modifier = Modifier.padding(16.dp)) {
                                                 Row(
                                                     modifier = Modifier.fillMaxWidth(),
-                                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                                    horizontalArrangement = Arrangement.SpaceBetween,
                                                     verticalAlignment = Alignment.CenterVertically
                                                 ) {
-                                                    Button(
-                                                        onClick = { 
-                                                            val tokens = listOfNotNull(
-                                                                primaryTokenInput.trim().takeIf { it.isNotEmpty() },
-                                                                secondaryTokenInput.trim().takeIf { it.isNotEmpty() }
-                                                            )
-                                                            viewModel.saveTelegramCredentials(tokens, localChatId)
-                                                        },
-                                                        enabled = hasChanges && primaryTokenInput.isNotBlank() && localChatId.isNotBlank(),
-                                                        modifier = Modifier.weight(1f)
+                                                    Row(
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                                                     ) {
-                                                        Text("Save Credentials")
+                                                        Icon(
+                                                            Icons.Outlined.Check,
+                                                            contentDescription = null,
+                                                            tint = MaterialTheme.colorScheme.primary,
+                                                            modifier = Modifier
+                                                                .size(24.dp)
+                                                                .background(
+                                                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                                                    shape = androidx.compose.foundation.shape.CircleShape
+                                                                )
+                                                                .padding(4.dp)
+                                                        )
+                                                        Text(
+                                                            "Connected",
+                                                            style = MaterialTheme.typography.titleSmall,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = MaterialTheme.colorScheme.primary
+                                                        )
                                                     }
-
                                                     FilledTonalButton(
-                                                        onClick = { 
-                                                            viewModel.testTelegramConnection(primaryTokenInput.trim(), localChatId.trim()) 
-                                                        },
-                                                        enabled = testResult != ConnectionTestResult.Testing && primaryTokenInput.isNotBlank() && localChatId.isNotBlank(),
-                                                        modifier = Modifier.weight(1f)
+                                                        onClick = { wizardStep = 0 },
+                                                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
+                                                        modifier = Modifier.height(32.dp)
                                                     ) {
-                                                        Text("Test Connection")
+                                                        Text("Edit", style = MaterialTheme.typography.labelMedium)
                                                     }
                                                 }
-
-                                                if (testResult != null) {
-                                                    Row(
-                                                        modifier = Modifier.fillMaxWidth(),
-                                                        horizontalArrangement = Arrangement.Start,
-                                                        verticalAlignment = Alignment.CenterVertically
-                                                    ) {
-                                                        when (val res = testResult) {
-                                                            ConnectionTestResult.Testing -> {
-                                                                com.inferno.gallery.ui.components.WavyProgressIndicator(
-                                                                    modifier = Modifier.size(width = 32.dp, height = 20.dp),
-                                                                    strokeWidth = 2.dp,
-                                                                    amplitude = 3.dp,
-                                                                    frequency = 1.5f
-                                                                )
-                                                                Spacer(Modifier.width(8.dp))
-                                                                Text("Testing connection…", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                                            }
-                                                            ConnectionTestResult.Success -> {
-                                                                Icon(
-                                                                    imageVector = Icons.Outlined.Check,
-                                                                    contentDescription = "Success",
-                                                                    tint = MaterialTheme.colorScheme.primary,
-                                                                    modifier = Modifier.size(20.dp)
-                                                                )
-                                                                Spacer(Modifier.width(4.dp))
-                                                                Text("Success! Connection verified.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-                                                            }
-                                                            is ConnectionTestResult.Migrated -> {
-                                                                Icon(
-                                                                    imageVector = Icons.Outlined.Check,
-                                                                    contentDescription = "Success",
-                                                                    tint = MaterialTheme.colorScheme.primary,
-                                                                    modifier = Modifier.size(20.dp)
-                                                                )
-                                                                Spacer(Modifier.width(4.dp))
-                                                                Text("Group upgraded to supergroup! Stored ID updated.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-                                                            }
-                                                            is ConnectionTestResult.Error -> {
-                                                                Icon(
-                                                                    imageVector = Icons.Outlined.Close,
-                                                                    contentDescription = "Error",
-                                                                    tint = MaterialTheme.colorScheme.error,
-                                                                    modifier = Modifier.size(20.dp)
-                                                                )
-                                                                Spacer(Modifier.width(4.dp))
-                                                                Text("Failed: ${res.message}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
-                                                            }
-                                                            else -> {}
-                                                        }
-                                                    }
+                                                Spacer(modifier = Modifier.height(8.dp))
+                                                Text(
+                                                    "Bot: ...${savedTokens.firstOrNull()?.takeLast(8) ?: ""}",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                                Text(
+                                                    "Chat ID: $savedChatId",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                                if (savedTokens.size > 1 && savedTokens[1].isNotBlank()) {
+                                                    Text(
+                                                        "Dual-bot: enabled",
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
                                                 }
                                             }
                                         }
-                                    }
+                                    } else {
+                                        // ── Wizard View ──
+                                        val actualStep = if (wizardStep == -1) 0 else wizardStep
 
-                                    // ── Setup Guide ──────────────────────────────────
-                                    val guideExpanded = remember { mutableStateOf(false) }
-
-                                    Column(modifier = Modifier.fillMaxWidth()) {
-                                        ListItem(
-                                            leadingContent = { Icon(Icons.Outlined.HelpOutline, contentDescription = null) },
-                                            headlineContent = { Text("Setup Guide") },
-                                            supportingContent = { Text("Step-by-step instructions to get your bot tokens and chat ID") },
-                                            trailingContent = {
-                                                Icon(
-                                                    imageVector = if (guideExpanded.value) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
-                                                    contentDescription = if (guideExpanded.value) "Collapse" else "Expand"
-                                                )
-                                            },
+                                        Surface(
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .clickable { guideExpanded.value = !guideExpanded.value },
-                                            colors = ListItemDefaults.colors(containerColor = Color.Transparent)
-                                        )
-
-                                        androidx.compose.animation.AnimatedVisibility(
-                                            visible = guideExpanded.value
+                                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                                            shape = MaterialTheme.shapes.large,
+                                            color = MaterialTheme.colorScheme.surfaceContainerHigh
                                         ) {
                                             Column(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .padding(horizontal = 16.dp, vertical = 8.dp)
-                                                    .background(
-                                                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
-                                                        shape = MaterialTheme.shapes.large
-                                                    )
-                                                    .padding(20.dp),
+                                                modifier = Modifier.padding(20.dp),
                                                 verticalArrangement = Arrangement.spacedBy(16.dp)
                                             ) {
-                                                // Step 1
-                                                SetupGuideStep(
-                                                    stepNumber = 1,
-                                                    title = "Create a Telegram Bot",
-                                                    instructions = listOf(
-                                                        "Open Telegram and search for @BotFather",
-                                                        "Send /newbot and follow the prompts",
-                                                        "Choose a name (e.g., \"My Gallery Backup\")",
-                                                        "Choose a username (must end in 'bot', e.g., mygallery_backup_bot)",
-                                                        "BotFather will reply with your bot token"
-                                                    ),
-                                                    highlight = "Copy the token — it looks like:\n6123456789:AAHx...-abcdefg"
-                                                )
-
-                                                HorizontalDivider(
-                                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
-                                                )
-
-                                                // Step 2
-                                                SetupGuideStep(
-                                                    stepNumber = 2,
-                                                    title = "Create a Private Channel",
-                                                    instructions = listOf(
-                                                        "In Telegram, create a new Channel (private)",
-                                                        "Name it anything (e.g., \"Gallery Backup\")",
-                                                        "Go to channel settings → Administrators → Add your bot as admin",
-                                                        "Give it permission to Post Messages"
-                                                    ),
-                                                    highlight = null
-                                                )
-
-                                                HorizontalDivider(
-                                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
-                                                )
-
-                                                // Step 3
-                                                SetupGuideStep(
-                                                    stepNumber = 3,
-                                                    title = "Get the Chat ID",
-                                                    instructions = listOf(
-                                                        "Forward any message from your channel to @userinfobot",
-                                                        "It will reply with the channel's chat ID",
-                                                        "Channel IDs start with -100 (e.g., -1001234567890)",
-                                                        "For a private group, add the bot to the group and message @userinfobot from there"
-                                                    ),
-                                                    highlight = "Paste the full ID including the minus sign:\n-1001234567890"
-                                                )
-
-                                                HorizontalDivider(
-                                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
-                                                )
-
-                                                // Step 4 (Optional)
-                                                SetupGuideStep(
-                                                    stepNumber = 4,
-                                                    title = "Dual-Bot Setup (Optional)",
-                                                    instructions = listOf(
-                                                        "Create a second bot with @BotFather for faster uploads",
-                                                        "Add it as admin to the same channel",
-                                                        "Paste its token in the Secondary Bot Token field",
-                                                        "Photon will upload two files at once for 2× speed"
-                                                    ),
-                                                    highlight = null
-                                                )
-
-                                                // Tip
-                                                Surface(
-                                                    color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f),
-                                                    shape = MaterialTheme.shapes.medium
+                                                // Step indicator
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.Center,
+                                                    verticalAlignment = Alignment.CenterVertically
                                                 ) {
-                                                    Row(
-                                                        modifier = Modifier.padding(12.dp),
-                                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                                        verticalAlignment = Alignment.Top
-                                                    ) {
-                                                        Icon(
-                                                            Icons.Outlined.Info,
-                                                            contentDescription = null,
-                                                            modifier = Modifier.size(18.dp),
-                                                            tint = MaterialTheme.colorScheme.onTertiaryContainer
+                                                    for (i in 0..2) {
+                                                        val isActive = i == actualStep
+                                                        val isCompleted = i < actualStep
+                                                        Surface(
+                                                            shape = androidx.compose.foundation.shape.CircleShape,
+                                                            color = when {
+                                                                isActive -> MaterialTheme.colorScheme.primary
+                                                                isCompleted -> MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                                                                else -> MaterialTheme.colorScheme.outlineVariant
+                                                            },
+                                                            modifier = Modifier.size(28.dp)
+                                                        ) {
+                                                            Box(contentAlignment = Alignment.Center) {
+                                                                if (isCompleted) {
+                                                                    Icon(Icons.Outlined.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp))
+                                                                } else {
+                                                                    Text("${i + 1}", style = MaterialTheme.typography.labelSmall, color = if (isActive) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant)
+                                                                }
+                                                            }
+                                                        }
+                                                        if (i < 2) {
+                                                            Box(
+                                                                modifier = Modifier
+                                                                    .width(40.dp)
+                                                                    .height(2.dp)
+                                                                    .background(if (i < actualStep) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f) else MaterialTheme.colorScheme.outlineVariant)
+                                                            )
+                                                        }
+                                                    }
+                                                }
+
+                                                when (actualStep) {
+                                                    // ═══════════════ STEP 1: Bot Token ═══════════════
+                                                    0 -> {
+                                                        Text(
+                                                            "Bot Token",
+                                                            style = MaterialTheme.typography.titleMedium,
+                                                            fontWeight = FontWeight.Bold
                                                         )
                                                         Text(
-                                                            "After setup, hit \"Test Connection\" above to verify everything works. Your media stays private — only you and your bot can see the channel.",
+                                                            "Create a bot via @BotFather on Telegram, then paste the token here.",
                                                             style = MaterialTheme.typography.bodySmall,
-                                                            color = MaterialTheme.colorScheme.onTertiaryContainer
+                                                            color = MaterialTheme.colorScheme.onSurfaceVariant
                                                         )
+
+                                                        OutlinedTextField(
+                                                            value = primaryTokenInput,
+                                                            onValueChange = {
+                                                                primaryTokenInput = it
+                                                                viewModel.clearConnectionTestResult()
+                                                            },
+                                                            label = { Text("Primary Bot Token") },
+                                                            placeholder = { Text("123456789:AABb...xyz") },
+                                                            singleLine = true,
+                                                            leadingIcon = { Icon(Icons.Outlined.Lock, contentDescription = null, modifier = Modifier.size(20.dp)) },
+                                                            trailingIcon = {
+                                                                Row {
+                                                                    if (primaryTokenInput.isNotBlank()) {
+                                                                        Icon(
+                                                                            if (isTokenValid) Icons.Outlined.Check else Icons.Outlined.Close,
+                                                                            contentDescription = null,
+                                                                            tint = if (isTokenValid) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                                                                            modifier = Modifier.size(18.dp)
+                                                                        )
+                                                                        Spacer(Modifier.width(4.dp))
+                                                                    }
+                                                                    val image = if (passwordVisiblePrimary) Icons.Filled.Visibility else Icons.Filled.VisibilityOff
+                                                                    IconButton(onClick = { passwordVisiblePrimary = !passwordVisiblePrimary }) {
+                                                                        Icon(imageVector = image, contentDescription = null)
+                                                                    }
+                                                                }
+                                                            },
+                                                            isError = primaryTokenInput.isNotBlank() && !isTokenValid,
+                                                            supportingText = if (primaryTokenInput.isNotBlank() && !isTokenValid) {
+                                                                { Text("Token format: numbers:letters (e.g. 123456:ABCdef...)") }
+                                                            } else null,
+                                                            visualTransformation = if (passwordVisiblePrimary) VisualTransformation.None else PasswordVisualTransformation(),
+                                                            modifier = Modifier.fillMaxWidth()
+                                                        )
+
+                                                        // Optional secondary token
+                                                        Column {
+                                                            Row(
+                                                                modifier = Modifier
+                                                                    .fillMaxWidth()
+                                                                    .clickable { showSecondaryToken = !showSecondaryToken }
+                                                                    .padding(vertical = 4.dp),
+                                                                verticalAlignment = Alignment.CenterVertically
+                                                            ) {
+                                                                Icon(
+                                                                    if (showSecondaryToken) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                                                                    contentDescription = null,
+                                                                    modifier = Modifier.size(20.dp),
+                                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                                                )
+                                                                Spacer(Modifier.width(8.dp))
+                                                                Text(
+                                                                    "Add secondary bot for 2× upload speed (optional)",
+                                                                    style = MaterialTheme.typography.bodySmall,
+                                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                                )
+                                                            }
+
+                                                            androidx.compose.animation.AnimatedVisibility(visible = showSecondaryToken) {
+                                                                OutlinedTextField(
+                                                                    value = secondaryTokenInput,
+                                                                    onValueChange = {
+                                                                        secondaryTokenInput = it
+                                                                        viewModel.clearConnectionTestResult()
+                                                                    },
+                                                                    label = { Text("Secondary Bot Token") },
+                                                                    placeholder = { Text("654321:XYZ-UVW...") },
+                                                                    singleLine = true,
+                                                                    leadingIcon = { Icon(Icons.Outlined.Lock, contentDescription = null, modifier = Modifier.size(20.dp)) },
+                                                                    trailingIcon = {
+                                                                        val image = if (passwordVisibleSecondary) Icons.Filled.Visibility else Icons.Filled.VisibilityOff
+                                                                        IconButton(onClick = { passwordVisibleSecondary = !passwordVisibleSecondary }) {
+                                                                            Icon(imageVector = image, contentDescription = null)
+                                                                        }
+                                                                    },
+                                                                    visualTransformation = if (passwordVisibleSecondary) VisualTransformation.None else PasswordVisualTransformation(),
+                                                                    modifier = Modifier.fillMaxWidth()
+                                                                )
+                                                            }
+                                                        }
+
+                                                        // Navigation
+                                                        Row(
+                                                            modifier = Modifier.fillMaxWidth(),
+                                                            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)
+                                                        ) {
+                                                            if (isConfigured) {
+                                                                TextButton(onClick = { wizardStep = -1 }) {
+                                                                    Text("Cancel")
+                                                                }
+                                                            }
+                                                            Button(
+                                                                onClick = { wizardStep = 1 },
+                                                                enabled = isTokenValid
+                                                            ) {
+                                                                Text("Next")
+                                                                Spacer(Modifier.width(4.dp))
+                                                                Icon(Icons.AutoMirrored.Outlined.ArrowForward, contentDescription = null, modifier = Modifier.size(16.dp))
+                                                            }
+                                                        }
+                                                    }
+
+                                                    // ═══════════════ STEP 2: Chat ID ═══════════════
+                                                    1 -> {
+                                                        Text(
+                                                            "Chat ID",
+                                                            style = MaterialTheme.typography.titleMedium,
+                                                            fontWeight = FontWeight.Bold
+                                                        )
+                                                        Text(
+                                                            "Add the bot as admin to your channel/group, then auto-detect or enter the ID manually.",
+                                                            style = MaterialTheme.typography.bodySmall,
+                                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                        )
+
+                                                        // Auto-detect button
+                                                        OutlinedButton(
+                                                            onClick = {
+                                                                viewModel.detectChatIds(primaryTokenInput.trim())
+                                                            },
+                                                            modifier = Modifier.fillMaxWidth(),
+                                                            enabled = detectedChatsResult !is DetectedChatsResult.Loading
+                                                        ) {
+                                                            Icon(Icons.Outlined.Search, contentDescription = null, modifier = Modifier.size(18.dp))
+                                                            Spacer(Modifier.width(8.dp))
+                                                            Text("Auto-detect Chat ID")
+                                                        }
+
+                                                        // Detection results
+                                                        when (val detResult = detectedChatsResult) {
+                                                            is DetectedChatsResult.Loading -> {
+                                                                Row(
+                                                                    verticalAlignment = Alignment.CenterVertically,
+                                                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                                ) {
+                                                                    com.inferno.gallery.ui.components.WavyProgressIndicator(
+                                                                        modifier = Modifier.size(width = 28.dp, height = 16.dp),
+                                                                        strokeWidth = 2.dp,
+                                                                        amplitude = 3.dp,
+                                                                        frequency = 1.5f
+                                                                    )
+                                                                    Text("Scanning for chats…", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                                }
+                                                            }
+                                                            is DetectedChatsResult.Success -> {
+                                                                Column(
+                                                                    modifier = Modifier
+                                                                        .fillMaxWidth()
+                                                                        .background(
+                                                                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                                                                            shape = MaterialTheme.shapes.medium
+                                                                        )
+                                                                        .padding(12.dp),
+                                                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                                                ) {
+                                                                    Text("Found ${detResult.chats.size} chat(s):", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                                                                    detResult.chats.forEach { chat ->
+                                                                        val isSelected = localChatId == chat.id.toString()
+                                                                        Surface(
+                                                                            onClick = {
+                                                                                localChatId = chat.id.toString()
+                                                                                viewModel.clearConnectionTestResult()
+                                                                            },
+                                                                            shape = MaterialTheme.shapes.small,
+                                                                            color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+                                                                            modifier = Modifier.fillMaxWidth()
+                                                                        ) {
+                                                                            Row(
+                                                                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                                                                verticalAlignment = Alignment.CenterVertically,
+                                                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                                            ) {
+                                                                                RadioButton(
+                                                                                    selected = isSelected,
+                                                                                    onClick = {
+                                                                                        localChatId = chat.id.toString()
+                                                                                        viewModel.clearConnectionTestResult()
+                                                                                    },
+                                                                                    modifier = Modifier.size(20.dp)
+                                                                                )
+                                                                                Column {
+                                                                                    Text(
+                                                                                        chat.title,
+                                                                                        style = MaterialTheme.typography.bodyMedium,
+                                                                                        fontWeight = FontWeight.Medium
+                                                                                    )
+                                                                                    Text(
+                                                                                        "${chat.id} · ${chat.type}",
+                                                                                        style = MaterialTheme.typography.bodySmall,
+                                                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                                                    )
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                            is DetectedChatsResult.Empty -> {
+                                                                Surface(
+                                                                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f),
+                                                                    shape = MaterialTheme.shapes.small
+                                                                ) {
+                                                                    Text(
+                                                                        "No chats found. Make sure you've added the bot to your channel/group as admin, or sent /start to the bot.",
+                                                                        style = MaterialTheme.typography.bodySmall,
+                                                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                                        modifier = Modifier.padding(12.dp)
+                                                                    )
+                                                                }
+                                                            }
+                                                            is DetectedChatsResult.Error -> {
+                                                                Text(
+                                                                    "Detection failed: ${detResult.message}",
+                                                                    style = MaterialTheme.typography.bodySmall,
+                                                                    color = MaterialTheme.colorScheme.error
+                                                                )
+                                                            }
+                                                            null -> {} // Initial state
+                                                        }
+
+                                                        // Manual entry divider
+                                                        Row(
+                                                            modifier = Modifier.fillMaxWidth(),
+                                                            verticalAlignment = Alignment.CenterVertically,
+                                                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                                        ) {
+                                                            HorizontalDivider(modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.outlineVariant)
+                                                            Text("or enter manually", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                            HorizontalDivider(modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.outlineVariant)
+                                                        }
+
+                                                        OutlinedTextField(
+                                                            value = localChatId,
+                                                            onValueChange = {
+                                                                localChatId = it
+                                                                viewModel.clearConnectionTestResult()
+                                                            },
+                                                            label = { Text("Channel / Chat ID") },
+                                                            placeholder = { Text("-1001234567890") },
+                                                            singleLine = true,
+                                                            leadingIcon = { Icon(Icons.AutoMirrored.Outlined.Send, contentDescription = null, modifier = Modifier.size(20.dp)) },
+                                                            trailingIcon = {
+                                                                if (localChatId.isNotBlank()) {
+                                                                    Icon(
+                                                                        if (isChatIdValid) Icons.Outlined.Check else Icons.Outlined.Close,
+                                                                        contentDescription = null,
+                                                                        tint = if (isChatIdValid) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                                                                        modifier = Modifier.size(18.dp)
+                                                                    )
+                                                                }
+                                                            },
+                                                            isError = localChatId.isNotBlank() && !isChatIdValid,
+                                                            supportingText = if (localChatId.isNotBlank() && !isChatIdValid) {
+                                                                { Text("Must be a number (e.g. -1001234567890)") }
+                                                            } else null,
+                                                            modifier = Modifier.fillMaxWidth()
+                                                        )
+
+                                                        // Navigation
+                                                        Row(
+                                                            modifier = Modifier.fillMaxWidth(),
+                                                            horizontalArrangement = Arrangement.SpaceBetween
+                                                        ) {
+                                                            TextButton(onClick = { wizardStep = 0 }) {
+                                                                Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = null, modifier = Modifier.size(16.dp))
+                                                                Spacer(Modifier.width(4.dp))
+                                                                Text("Back")
+                                                            }
+                                                            Button(
+                                                                onClick = { wizardStep = 2 },
+                                                                enabled = isChatIdValid
+                                                            ) {
+                                                                Text("Next")
+                                                                Spacer(Modifier.width(4.dp))
+                                                                Icon(Icons.AutoMirrored.Outlined.ArrowForward, contentDescription = null, modifier = Modifier.size(16.dp))
+                                                            }
+                                                        }
+                                                    }
+
+                                                    // ═══════════════ STEP 3: Test & Save ═══════════════
+                                                    2 -> {
+                                                        Text(
+                                                            "Test & Save",
+                                                            style = MaterialTheme.typography.titleMedium,
+                                                            fontWeight = FontWeight.Bold
+                                                        )
+
+                                                        // Summary
+                                                        Surface(
+                                                            modifier = Modifier.fillMaxWidth(),
+                                                            shape = MaterialTheme.shapes.medium,
+                                                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                                                        ) {
+                                                            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                                    Text("Token:", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                                    Text("...${primaryTokenInput.trim().takeLast(10)}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                                                                }
+                                                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                                    Text("Chat ID:", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                                    Text(localChatId.trim(), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                                                                }
+                                                                if (secondaryTokenInput.isNotBlank()) {
+                                                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                                        Text("Dual-bot:", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                                        Text("Enabled", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.primary)
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+
+                                                        // Test button
+                                                        FilledTonalButton(
+                                                            onClick = {
+                                                                viewModel.testTelegramConnection(primaryTokenInput.trim(), localChatId.trim())
+                                                            },
+                                                            enabled = testResult != ConnectionTestResult.Testing,
+                                                            modifier = Modifier.fillMaxWidth()
+                                                        ) {
+                                                            Icon(Icons.Outlined.Cloud, contentDescription = null, modifier = Modifier.size(18.dp))
+                                                            Spacer(Modifier.width(8.dp))
+                                                            Text("Test Connection")
+                                                        }
+
+                                                        // Test result display
+                                                        if (testResult != null) {
+                                                            when (val res = testResult) {
+                                                                ConnectionTestResult.Testing -> {
+                                                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                                        com.inferno.gallery.ui.components.WavyProgressIndicator(
+                                                                            modifier = Modifier.size(width = 32.dp, height = 20.dp),
+                                                                            strokeWidth = 2.dp, amplitude = 3.dp, frequency = 1.5f
+                                                                        )
+                                                                        Text("Testing connection…", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                                    }
+                                                                }
+                                                                ConnectionTestResult.Success, is ConnectionTestResult.AutoCorrected, is ConnectionTestResult.Migrated -> {
+                                                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                                        Icon(Icons.Outlined.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                                                                        Column {
+                                                                            Text("Connected!", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                                                                            if (res is ConnectionTestResult.AutoCorrected) {
+                                                                                Text("Chat ID corrected to ${res.correctedChatId}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                                            } else if (res is ConnectionTestResult.Migrated) {
+                                                                                Text("Chat ID updated to ${res.newChatId}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+                                                                is ConnectionTestResult.Error -> {
+                                                                    Column {
+                                                                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                                            Icon(Icons.Outlined.Close, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp))
+                                                                            Text("Failed: ${res.message}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+                                                                        }
+                                                                        val hint = when {
+                                                                            res.message.contains("chat not found", ignoreCase = true) ->
+                                                                                "💡 For groups/channels, the Chat ID must start with \"-100\" followed by the raw ID (e.g. -1001234567890). Try using Auto-detect on the previous step."
+                                                                            res.message.contains("bot can't send messages", ignoreCase = true) || res.message.contains("bot was blocked", ignoreCase = true) ->
+                                                                                "💡 Open Telegram, find your bot and tap /start. Bots can't message you until you start a conversation first."
+                                                                            res.message.contains("Forbidden", ignoreCase = true) && res.message.contains("bot", ignoreCase = true) ->
+                                                                                "💡 The bot doesn't have permission to send messages. Add the bot as admin to your group/channel."
+                                                                            res.message.contains("Unauthorized", ignoreCase = true) ->
+                                                                                "💡 The bot token is invalid. Go back and check the token from @BotFather."
+                                                                            res.message.contains("Too Many Requests", ignoreCase = true) ->
+                                                                                "💡 Rate limited by Telegram. Wait a minute and try again."
+                                                                            else -> null
+                                                                        }
+                                                                        if (hint != null) {
+                                                                            Spacer(Modifier.height(6.dp))
+                                                                            Text(hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                                        }
+                                                                    }
+                                                                }
+                                                                else -> {}
+                                                            }
+                                                        }
+
+                                                        // Navigation
+                                                        Row(
+                                                            modifier = Modifier.fillMaxWidth(),
+                                                            horizontalArrangement = Arrangement.SpaceBetween
+                                                        ) {
+                                                            TextButton(onClick = { wizardStep = 1 }) {
+                                                                Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = null, modifier = Modifier.size(16.dp))
+                                                                Spacer(Modifier.width(4.dp))
+                                                                Text("Back")
+                                                            }
+                                                            val isTestSuccess = testResult is ConnectionTestResult.Success || 
+                                                                               testResult is ConnectionTestResult.AutoCorrected || 
+                                                                               testResult is ConnectionTestResult.Migrated
+                                                            Button(
+                                                                onClick = {
+                                                                    val tokens = listOfNotNull(
+                                                                        primaryTokenInput.trim().takeIf { it.isNotEmpty() },
+                                                                        secondaryTokenInput.trim().takeIf { it.isNotEmpty() }
+                                                                    )
+                                                                    viewModel.saveTelegramCredentials(tokens, localChatId.trim())
+                                                                    viewModel.clearConnectionTestResult()
+                                                                    viewModel.clearDetectedChats()
+                                                                    wizardStep = -1
+                                                                },
+                                                                enabled = isTokenValid && isChatIdValid
+                                                            ) {
+                                                                Icon(Icons.Outlined.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                                                                Spacer(Modifier.width(4.dp))
+                                                                Text("Save")
+                                                            }
+                                                        }
                                                     }
                                                 }
                                             }

@@ -47,6 +47,8 @@ class SettingsRepository(private val context: Context) {
         val CACHE_THUMBNAILS_ENABLED = booleanPreferencesKey("cache_thumbnails_enabled")
         val MAX_BRIGHTNESS_ENABLED = booleanPreferencesKey("max_brightness_enabled")
         val EXCLUDED_FOLDERS = stringPreferencesKey("excluded_folders")
+        val HDR_DISPLAY_ENABLED = booleanPreferencesKey("hdr_display_enabled")
+        val PINNED_FOLDERS = stringPreferencesKey("pinned_folders")
     }
 
     val themeModeFlow: Flow<String> = context.dataStore.data
@@ -408,6 +410,24 @@ class SettingsRepository(private val context: Context) {
     suspend fun updateExcludedFolders(folders: Set<String>) {
         context.dataStore.edit { preferences ->
             preferences[EXCLUDED_FOLDERS] = folders.joinToString(",")
+        }
+    }
+
+    val pinnedFoldersFlow: Flow<Set<String>> = context.dataStore.data
+        .map { preferences ->
+            val str = preferences[PINNED_FOLDERS] ?: ""
+            if (str.isBlank()) emptySet() else str.split(",").map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+        }
+
+    suspend fun togglePinnedFolder(folder: String) {
+        context.dataStore.edit { preferences ->
+            val current = (preferences[PINNED_FOLDERS] ?: "").split(",").map { it.trim() }.filter { it.isNotEmpty() }.toMutableSet()
+            if (current.contains(folder)) {
+                current.remove(folder)
+            } else {
+                current.add(folder)
+            }
+            preferences[PINNED_FOLDERS] = current.joinToString(",")
         }
     }
 }

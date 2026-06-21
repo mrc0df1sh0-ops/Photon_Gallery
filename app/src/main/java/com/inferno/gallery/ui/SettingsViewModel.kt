@@ -9,7 +9,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -314,24 +313,27 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             // 1. Clean up pending backups that are no longer selected
             val allBackups = backupDao.observeAllBackups().first()
             val pendingBackups = allBackups.filter { it.backupStatus == "PENDING" }
+            val removedIds = mutableSetOf<Long>()
             for (pending in pendingBackups) {
                 val media = mediaMap[pending.mediaId]
                 if (media == null) {
                     backupDao.deleteBackup(pending.mediaId)
+                    removedIds.add(pending.mediaId)
                     continue
                 }
                 if (!enabled || !folders.contains(media.bucketName)) {
                     android.util.Log.d("SettingsViewModel", "Removing cancelled auto-backup: ${media.name} (folder: ${media.bucketName})")
                     backupDao.deleteBackup(pending.mediaId)
+                    removedIds.add(pending.mediaId)
                 }
             }
 
             if (!enabled || folders.isEmpty()) return@launch
 
             // 2. Queue existing backups for newly selected folders (skipping files > 50MB limit)
-            val updatedBackups = backupDao.observeAllBackups().first().associateBy { it.mediaId }
+            val existingBackupIds = allBackups.filter { it.mediaId !in removedIds }.map { it.mediaId }.toSet()
             val toQueue = allMedia.filter { media ->
-                folders.contains(media.bucketName) && !updatedBackups.containsKey(media.id) && media.size <= 50 * 1024 * 1024L
+                folders.contains(media.bucketName) && media.id !in existingBackupIds && media.size <= 50 * 1024 * 1024L && !media.isVideo
             }
 
             if (toQueue.isNotEmpty()) {
@@ -386,6 +388,37 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             }
         }
     }
+    // ── Chat ID Auto-Detection ──
+    private val _detectedChatsState = MutableStateFlow<DetectedChatsResult?>(null)
+    val detectedChatsState: StateFlow<DetectedChatsResult?> = _detectedChatsState.asStateFlow()
+
+    fun detectChatIds(token: String) {
+        if (token.isBlank()) {
+            _detectedChatsState.value = DetectedChatsResult.Error("Bot token is empty")
+            return
+        }
+        _detectedChatsState.value = DetectedChatsResult.Loading
+        viewModelScope.launch {
+            val result = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                try {
+                    val client = com.inferno.gallery.data.network.TelegramClient(token, "")
+                    val chats = client.getRecentChatIds()
+                    if (chats.isEmpty()) {
+                        DetectedChatsResult.Empty
+                    } else {
+                        DetectedChatsResult.Success(chats)
+                    }
+                } catch (e: Exception) {
+                    DetectedChatsResult.Error(e.message ?: "Detection failed")
+                }
+            }
+            _detectedChatsState.value = result
+        }
+    }
+
+    fun clearDetectedChats() {
+        _detectedChatsState.value = null
+    }
 
     private val _connectionTestState = MutableStateFlow<ConnectionTestResult?>(null)
     val connectionTestState: StateFlow<ConnectionTestResult?> = _connectionTestState.asStateFlow()
@@ -399,45 +432,69 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         _connectionTestState.value = ConnectionTestResult.Testing
         viewModelScope.launch {
             val result = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                try {
-                    val client = okhttp3.OkHttpClient()
-                    val requestBody = okhttp3.MultipartBody.Builder()
-                        .setType(okhttp3.MultipartBody.FORM)
-                        .addFormDataPart("chat_id", chatId)
-                        .addFormDataPart("text", "Photon Gallery connection test successful!")
-                        .build()
-                    val request = okhttp3.Request.Builder()
-                        .url("https://api.telegram.org/bot$token/sendMessage")
-                        .header("User-Agent", "PhotonGalleryApp/1.0 (Android; Jetpack Compose)")
-                        .post(requestBody)
-                        .build()
-                    client.newCall(request).execute().use { response ->
-                        val bodyString = response.body?.string() ?: ""
-                        if (!response.isSuccessful) {
-                            val json = try { org.json.JSONObject(bodyString) } catch (e: Exception) { null }
-                            val description = json?.optString("description") ?: ""
-                            val migrateToChatId = json?.optJSONObject("parameters")?.optLong("migrate_to_chat_id", 0L) ?: 0L
-                            if (migrateToChatId != 0L) {
-                                repository.updateTelegramChatId(migrateToChatId.toString())
-                                ConnectionTestResult.Migrated(migrateToChatId.toString())
-                            } else {
-                                val errorDetail = if (description.isNotBlank()) description else "HTTP error: ${response.code}"
-                                ConnectionTestResult.Error(errorDetail)
-                            }
-                        } else {
-                            val json = org.json.JSONObject(bodyString)
-                            if (json.getBoolean("ok")) {
-                                ConnectionTestResult.Success
-                            } else {
-                                ConnectionTestResult.Error(json.optString("description", "Unknown error"))
-                            }
+                val firstResult = trySendTestMessage(token, chatId)
+                
+                // Auto-fix: if "chat not found" and missing -100 prefix, retry with corrected ID
+                if (firstResult is ConnectionTestResult.Error && 
+                    firstResult.message.contains("chat not found", ignoreCase = true)) {
+                    
+                    val rawDigits = chatId.trimStart('-')
+                    val correctedId = "-100$rawDigits"
+                    
+                    // Only retry if the ID wasn't already in -100 format
+                    if (!chatId.startsWith("-100")) {
+                        val retryResult = trySendTestMessage(token, correctedId)
+                        if (retryResult is ConnectionTestResult.Success || retryResult is ConnectionTestResult.Migrated) {
+                            // Auto-save the corrected ID
+                            repository.updateTelegramChatId(correctedId)
+                            return@withContext ConnectionTestResult.AutoCorrected(correctedId)
                         }
                     }
-                } catch (e: Exception) {
-                    ConnectionTestResult.Error(e.message ?: "Connection failed")
                 }
+                
+                firstResult
             }
             _connectionTestState.value = result
+        }
+    }
+
+    private suspend fun trySendTestMessage(token: String, chatId: String): ConnectionTestResult {
+        return try {
+            val client = okhttp3.OkHttpClient()
+            val requestBody = okhttp3.MultipartBody.Builder()
+                .setType(okhttp3.MultipartBody.FORM)
+                .addFormDataPart("chat_id", chatId)
+                .addFormDataPart("text", "Photon Gallery connection test successful!")
+                .build()
+            val request = okhttp3.Request.Builder()
+                .url("https://api.telegram.org/bot$token/sendMessage")
+                .header("User-Agent", "PhotonGalleryApp/1.0 (Android; Jetpack Compose)")
+                .post(requestBody)
+                .build()
+            client.newCall(request).execute().use { response ->
+                val bodyString = response.body?.string() ?: ""
+                if (!response.isSuccessful) {
+                    val json = try { org.json.JSONObject(bodyString) } catch (e: Exception) { null }
+                    val description = json?.optString("description") ?: ""
+                    val migrateToChatId = json?.optJSONObject("parameters")?.optLong("migrate_to_chat_id", 0L) ?: 0L
+                    if (migrateToChatId != 0L) {
+                        repository.updateTelegramChatId(migrateToChatId.toString())
+                        ConnectionTestResult.Migrated(migrateToChatId.toString())
+                    } else {
+                        val errorDetail = if (description.isNotBlank()) description else "HTTP error: ${response.code}"
+                        ConnectionTestResult.Error(errorDetail)
+                    }
+                } else {
+                    val json = org.json.JSONObject(bodyString)
+                    if (json.getBoolean("ok")) {
+                        ConnectionTestResult.Success
+                    } else {
+                        ConnectionTestResult.Error(json.optString("description", "Unknown error"))
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            ConnectionTestResult.Error(e.message ?: "Connection failed")
         }
     }
 
@@ -699,5 +756,13 @@ sealed class ConnectionTestResult {
     object Testing : ConnectionTestResult()
     object Success : ConnectionTestResult()
     data class Migrated(val newChatId: String) : ConnectionTestResult()
+    data class AutoCorrected(val correctedChatId: String) : ConnectionTestResult()
     data class Error(val message: String) : ConnectionTestResult()
+}
+
+sealed class DetectedChatsResult {
+    object Loading : DetectedChatsResult()
+    object Empty : DetectedChatsResult()
+    data class Success(val chats: List<com.inferno.gallery.data.network.DetectedChat>) : DetectedChatsResult()
+    data class Error(val message: String) : DetectedChatsResult()
 }

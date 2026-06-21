@@ -32,6 +32,10 @@
 - **Auto-Hiding Pill Dock**: Navigation toolbar that collapses dynamically on down-scroll and re-appears on minor up-scroll to maximize screen space.
 - **Telegram Cloud Backup**: Synchronize selected media folders securely to your private Telegram chat using a personal Telegram Bot. Includes Wi-Fi only upload constraints, low-battery pausing, and location metadata stripping for enhanced privacy.
 - **Collage Builder**: Select multiple photos to instantly create custom photo collages.
+- **Pinned Albums**: Pin your most-used albums to the top for quick access. Long-press any album to pin or unpin it.
+- **Private Space**: A biometric-protected vault to keep sensitive photos and videos hidden from the main gallery.
+- **Stitch Tool**: Combine multiple images into a single stitched panorama.
+- **Exclude Folders**: Hide unwanted folders from your main gallery view while keeping them accessible via search.
 
 ---
 

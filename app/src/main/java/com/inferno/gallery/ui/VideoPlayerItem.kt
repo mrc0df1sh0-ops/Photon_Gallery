@@ -47,10 +47,13 @@ fun VideoPlayerItem(uri: Uri, isCurrentPage: Boolean, modifier: Modifier = Modif
     val context = LocalContext.current
     var resolvedPlayUri by remember(uri) { mutableStateOf<Uri?>(null) }
     var isLoadingUrl by remember(uri) { mutableStateOf(false) }
+    var errorMessage by remember(uri) { mutableStateOf<String?>(null) }
+    var downloadProgress by remember(uri) { mutableStateOf<String?>(null) }
 
     LaunchedEffect(uri) {
         if (uri.scheme == "telegram") {
             isLoadingUrl = true
+            errorMessage = null
             try {
                 val fileId = uri.host
                 if (fileId != null) {
@@ -58,16 +61,41 @@ fun VideoPlayerItem(uri: Uri, isCurrentPage: Boolean, modifier: Modifier = Modif
                     val botTokens = settings.telegramBotTokensFlow.first()
                     if (botTokens.isNotEmpty()) {
                         val client = com.inferno.gallery.data.network.TelegramClient(botTokens.first(), "")
-                        val httpUrl = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                            client.getFileUrl(fileId)
+                        try {
+                            // Try getFile first (works for files ≤20MB)
+                            val httpUrl = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                client.getFileUrl(fileId)
+                            }
+                            resolvedPlayUri = Uri.parse(httpUrl)
+                        } catch (e: com.inferno.gallery.data.network.TelegramApiException) {
+                            if (e.code == 400 && e.description.contains("file is too big", ignoreCase = true)) {
+                                // File >20MB: download to cache and play locally
+                                downloadProgress = "Downloading video…"
+                                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                    val cacheFile = java.io.File(context.cacheDir, "cloud_video_${fileId.hashCode()}.mp4")
+                                    if (cacheFile.exists() && cacheFile.length() > 0) {
+                                        // Already cached
+                                        resolvedPlayUri = Uri.fromFile(cacheFile)
+                                    } else {
+                                        // Need to download — for >20MB, getFile won't work.
+                                        // We can't stream these via Bot API, show error.
+                                        errorMessage = "Video too large for streaming (>20MB). Open in Telegram to watch."
+                                    }
+                                }
+                            } else {
+                                throw e
+                            }
                         }
-                        resolvedPlayUri = Uri.parse(httpUrl)
+                    } else {
+                        errorMessage = "No bot token configured"
                     }
                 }
             } catch (e: Exception) {
+                errorMessage = "Failed to load video: ${e.message}"
                 e.printStackTrace()
             } finally {
                 isLoadingUrl = false
+                downloadProgress = null
             }
         } else {
             resolvedPlayUri = uri
@@ -86,10 +114,41 @@ fun VideoPlayerItem(uri: Uri, isCurrentPage: Boolean, modifier: Modifier = Modif
             contentAlignment = Alignment.Center
         ) {
             if (isLoadingUrl) {
-                com.inferno.gallery.ui.components.WavyProgressIndicator(
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(48.dp)
-                )
+                androidx.compose.foundation.layout.Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp)
+                ) {
+                    com.inferno.gallery.ui.components.WavyProgressIndicator(
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(48.dp)
+                    )
+                    if (downloadProgress != null) {
+                        Text(
+                            text = downloadProgress!!,
+                            color = Color.White.copy(alpha = 0.7f),
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+            } else if (errorMessage != null) {
+                androidx.compose.foundation.layout.Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(32.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.PlayArrow,
+                        contentDescription = null,
+                        tint = Color.White.copy(alpha = 0.5f),
+                        modifier = Modifier.size(48.dp)
+                    )
+                    Text(
+                        text = errorMessage!!,
+                        color = Color.White.copy(alpha = 0.7f),
+                        style = MaterialTheme.typography.bodyMedium,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                }
             }
         }
     }

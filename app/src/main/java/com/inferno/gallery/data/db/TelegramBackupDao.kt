@@ -14,6 +14,9 @@ interface TelegramBackupDao {
     @Query("SELECT * FROM telegram_backups WHERE backupStatus = 'PENDING'")
     suspend fun getPendingBackups(): List<TelegramBackupEntity>
 
+    @Query("SELECT * FROM telegram_backups WHERE backupStatus = 'FAILED'")
+    suspend fun getFailedBackups(): List<TelegramBackupEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertOrUpdate(backup: TelegramBackupEntity)
 
@@ -40,6 +43,18 @@ interface TelegramBackupDao {
 
     @Query("SELECT * FROM telegram_backups WHERE mediaId IN (:mediaIds)")
     suspend fun getBackupsForMediaIds(mediaIds: List<Long>): List<TelegramBackupEntity>
+
+    @Query("""
+        SELECT cm.*, tb.telegramFileId, tb.telegramThumbFileId, tb.backupStatus 
+        FROM core_media cm 
+        INNER JOIN telegram_backups tb ON cm.id = tb.mediaId 
+        WHERE tb.backupStatus = 'FAILED' 
+        ORDER BY tb.backupTimestamp DESC
+    """)
+    fun observeFailedBackups(): Flow<List<CloudMediaItem>>
+
+    @Query("UPDATE telegram_backups SET backupStatus = 'PENDING' WHERE backupStatus = 'FAILED'")
+    suspend fun retryAllFailedBackups()
 }
 
 data class CloudMediaItem(

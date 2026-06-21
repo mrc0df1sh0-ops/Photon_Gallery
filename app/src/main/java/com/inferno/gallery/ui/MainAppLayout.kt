@@ -452,6 +452,18 @@ fun MainAppLayout(
                                     style = MaterialTheme.typography.displayMedium
                                 )
                                 Row(verticalAlignment = Alignment.CenterVertically) {
+                                    if (currentRoute == "photos") {
+                                        IconButton(onClick = { nestedNavController.navigate("search") {
+                                            popUpTo("photos") { inclusive = false }
+                                            launchSingleTop = true
+                                        } }) {
+                                            Icon(
+                                                imageVector = Icons.Outlined.Search,
+                                                contentDescription = "Search",
+                                                tint = MaterialTheme.colorScheme.onSurface
+                                            )
+                                        }
+                                    }
                                     if (currentRoute == "albums") {
                                         IconButton(onClick = { showCreateAlbumDialog = true }) {
                                             Icon(
@@ -1076,40 +1088,43 @@ fun MainAppLayout(
                 androidx.compose.material3.AlertDialog(
                     onDismissRequest = { showSmartDeleteDialog = false },
                     title = { Text("Delete Items") },
-                    text = { Text("Some of the selected items are backed up to the cloud. Do you want to delete them everywhere (device and cloud) or from this device only?") },
+                    text = { Text("Some selected items are backed up to the cloud. Choose how to delete:") },
                     confirmButton = {
-                        androidx.compose.material3.TextButton(
-                            onClick = {
-                                showSmartDeleteDialog = false
-                                // Delete everywhere (device & cloud)
-                                viewModel.deleteCloudBackupsByUris(selectedUris)
-                                
-                                val uris = selectedUris.map { Uri.parse(it) }
-                                if (uris.isNotEmpty()) {
-                                    try {
-                                        val trashIntent = android.provider.MediaStore.createTrashRequest(
-                                            context.contentResolver,
-                                            uris,
-                                            true
-                                        )
-                                        trashLauncher.launch(
-                                            androidx.activity.result.IntentSenderRequest.Builder(trashIntent.intentSender).build()
-                                        )
-                                    } catch (e: Exception) {
-                                        e.printStackTrace()
-                                    }
-                                }
-                            }
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(0.dp),
+                            horizontalAlignment = Alignment.End
                         ) {
-                            Text("Delete Everywhere", color = MaterialTheme.colorScheme.error)
-                        }
-                    },
-                    dismissButton = {
-                        Row {
+                            // Option 1: Delete Everywhere
                             androidx.compose.material3.TextButton(
                                 onClick = {
                                     showSmartDeleteDialog = false
-                                    // Delete from device only
+                                    // Delete cloud backups
+                                    viewModel.deleteCloudBackupsByUris(selectedUris)
+                                    // Delete from device (trash)
+                                    val uris = selectedUris.map { Uri.parse(it) }
+                                    if (uris.isNotEmpty()) {
+                                        try {
+                                            val trashIntent = android.provider.MediaStore.createTrashRequest(
+                                                context.contentResolver,
+                                                uris,
+                                                true
+                                            )
+                                            trashLauncher.launch(
+                                                androidx.activity.result.IntentSenderRequest.Builder(trashIntent.intentSender).build()
+                                            )
+                                        } catch (e: Exception) {
+                                            e.printStackTrace()
+                                        }
+                                    }
+                                }
+                            ) {
+                                Text("Delete Everywhere", color = MaterialTheme.colorScheme.error)
+                            }
+                            // Option 2: Device Only
+                            androidx.compose.material3.TextButton(
+                                onClick = {
+                                    showSmartDeleteDialog = false
+                                    // Delete from device only, keep cloud backup
                                     val uris = selectedUris.map { Uri.parse(it) }
                                     if (uris.isNotEmpty()) {
                                         try {
@@ -1129,12 +1144,29 @@ fun MainAppLayout(
                             ) {
                                 Text("Device Only")
                             }
-                            Spacer(modifier = Modifier.width(8.dp))
+                            // Option 3: Cloud Only
                             androidx.compose.material3.TextButton(
-                                onClick = { showSmartDeleteDialog = false }
+                                onClick = {
+                                    showSmartDeleteDialog = false
+                                    // Delete cloud backups only, keep local files
+                                    viewModel.deleteCloudBackupsByUris(selectedUris)
+                                    viewModel.clearSelection()
+                                    android.widget.Toast.makeText(
+                                        context,
+                                        "Removed cloud backups. Local files kept.",
+                                        android.widget.Toast.LENGTH_SHORT
+                                    ).show()
+                                }
                             ) {
-                                Text("Cancel")
+                                Text("Cloud Only")
                             }
+                        }
+                    },
+                    dismissButton = {
+                        androidx.compose.material3.TextButton(
+                            onClick = { showSmartDeleteDialog = false }
+                        ) {
+                            Text("Cancel")
                         }
                     }
                 )

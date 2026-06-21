@@ -251,6 +251,20 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
             initialValue = emptyList()
         )
 
+    val failedBackups: StateFlow<List<CloudMediaItem>> = database.telegramBackupDao().observeFailedBackups()
+        .flowOn(Dispatchers.Default)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
+    fun retryAllFailedBackups() {
+        viewModelScope.launch(Dispatchers.IO) {
+            database.telegramBackupDao().retryAllFailedBackups()
+        }
+    }
+
     val favoriteMedia: StateFlow<List<GalleryItem>> = favoritesManager.favoritesFlow.flatMapLatest { favs ->
         if (favs.isEmpty()) kotlinx.coroutines.flow.flowOf(emptyList())
         else database.mediaDao().observeMediaByIds(favs.mapNotNull { it.toLongOrNull() })
@@ -1033,6 +1047,23 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
         ).filter { it.bucketName == "Favorites" || it.itemCount > 0 }
     }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    // User-pinned folders (from Settings, not the hardcoded system buckets)
+    val userPinnedFolderNames: StateFlow<Set<String>> = settingsRepository.pinnedFoldersFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
+
+    val userPinnedAlbums: StateFlow<List<AlbumBucket>> = combine(
+        allAlbums,
+        settingsRepository.pinnedFoldersFlow
+    ) { albums, pinnedNames ->
+        albums.filter { it.bucketName in pinnedNames }
+    }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun togglePinAlbum(bucketName: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            settingsRepository.togglePinnedFolder(bucketName)
+        }
+    }
+
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
 
@@ -1675,47 +1706,89 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
             val allMediaList = database.mediaDao().getAllMedia()
             val backupDao = database.telegramBackupDao()
             
-            var skippedCount = 0
+            // Build a content fingerprint set from already-backed-up items (name+size)
+            // This catches duplicates where the same file exists with different mediaIds
+            val allBackups = backupDao.observeAllBackups().first()
+            val backedUpMediaIds = allBackups
+                .filter { it.backupStatus == "SUCCESS" || it.backupStatus == "PENDING" }
+                .map { it.mediaId }
+                .toSet()
+            val allMediaMap = allMediaList.associateBy { it.id }
+            val backedUpFingerprints = backedUpMediaIds.mapNotNull { id ->
+                allMediaMap[id]?.let { "${it.name}|${it.size}" }
+            }.toMutableSet()
+
+            var skippedSize = 0
+            var skippedDuplicate = 0
+            var skippedVideo = 0
+            var queuedCount = 0
+
             selected.forEach { uriStr ->
                 val mediaItem = allMediaList.firstOrNull { it.uriString == uriStr }
                 if (mediaItem != null) {
-                    if (mediaItem.size > 50 * 1024 * 1024L) {
-                        skippedCount++
+                    if (mediaItem.isVideo) {
+                        skippedVideo++
                         return@forEach
                     }
-                    val existingBackup = backupDao.getBackupForMedia(mediaItem.id)
-                    if (existingBackup == null || existingBackup.backupStatus == "FAILED") {
-                        backupDao.insertOrUpdate(
-                            TelegramBackupEntity(
-                                mediaId = mediaItem.id,
-                                telegramFileId = null,
-                                telegramThumbFileId = null,
-                                backupStatus = "PENDING",
-                                backupTimestamp = System.currentTimeMillis()
-                            )
-                        )
+                    if (mediaItem.size > 50 * 1024 * 1024L) {
+                        skippedSize++
+                        return@forEach
                     }
+
+                    val fingerprint = "${mediaItem.name}|${mediaItem.size}"
+
+                    // Check 1: Same mediaId already backed up
+                    val existingBackup = backupDao.getBackupForMedia(mediaItem.id)
+                    if (existingBackup != null && existingBackup.backupStatus != "FAILED") {
+                        skippedDuplicate++
+                        return@forEach
+                    }
+
+                    // Check 2: Different mediaId but same content (name+size) already backed up
+                    if (fingerprint in backedUpFingerprints) {
+                        skippedDuplicate++
+                        return@forEach
+                    }
+
+                    backupDao.insertOrUpdate(
+                        TelegramBackupEntity(
+                            mediaId = mediaItem.id,
+                            telegramFileId = null,
+                            telegramThumbFileId = null,
+                            backupStatus = "PENDING",
+                            backupTimestamp = System.currentTimeMillis()
+                        )
+                    )
+                    backedUpFingerprints.add(fingerprint)
+                    queuedCount++
                 }
             }
             
             withContext(Dispatchers.Main) {
                 clearSelection()
-                if (skippedCount > 0) {
+                val messages = mutableListOf<String>()
+                if (skippedVideo > 0) messages.add("$skippedVideo videos skipped")
+                if (skippedSize > 0) messages.add("$skippedSize too large (>50MB)")
+                if (skippedDuplicate > 0) messages.add("$skippedDuplicate already backed up")
+                if (messages.isNotEmpty()) {
+                    val skipMsg = "Skipped: ${messages.joinToString(", ")}"
                     android.widget.Toast.makeText(
                         getApplication(),
-                        "Skipped $skippedCount items (Telegram limit: max 50MB per file)",
+                        skipMsg,
                         android.widget.Toast.LENGTH_LONG
                     ).show()
                 }
             }
             
-            val request = OneTimeWorkRequestBuilder<com.inferno.gallery.workers.TelegramBackupWorker>()
-                .build()
-            WorkManager.getInstance(getApplication()).enqueueUniqueWork(
-                "TelegramBackupWorker",
-                ExistingWorkPolicy.KEEP,
-                request
-            )
+            if (queuedCount > 0) {
+                val request = OneTimeWorkRequestBuilder<com.inferno.gallery.workers.TelegramBackupWorker>()
+                    .build()
+                WorkManager.getInstance(getApplication()).enqueueUniqueWork(
+                    "TelegramBackupWorker",
+                    ExistingWorkPolicy.KEEP,
+                    request
+                )
+            }
         }
     }
 

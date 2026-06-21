@@ -1,12 +1,17 @@
 package com.inferno.gallery.workers
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.Context
+import android.content.pm.ServiceInfo
 import android.net.Uri
 import android.util.Log
 import android.os.BatteryManager
 import android.content.Intent
 import android.content.IntentFilter
+import androidx.core.app.NotificationCompat
 import androidx.work.CoroutineWorker
+import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
 import com.inferno.gallery.data.SettingsRepository
 import com.inferno.gallery.data.db.DatabaseProvider
@@ -31,6 +36,36 @@ class TelegramBackupWorker(
 
     companion object {
         private const val TAG = "TelegramBackupWorker"
+        private const val NOTIFICATION_ID = 77
+        private const val CHANNEL_ID = "telegram_backup_channel"
+    }
+
+    override suspend fun getForegroundInfo(): ForegroundInfo =
+        createForegroundInfo("Preparing backup…")
+
+    private fun createForegroundInfo(progress: String): ForegroundInfo {
+        val context = applicationContext
+        val channel = NotificationChannel(
+            CHANNEL_ID,
+            "Cloud Backup",
+            NotificationManager.IMPORTANCE_LOW
+        ).apply { description = "Shows progress while backing up photos to Telegram" }
+        (context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
+            .createNotificationChannel(channel)
+
+        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setContentTitle("Telegram Cloud Backup")
+            .setContentText(progress)
+            .setSmallIcon(android.R.drawable.ic_menu_upload)
+            .setOngoing(true)
+            .setSilent(true)
+            .build()
+
+        return ForegroundInfo(
+            NOTIFICATION_ID,
+            notification,
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+        )
     }
 
     private fun isBatteryTooLow(context: Context): Boolean {
@@ -69,13 +104,30 @@ class TelegramBackupWorker(
         val backupDao = database.telegramBackupDao()
         val mediaDao = database.mediaDao()
         
+        // Retry FAILED backups (reset to PENDING so they get re-processed)
+        val failedBackups = backupDao.getFailedBackups()
+        if (failedBackups.isNotEmpty()) {
+            Log.d(TAG, "Retrying ${failedBackups.size} previously failed backups.")
+            for (failed in failedBackups) {
+                backupDao.insertOrUpdate(failed.copy(backupStatus = "PENDING"))
+            }
+        }
+
         val pendingBackups = backupDao.getPendingBackups()
         if (pendingBackups.isEmpty()) {
             Log.d(TAG, "No pending backups found.")
             return@withContext Result.success()
         }
 
+        // Pre-load all media into a map ONCE (avoids per-item full table scans)
+        val allMediaMap = mediaDao.getAllMedia().associateBy { it.id }
+
         Log.d(TAG, "Starting Telegram backup. Pending count: ${pendingBackups.size}, Bots count: ${botTokens.size}")
+
+        // Show foreground notification with progress
+        val totalPending = pendingBackups.size
+        val completedCount = java.util.concurrent.atomic.AtomicInteger(0)
+        setForeground(createForegroundInfo("Backing up 0/$totalPending photos…"))
 
         // Thread-safe channel to distribute pending media tasks
         val channel = Channel<TelegramBackupEntity>(pendingBackups.size)
@@ -104,11 +156,15 @@ class TelegramBackupWorker(
                         continue
                     }
 
-                    // Fetch the media metadata
-                    val entities = database.mediaDao().getAllMedia()
-                    val mediaEntity = entities.firstOrNull { it.id == backup.mediaId }
+                    // Fetch the media metadata from pre-loaded map
+                    val mediaEntity = allMediaMap[backup.mediaId]
                     if (mediaEntity == null) {
                         Log.w(TAG, "Media item ${backup.mediaId} not found in core_media, skipping.")
+                        backupDao.deleteBackup(backup.mediaId)
+                        continue
+                    }
+                    if (mediaEntity.isVideo) {
+                        Log.w(TAG, "Video backup not supported: ${mediaEntity.name}. Removing from queue.")
                         backupDao.deleteBackup(backup.mediaId)
                         continue
                     }
@@ -183,7 +239,23 @@ class TelegramBackupWorker(
                                 backupTimestamp = System.currentTimeMillis()
                             )
                         )
-                        Log.d(TAG, "Upload success for ${mediaEntity.name}. file_id: ${uploadResult.fileId}")
+                        val done = completedCount.incrementAndGet()
+                        Log.d(TAG, "Upload success for ${mediaEntity.name}. file_id: ${uploadResult.fileId} ($done/$totalPending)")
+                        setForeground(createForegroundInfo("Backing up $done/$totalPending photos…"))
+
+                        // Periodic manifest sync every 10 uploads for crash protection
+                        if (done % 10 == 0) {
+                            try {
+                                Log.d(TAG, "Periodic manifest sync at $done/$totalPending uploads")
+                                com.inferno.gallery.data.SyncManifestManager.updateManifest(
+                                    applicationContext,
+                                    botToken,
+                                    sharedChatId.get()
+                                )
+                            } catch (manifestEx: Exception) {
+                                Log.w(TAG, "Periodic manifest sync failed (non-fatal): ${manifestEx.message}")
+                            }
+                        }
 
                         // Add randomized delay (jitter) of 5 to 9 seconds to strictly comply with Telegram's 20-messages-per-minute per chat limit
                         val jitterDelay = (5000L..9000L).random()
@@ -222,6 +294,41 @@ class TelegramBackupWorker(
                             delay(jitterDelay)
                         } catch (retryException: Exception) {
                             Log.e(TAG, "Retry upload failed for ${mediaEntity.name}: ${retryException.message}", retryException)
+                            backupDao.insertOrUpdate(
+                                TelegramBackupEntity(
+                                    mediaId = mediaEntity.id,
+                                    telegramFileId = null,
+                                    telegramThumbFileId = null,
+                                    backupStatus = "FAILED",
+                                    backupTimestamp = System.currentTimeMillis()
+                                )
+                            )
+                        }
+
+                    } catch (e: java.net.SocketTimeoutException) {
+                        // Timeout during upload (common for large videos) — retry once
+                        Log.w(TAG, "Timeout uploading ${mediaEntity.name}, retrying once...")
+                        try {
+                            val retryClient = TelegramClient(botToken, sharedChatId.get())
+                            val mimeType2 = mediaEntity.mimeType ?: if (mediaEntity.isVideo) "video/mp4" else "image/jpeg"
+                            val uploadResult = retryClient.uploadDocument(tempFile!!, mimeType2)
+                            backupDao.insertOrUpdate(
+                                TelegramBackupEntity(
+                                    mediaId = mediaEntity.id,
+                                    telegramFileId = uploadResult.fileId,
+                                    telegramThumbFileId = uploadResult.thumbFileId,
+                                    telegramMessageId = uploadResult.messageId,
+                                    backupStatus = "SUCCESS",
+                                    backupTimestamp = System.currentTimeMillis()
+                                )
+                            )
+                            val done = completedCount.incrementAndGet()
+                            Log.d(TAG, "Retry upload success for ${mediaEntity.name} ($done/$totalPending)")
+                            setForeground(createForegroundInfo("Backing up $done/$totalPending photos…"))
+                            val jitterDelay = (5000L..9000L).random()
+                            delay(jitterDelay)
+                        } catch (retryEx: Exception) {
+                            Log.e(TAG, "Retry also failed for ${mediaEntity.name}: ${retryEx.message}")
                             backupDao.insertOrUpdate(
                                 TelegramBackupEntity(
                                     mediaId = mediaEntity.id,

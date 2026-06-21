@@ -198,6 +198,7 @@ fun DetailScreen(
     }
 
 
+
     // Ensure we don't crash if items is empty
     if (galleryItems.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize().background(Color.Black))
@@ -217,6 +218,8 @@ fun DetailScreen(
             }
         }
     }
+
+
     val resolvedCurrentUri by produceState<Uri?>(initialValue = currentItem?.uri, key1 = currentItem) {
         val uri = currentItem?.uri
         if (uri != null) {
@@ -1050,6 +1053,8 @@ fun DetailScreen(
                 )
             }
         }
+
+
 
         // UI Overlay
         AnimatedVisibility(

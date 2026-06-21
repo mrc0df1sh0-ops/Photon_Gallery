@@ -97,12 +97,15 @@ fun AlbumsScreen(
 ) {
     val albums by viewModel.allAlbums.collectAsState()
     val pinnedAlbums by viewModel.pinnedAlbums.collectAsState()
+    val userPinnedAlbums by viewModel.userPinnedAlbums.collectAsState()
+    val userPinnedNames by viewModel.userPinnedFolderNames.collectAsState()
     val albumSortOrder by viewModel.albumSortOrder.collectAsState()
     val favoriteItems by viewModel.favoriteMedia.collectAsState()
     val gridAutoPlay by viewModel.gridAutoPlay.collectAsState()
     val trashCount by viewModel.trashCount.collectAsState()
     val vaultItemCount by viewModel.vaultItemCount.collectAsState()
     val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
 
     var isInitialLoading by remember { mutableStateOf(true) }
     LaunchedEffect(Unit) {
@@ -110,7 +113,8 @@ fun AlbumsScreen(
         isInitialLoading = false
     }
 
-    val pinnedAlbumsWithTrash = remember(pinnedAlbums, trashCount) {
+    // Merge system pinned + user pinned, cap at 8 visible
+    val systemPinned = remember(pinnedAlbums, trashCount) {
         val list = pinnedAlbums.toMutableList()
         val screenshotIndex = list.indexOfFirst { it.bucketName.contains("Screenshots", ignoreCase = true) || it.bucketName.contains("Screenshot", ignoreCase = true) }
         val trashBucket = AlbumBucket(
@@ -125,39 +129,27 @@ fun AlbumsScreen(
         }
         list
     }
+
+    val allPinnedCards = remember(systemPinned, userPinnedAlbums) {
+        val filteredSystem = systemPinned.filter {
+            it.bucketName != "Trash" && it.bucketName != "Favorites"
+        }
+        (filteredSystem + userPinnedAlbums).distinctBy { it.bucketName }
+    }
+
+    val maxVisible = 8
+    val visiblePinned = allPinnedCards.take(maxVisible)
+    val overflowPinned = allPinnedCards.drop(maxVisible)
+    var showOverflowMenu by remember { mutableStateOf(false) }
+
+    // Long-press state for album cards
+    var longPressAlbum by remember { mutableStateOf<String?>(null) }
     
     var showSortMenu by remember { mutableStateOf(false) }
 
     val lazyGridState = rememberLazyGridState()
 
-    LaunchedEffect(lazyGridState) {
-        var previousIndex = 0
-        var previousScrollOffset = 0
-        snapshotFlow {
-            Triple(
-                lazyGridState.firstVisibleItemIndex,
-                lazyGridState.firstVisibleItemScrollOffset,
-                lazyGridState.isScrollInProgress
-            )
-        }
-        .collectLatest { (index, offset, isScrollInProgress) ->
-            if (isScrollInProgress) {
-                if (index > previousIndex) {
-                    viewModel.setScrollDockVisible(false)
-                } else if (index < previousIndex) {
-                    viewModel.setScrollDockVisible(true)
-                } else {
-                    if (offset > previousScrollOffset + 15) {
-                        viewModel.setScrollDockVisible(false)
-                    } else if (offset < previousScrollOffset - 15) {
-                        viewModel.setScrollDockVisible(true)
-                    }
-                }
-            }
-            previousIndex = index
-            previousScrollOffset = offset
-        }
-    }
+
     
     if (isInitialLoading) {
         Box(
@@ -173,7 +165,6 @@ fun AlbumsScreen(
     var showPrivateSpaceCard by remember { mutableStateOf(false) }
     var pullAccumulator by remember { mutableStateOf(0f) }
     val pullThreshold = 150f // pixels of overscroll needed
-    val haptic = LocalHapticFeedback.current
 
     // Auto-hide after 3 seconds
     LaunchedEffect(showPrivateSpaceCard) {
@@ -405,30 +396,102 @@ fun AlbumsScreen(
                 }
             }
         }
-        // ── Pinned albums (exclude Favorites & Trash — they have their own cards) ──
-        val filteredPinned = pinnedAlbumsWithTrash.filter { 
-            it.bucketName != "Trash" && it.bucketName != "Favorites" 
-        }
-        if (filteredPinned.isNotEmpty()) {
+        // ── Pinned albums (system + user-pinned, max 8 visible) ──
+        if (visiblePinned.isNotEmpty()) {
             items(
-                items = filteredPinned,
+                items = visiblePinned,
                 key = { "pinned_${it.bucketName}" },
                 span = { GridItemSpan(4) }
             ) { bucket ->
-                // Map screen recordings bucket name for UI display
                 val displayBucketName = when (bucket.bucketName) {
                     "Screenrecordings", "Screenrecords", "ScreenRecord" -> "Screen recordings"
                     else -> bucket.bucketName
                 }
-                AlbumCard(
-                    bucket = bucket.copy(bucketName = displayBucketName), 
-                    gridAutoPlay = gridAutoPlay,
-                    onClick = { onAlbumClick(bucket.bucketName) }
-                )
+                val isUserPinned = bucket.bucketName in userPinnedNames
+                if (isUserPinned) {
+                    Box {
+                        var showUnpinMenu by remember { mutableStateOf(false) }
+                        AlbumCard(
+                            bucket = bucket.copy(bucketName = displayBucketName), 
+                            gridAutoPlay = gridAutoPlay,
+                            onClick = { onAlbumClick(bucket.bucketName) },
+                            onLongPress = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                showUnpinMenu = true
+                            }
+                        )
+                        androidx.compose.material3.DropdownMenu(
+                            expanded = showUnpinMenu,
+                            onDismissRequest = { showUnpinMenu = false },
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                        ) {
+                            androidx.compose.material3.DropdownMenuItem(
+                                text = { Text("Unpin Album") },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Outlined.Folder,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                },
+                                onClick = {
+                                    showUnpinMenu = false
+                                    viewModel.togglePinAlbum(bucket.bucketName)
+                                }
+                            )
+                        }
+                    }
+                } else {
+                    AlbumCard(
+                        bucket = bucket.copy(bucketName = displayBucketName), 
+                        gridAutoPlay = gridAutoPlay,
+                        onClick = { onAlbumClick(bucket.bucketName) }
+                    )
+                }
+            }
+        }
+
+        // ── Overflow pinned albums (>8) dropdown ──
+        if (overflowPinned.isNotEmpty()) {
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                Box {
+                    androidx.compose.material3.TextButton(
+                        onClick = { showOverflowMenu = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            "+${overflowPinned.size} more pinned",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    androidx.compose.material3.DropdownMenu(
+                        expanded = showOverflowMenu,
+                        onDismissRequest = { showOverflowMenu = false },
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                    ) {
+                        overflowPinned.forEach { bucket ->
+                            androidx.compose.material3.DropdownMenuItem(
+                                text = { Text(bucket.bucketName) },
+                                leadingIcon = { Icon(Icons.Outlined.Folder, contentDescription = null, modifier = Modifier.size(20.dp)) },
+                                trailingIcon = { Text("${bucket.itemCount}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                                onClick = {
+                                    showOverflowMenu = false
+                                    onAlbumClick(bucket.bucketName)
+                                }
+                            )
+                        }
+                    }
+                }
             }
         }
         
-        if (albums.isNotEmpty()) {
+        // ── More albums (excluding user-pinned to avoid duplication) ──
+        val unpinnedAlbums = albums.filter { it.bucketName != "Favorites" && it.bucketName !in userPinnedNames }
+
+        if (unpinnedAlbums.isNotEmpty()) {
             item(span = { GridItemSpan(maxLineSpan) }) {
                 Row(
                     modifier = Modifier
@@ -530,15 +593,44 @@ fun AlbumsScreen(
             }
             
             items(
-                items = albums.filter { it.bucketName != "Favorites" },
+                items = unpinnedAlbums,
                 key = { "folder_${it.bucketName}" },
                 span = { GridItemSpan(3) }
             ) { bucket ->
-                AlbumCard(
-                    bucket = bucket, 
-                    gridAutoPlay = gridAutoPlay,
-                    onClick = { onAlbumClick(bucket.bucketName) }
-                )
+                Box {
+                    var showPinMenu by remember { mutableStateOf(false) }
+                    AlbumCard(
+                        bucket = bucket, 
+                        gridAutoPlay = gridAutoPlay,
+                        onClick = { onAlbumClick(bucket.bucketName) },
+                        onLongPress = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            showPinMenu = true
+                        }
+                    )
+                    androidx.compose.material3.DropdownMenu(
+                        expanded = showPinMenu,
+                        onDismissRequest = { showPinMenu = false },
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                    ) {
+                        val isPinned = bucket.bucketName in userPinnedNames
+                        androidx.compose.material3.DropdownMenuItem(
+                            text = { Text(if (isPinned) "Unpin Album" else "Pin Album") },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Outlined.Folder,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            },
+                            onClick = {
+                                showPinMenu = false
+                                viewModel.togglePinAlbum(bucket.bucketName)
+                            }
+                        )
+                    }
+                }
             }
         }
 
@@ -549,7 +641,7 @@ fun AlbumsScreen(
 }
 
 @Composable
-fun Modifier.expressiveClick(onClick: () -> Unit): Modifier {
+fun Modifier.expressiveClick(onClick: () -> Unit, onLongPress: (() -> Unit)? = null): Modifier {
     var isPressed by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(
         targetValue = if (isPressed) 0.97f else 1f,
@@ -561,14 +653,15 @@ fun Modifier.expressiveClick(onClick: () -> Unit): Modifier {
     )
     return this
         .scale(scale)
-        .pointerInput(Unit) {
+        .pointerInput(onClick, onLongPress) {
             detectTapGestures(
                 onPress = {
                     isPressed = true
                     tryAwaitRelease()
                     isPressed = false
                 },
-                onTap = { onClick() }
+                onTap = { onClick() },
+                onLongPress = if (onLongPress != null) {{ onLongPress() }} else null
             )
         }
 }
@@ -663,7 +756,8 @@ fun AlbumCard(
     bucket: AlbumBucket,
     modifier: Modifier = Modifier,
     gridAutoPlay: Boolean = true,
-    onClick: () -> Unit = {}
+    onClick: () -> Unit = {},
+    onLongPress: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
 
@@ -687,7 +781,7 @@ fun AlbumCard(
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .expressiveClick(onClick),
+            .expressiveClick(onClick, onLongPress),
         shape = MaterialTheme.shapes.large,
         color = MaterialTheme.colorScheme.surfaceContainerHigh
     ) {
