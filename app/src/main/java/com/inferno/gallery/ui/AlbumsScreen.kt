@@ -107,12 +107,6 @@ fun AlbumsScreen(
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
 
-    var isInitialLoading by remember { mutableStateOf(true) }
-    LaunchedEffect(Unit) {
-        kotlinx.coroutines.delay(300)
-        isInitialLoading = false
-    }
-
     // Merge system pinned + user pinned, cap at 8 visible
     val systemPinned = remember(pinnedAlbums, trashCount) {
         val list = pinnedAlbums.toMutableList()
@@ -148,18 +142,6 @@ fun AlbumsScreen(
     var showSortMenu by remember { mutableStateOf(false) }
 
     val lazyGridState = rememberLazyGridState()
-
-
-    
-    if (isInitialLoading) {
-        Box(
-            modifier = modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
-        ) {
-            WavyProgressIndicator(modifier = Modifier.size(48.dp))
-        }
-        return
-    }
     
     // ── Pull-down to reveal Private Space ──
     var showPrivateSpaceCard by remember { mutableStateOf(false) }
@@ -293,7 +275,7 @@ fun AlbumsScreen(
                     color = MaterialTheme.colorScheme.surfaceContainerHigh,
                     modifier = Modifier
                         .weight(1f)
-                        .height(140.dp)
+                        .height(70.dp)
                 ) {
                     Box(modifier = Modifier.fillMaxSize()) {
                         if (favoriteItems.isNotEmpty()) {
@@ -302,7 +284,7 @@ fun AlbumsScreen(
                                     .data(favoriteItems.first().uri)
                                     .size(400, 400)
                                     .precision(Precision.EXACT)
-                                    .crossfade(150)
+                                    .crossfade(false)
                                     .apply {
                                         if (!gridAutoPlay) {
                                             repeatCount(0)
@@ -314,7 +296,6 @@ fun AlbumsScreen(
                                 contentScale = ContentScale.Crop,
                                 modifier = Modifier.fillMaxSize()
                             )
-                            // Gradient overlay
                             Box(
                                 modifier = Modifier
                                     .fillMaxSize()
@@ -324,33 +305,32 @@ fun AlbumsScreen(
                                                 Color.Transparent,
                                                 Color.Black.copy(alpha = 0.6f)
                                             ),
-                                            startY = 60f
+                                            startY = 20f
                                         )
                                     )
                             )
                         }
-                        // Label
                         Row(
                             modifier = Modifier
                                 .align(Alignment.BottomStart)
-                                .padding(12.dp),
+                                .padding(10.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             Icon(
                                 Icons.Outlined.FavoriteBorder,
                                 contentDescription = null,
                                 tint = if (favoriteItems.isNotEmpty()) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(16.dp)
+                                modifier = Modifier.size(14.dp)
                             )
                             Text(
                                 "Favorites",
-                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
                                 color = if (favoriteItems.isNotEmpty()) Color.White else MaterialTheme.colorScheme.onSurface
                             )
                             Text(
                                 "${favoriteItems.size}",
-                                style = MaterialTheme.typography.bodySmall,
+                                style = MaterialTheme.typography.labelSmall,
                                 color = if (favoriteItems.isNotEmpty()) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
@@ -364,31 +344,24 @@ fun AlbumsScreen(
                     color = MaterialTheme.colorScheme.surfaceContainerHigh,
                     modifier = Modifier
                         .weight(1f)
-                        .height(140.dp)
+                        .height(70.dp)
                 ) {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center,
-                            modifier = Modifier.padding(16.dp)
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        Row(
+                            modifier = Modifier
+                                .align(Alignment.BottomStart)
+                                .padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            Icon(
-                                Icons.Outlined.Delete,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(32.dp)
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
                             Text(
                                 "Trash",
-                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold)
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                                color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
                                 "$trashCount items",
-                                style = MaterialTheme.typography.bodySmall,
+                                style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
@@ -514,7 +487,7 @@ fun AlbumsScreen(
                         )
                         Text(
                             text = "More albums",
-                            style = MaterialTheme.typography.titleLarge.copy(
+                            style = MaterialTheme.typography.titleMedium.copy(
                                 fontWeight = FontWeight.Bold
                             )
                         )
@@ -679,7 +652,7 @@ fun CollageCover(
                 .data(uri)
                 .size(150, 150)
                 .precision(Precision.EXACT)
-                .crossfade(100)
+                .crossfade(false)
                 .memoryCachePolicy(CachePolicy.ENABLED)
                 .diskCachePolicy(CachePolicy.ENABLED)
                 .apply {
@@ -766,7 +739,7 @@ fun AlbumCard(
             .data(bucket.coverUri)
             .size(Size(300, 300))
             .precision(Precision.EXACT)
-            .crossfade(100)
+            .crossfade(false)
             .memoryCachePolicy(CachePolicy.ENABLED)
             .diskCachePolicy(CachePolicy.ENABLED)
             .apply {
