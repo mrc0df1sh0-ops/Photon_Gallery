@@ -1,0 +1,9 @@
+v2.0.0 — UI Consistency & Performance
+• Standardized typography and top bar design across all screens
+• Consolidated sort menu into Photos header
+• Unified Settings navigation with seamless transitions
+• Fixed back gesture in Settings sub-sections
+• Optimized image loading and thumbnail performance
+• Replaced legacy CenterAlignedTopAppBar with custom Row pattern
+• Resized Favorites/Trash cards for cleaner Albums layout
+• Swapped Cloud/Search dock tab positions

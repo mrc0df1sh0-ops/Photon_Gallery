@@ -1,0 +1,17 @@
+Photon Gallery is a high-performance, AI-powered local gallery app built with Jetpack Compose and Material 3 Expressive design language.
+
+Features:
+• Smart Search — Find photos using natural language powered by on-device AI (MobileCLIP)
+• OCR Text Search — Search text within your images
+• Cloud Backup — Back up your photos to Telegram cloud
+• Collage Creator — Create beautiful collages with multiple layout presets
+• Image Stitching — Stitch multiple images together vertically or horizontally
+• Private Space — Secure vault for sensitive photos
+• Pinch-to-zoom grid — Dynamically adjust column count with gestures
+• Swipe-to-dismiss — Fluid gesture-based image viewer with shared element transitions
+• Video playback — Inline video with skip gestures and full-screen support
+• Material You — Dynamic color theming with AMOLED black option
+
+All AI processing happens entirely on-device. No data leaves your phone.
+
+Built for Android with ❤️ using Kotlin, Jetpack Compose, Room, Coil, and ONNX Runtime.
