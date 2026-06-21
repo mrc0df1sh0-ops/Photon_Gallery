@@ -67,6 +67,9 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.outlined.Cloud
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Shield
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -84,6 +87,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
@@ -117,6 +122,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.sp
 import androidx.compose.material3.Text
 import coil3.compose.AsyncImage
@@ -972,9 +978,8 @@ fun DetailScreen(
                 Box(
                     modifier = Modifier
                         .size(thumbnailWidth, thumbnailHeight)
-                        .clip(RoundedCornerShape(12.dp))
                         .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                        .border(1.dp, Color.Black, RoundedCornerShape(12.dp))
+                        .border(0.5.dp, Color.White.copy(alpha = 0.5f))
                 ) {
                     AsyncImage(
                         model = ImageRequest.Builder(context)
@@ -996,13 +1001,14 @@ fun DetailScreen(
                         
                         val pctX = if (maxOffsetX > 0) -offsetX.floatValue / maxOffsetX else 0f
                         val pctY = if (maxOffsetY > 0) -offsetY.floatValue / maxOffsetY else 0f
-                        val rectX = (size.width - viewportWidth) / 2 + (pctX * (size.width - viewportWidth) / 2)
-                        val rectY = (size.height - viewportHeight) / 2 + (pctY * (size.height - viewportHeight) / 2)
+                        
+                        val rectX = ((size.width - viewportWidth) / 2 * (1 + pctX)).coerceIn(0f, size.width - viewportWidth)
+                        val rectY = ((size.height - viewportHeight) / 2 * (1 + pctY)).coerceIn(0f, size.height - viewportHeight)
                         drawRect(
                             color = androidx.compose.ui.graphics.Color.White,
                             topLeft = Offset(rectX, rectY),
                             size = androidx.compose.ui.geometry.Size(viewportWidth, viewportHeight),
-                            style = androidx.compose.ui.graphics.drawscope.Stroke(width = 3.dp.toPx())
+                            style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.5.dp.toPx())
                         )
                     }
                 }
@@ -1330,12 +1336,42 @@ fun DetailScreen(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CustomShareSheet(items: List<GalleryItem>, initialIndex: Int, onDismiss: () -> Unit) {
+    val initialUris = remember(items, initialIndex) {
+        listOfNotNull(items.getOrNull(initialIndex)?.uri)
+    }
+    CustomShareSheetContent(
+        allItems = items,
+        initialSelectedUris = initialUris,
+        showCarousel = items.size > 1,
+        onDismiss = onDismiss
+    )
+}
+
+/** Overload for selection mode — accepts raw URIs, no carousel needed. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun CustomShareSheet(uris: List<Uri>, onDismiss: () -> Unit) {
+    CustomShareSheetContent(
+        allItems = emptyList(),
+        initialSelectedUris = uris,
+        showCarousel = false,
+        onDismiss = onDismiss
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CustomShareSheetContent(
+    allItems: List<GalleryItem>,
+    initialSelectedUris: List<Uri>,
+    showCarousel: Boolean,
+    onDismiss: () -> Unit
+) {
     val context = LocalContext.current
     val pm = context.packageManager
-    val selectedUris = remember { mutableStateListOf(items.getOrNull(initialIndex)?.uri).apply { removeAll { it == null } } }
+    val selectedUris = remember(initialSelectedUris) { mutableStateListOf<Uri>().apply { addAll(initialSelectedUris) } }
     val coroutineScope = rememberCoroutineScope()
 
-    // Read the strip-metadata preference asynchronously via produceState (Compose-idiomatic)
     val galleryViewModel: GalleryViewModel = viewModel()
     val stripMetadata by produceState(initialValue = false) {
         value = withContext(Dispatchers.IO) {
@@ -1343,151 +1379,269 @@ fun CustomShareSheet(items: List<GalleryItem>, initialIndex: Int, onDismiss: () 
         }
     }
 
-    // Query apps that handle image sharing
     val shareTargets = remember {
         val intent = Intent(Intent.ACTION_SEND).setType("image/*")
         pm.queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY)
     }
 
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = MaterialTheme.colorScheme.surfaceContainerHigh) {
-        Column(modifier = Modifier.fillMaxWidth().padding(bottom = 32.dp)) {
-            // Header
-            AnimatedContent(
-                targetState = selectedUris.size,
-                transitionSpec = {
-                    if (targetState > initialState) {
-                        (slideInVertically { -it } + fadeIn()) togetherWith
-                                (slideOutVertically { it } + fadeOut())
-                    } else {
-                        (slideInVertically { it } + fadeIn()) togetherWith
-                                (slideOutVertically { -it } + fadeOut())
-                    }
-                },
-                label = "shareCount",
-                modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)
-            ) { count ->
-                Text("$count selected", style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold))
-            }
+    val sortedShareTargets = remember(shareTargets) {
+        val priorityApps = listOf("com.instagram.android", "com.whatsapp", "com.facebook.katana", "com.google.android.gm", "org.telegram.messenger")
+        shareTargets.sortedByDescending { target ->
+            val pkg = target.activityInfo.packageName
+            val idx = priorityApps.indexOf(pkg)
+            if (idx >= 0) priorityApps.size - idx else -1
+        }
+    }
 
-            // Image Multi-Select Carousel
-            LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                items(items) { item ->
-                    val isSelected = selectedUris.contains(item.uri)
-                    Box(modifier = Modifier.size(140.dp, 180.dp).clickable { if (isSelected) selectedUris.remove(item.uri) else item.uri?.let { selectedUris.add(it) } }) {
-                        AsyncImage(model = item.uri, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-                        if (isSelected) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .border(4.dp, MaterialTheme.colorScheme.primary)
-                            )
-                            Surface(
-                                modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp),
-                                shape = androidx.compose.foundation.shape.CircleShape,
-                                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                contentColor = MaterialTheme.colorScheme.primary
-                            ) {
-                                Icon(Icons.Filled.CheckCircle, contentDescription = null, modifier = Modifier.padding(4.dp).size(20.dp))
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 32.dp)
+        ) {
+            // ── Header ──────────────────────────────────────────────
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp)
+                    .padding(bottom = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column {
+                    Text(
+                        "Share",
+                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+                    )
+                    AnimatedContent(
+                        targetState = selectedUris.size,
+                        transitionSpec = {
+                            if (targetState > initialState) {
+                                (slideInVertically { -it } + fadeIn()) togetherWith
+                                        (slideOutVertically { it } + fadeOut())
+                            } else {
+                                (slideInVertically { it } + fadeIn()) togetherWith
+                                        (slideOutVertically { -it } + fadeOut())
                             }
-                        } else {
-                            Box(modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp).size(28.dp).border(2.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape))
+                        },
+                        label = "shareCount"
+                    ) { count ->
+                        Text(
+                            "$count ${if (count == 1) "item" else "items"} selected",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                // Strip metadata indicator
+                if (stripMetadata) {
+                    Surface(
+                        shape = MaterialTheme.shapes.small,
+                        color = MaterialTheme.colorScheme.tertiaryContainer
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                Icons.Outlined.Shield,
+                                contentDescription = null,
+                                modifier = Modifier.size(14.dp),
+                                tint = MaterialTheme.colorScheme.onTertiaryContainer
+                            )
+                            Text(
+                                "Metadata stripped",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onTertiaryContainer
+                            )
                         }
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
-
-            val sortedShareTargets = remember(shareTargets) {
-                val priorityApps = listOf("com.instagram.android", "com.whatsapp", "com.facebook.katana", "com.google.android.gm")
-                shareTargets.sortedByDescending { target ->
-                    priorityApps.contains(target.activityInfo.packageName)
+            // ── Image Carousel (multi-item detail mode only) ─────
+            if (showCarousel && allItems.isNotEmpty()) {
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = 24.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    items(allItems) { item ->
+                        val isSelected = selectedUris.contains(item.uri)
+                        val scale by animateFloatAsState(
+                            targetValue = if (isSelected) 1f else 0.92f,
+                            animationSpec = spring(stiffness = Spring.StiffnessMedium),
+                            label = "thumbScale"
+                        )
+                        Box(
+                            modifier = Modifier
+                                .size(100.dp, 130.dp)
+                                .scale(scale)
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable {
+                                    if (isSelected) selectedUris.remove(item.uri)
+                                    else item.uri?.let { selectedUris.add(it) }
+                                }
+                        ) {
+                            AsyncImage(
+                                model = item.uri,
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                            // Scrim + check overlay
+                            if (isSelected) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .border(3.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp))
+                                )
+                                Surface(
+                                    modifier = Modifier
+                                        .align(Alignment.BottomEnd)
+                                        .padding(6.dp),
+                                    shape = CircleShape,
+                                    color = MaterialTheme.colorScheme.primary
+                                ) {
+                                    Icon(
+                                        Icons.Filled.Check,
+                                        contentDescription = null,
+                                        modifier = Modifier
+                                            .padding(3.dp)
+                                            .size(14.dp),
+                                        tint = MaterialTheme.colorScheme.onPrimary
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
+                Spacer(modifier = Modifier.height(20.dp))
             }
 
-            // App Targets Grid
+            // ── Divider ─────────────────────────────────────────────
+            HorizontalDivider(
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
+                modifier = Modifier.padding(horizontal = 24.dp)
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // ── "Share via" label ────────────────────────────────────
+            Text(
+                "SHARE VIA",
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.sp
+                ),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // ── App Targets Grid (4 columns) ─────────────────────
             LazyVerticalGrid(
-                columns = GridCells.Fixed(5),
-                contentPadding = PaddingValues(16.dp),
+                columns = GridCells.Fixed(4),
+                contentPadding = PaddingValues(horizontal = 20.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.heightIn(max = 240.dp)
+                modifier = Modifier.heightIn(max = 280.dp)
             ) {
                 items(sortedShareTargets) { target ->
-                    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.clickable {
-                        if (selectedUris.isEmpty()) return@clickable
-                        coroutineScope.launch {
-                            val urisToShare: List<Uri> = if (stripMetadata) {
-                                // Strip PII EXIF and share via FileProvider URI
-                                withContext(Dispatchers.IO) {
-                                    val shareDir = File(context.cacheDir, "shared_images").also { it.mkdirs() }
-                                    selectedUris.filterNotNull().mapIndexed { idx, uri ->
-                                        try {
-                                            val extension = context.contentResolver.getType(uri)?.substringAfter("/") ?: "jpg"
-                                            val tempFile = File(shareDir, "share_${System.currentTimeMillis()}_$idx.$extension")
-                                            context.contentResolver.openInputStream(uri)?.use { input ->
-                                                tempFile.outputStream().use { output -> input.copyTo(output) }
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable {
+                                if (selectedUris.isEmpty()) return@clickable
+                                coroutineScope.launch {
+                                    val urisToShare: List<Uri> = if (stripMetadata) {
+                                        withContext(Dispatchers.IO) {
+                                            val shareDir = File(context.cacheDir, "shared_images").also { it.mkdirs() }
+                                            selectedUris.filterNotNull().mapIndexed { idx, uri ->
+                                                try {
+                                                    val extension = context.contentResolver.getType(uri)?.substringAfter("/") ?: "jpg"
+                                                    val tempFile = File(shareDir, "share_${System.currentTimeMillis()}_$idx.$extension")
+                                                    context.contentResolver.openInputStream(uri)?.use { input ->
+                                                        tempFile.outputStream().use { output -> input.copyTo(output) }
+                                                    }
+                                                    val exif = androidx.exifinterface.media.ExifInterface(tempFile.absolutePath)
+                                                    val piiTags = listOf(
+                                                        androidx.exifinterface.media.ExifInterface.TAG_GPS_LATITUDE,
+                                                        androidx.exifinterface.media.ExifInterface.TAG_GPS_LATITUDE_REF,
+                                                        androidx.exifinterface.media.ExifInterface.TAG_GPS_LONGITUDE,
+                                                        androidx.exifinterface.media.ExifInterface.TAG_GPS_LONGITUDE_REF,
+                                                        androidx.exifinterface.media.ExifInterface.TAG_GPS_ALTITUDE,
+                                                        androidx.exifinterface.media.ExifInterface.TAG_GPS_ALTITUDE_REF,
+                                                        androidx.exifinterface.media.ExifInterface.TAG_GPS_TIMESTAMP,
+                                                        androidx.exifinterface.media.ExifInterface.TAG_GPS_DATESTAMP,
+                                                        androidx.exifinterface.media.ExifInterface.TAG_GPS_PROCESSING_METHOD,
+                                                        androidx.exifinterface.media.ExifInterface.TAG_GPS_DEST_BEARING,
+                                                        androidx.exifinterface.media.ExifInterface.TAG_GPS_DEST_DISTANCE,
+                                                        androidx.exifinterface.media.ExifInterface.TAG_GPS_SPEED,
+                                                        androidx.exifinterface.media.ExifInterface.TAG_GPS_TRACK,
+                                                        androidx.exifinterface.media.ExifInterface.TAG_GPS_IMG_DIRECTION,
+                                                        androidx.exifinterface.media.ExifInterface.TAG_MAKE,
+                                                        androidx.exifinterface.media.ExifInterface.TAG_MODEL,
+                                                        androidx.exifinterface.media.ExifInterface.TAG_SOFTWARE,
+                                                        androidx.exifinterface.media.ExifInterface.TAG_ARTIST,
+                                                        androidx.exifinterface.media.ExifInterface.TAG_COPYRIGHT,
+                                                        androidx.exifinterface.media.ExifInterface.TAG_USER_COMMENT,
+                                                        androidx.exifinterface.media.ExifInterface.TAG_DATETIME,
+                                                        androidx.exifinterface.media.ExifInterface.TAG_DATETIME_ORIGINAL,
+                                                        androidx.exifinterface.media.ExifInterface.TAG_DATETIME_DIGITIZED,
+                                                        androidx.exifinterface.media.ExifInterface.TAG_OFFSET_TIME,
+                                                        androidx.exifinterface.media.ExifInterface.TAG_OFFSET_TIME_ORIGINAL
+                                                    )
+                                                    piiTags.forEach { tag -> exif.setAttribute(tag, null) }
+                                                    exif.saveAttributes()
+                                                    FileProvider.getUriForFile(
+                                                        context,
+                                                        "${context.packageName}.fileprovider",
+                                                        tempFile
+                                                    )
+                                                } catch (e: Exception) {
+                                                    android.util.Log.e("CustomShareSheet", "Failed to strip metadata for $uri", e)
+                                                    uri
+                                                }
                                             }
-                                            // Strip PII EXIF tags
-                                            val exif = androidx.exifinterface.media.ExifInterface(tempFile.absolutePath)
-                                            val piiTags = listOf(
-                                                androidx.exifinterface.media.ExifInterface.TAG_GPS_LATITUDE,
-                                                androidx.exifinterface.media.ExifInterface.TAG_GPS_LATITUDE_REF,
-                                                androidx.exifinterface.media.ExifInterface.TAG_GPS_LONGITUDE,
-                                                androidx.exifinterface.media.ExifInterface.TAG_GPS_LONGITUDE_REF,
-                                                androidx.exifinterface.media.ExifInterface.TAG_GPS_ALTITUDE,
-                                                androidx.exifinterface.media.ExifInterface.TAG_GPS_ALTITUDE_REF,
-                                                androidx.exifinterface.media.ExifInterface.TAG_GPS_TIMESTAMP,
-                                                androidx.exifinterface.media.ExifInterface.TAG_GPS_DATESTAMP,
-                                                androidx.exifinterface.media.ExifInterface.TAG_GPS_PROCESSING_METHOD,
-                                                androidx.exifinterface.media.ExifInterface.TAG_GPS_DEST_BEARING,
-                                                androidx.exifinterface.media.ExifInterface.TAG_GPS_DEST_DISTANCE,
-                                                androidx.exifinterface.media.ExifInterface.TAG_GPS_SPEED,
-                                                androidx.exifinterface.media.ExifInterface.TAG_GPS_TRACK,
-                                                androidx.exifinterface.media.ExifInterface.TAG_GPS_IMG_DIRECTION,
-                                                androidx.exifinterface.media.ExifInterface.TAG_MAKE,
-                                                androidx.exifinterface.media.ExifInterface.TAG_MODEL,
-                                                androidx.exifinterface.media.ExifInterface.TAG_SOFTWARE,
-                                                androidx.exifinterface.media.ExifInterface.TAG_ARTIST,
-                                                androidx.exifinterface.media.ExifInterface.TAG_COPYRIGHT,
-                                                androidx.exifinterface.media.ExifInterface.TAG_USER_COMMENT,
-                                                androidx.exifinterface.media.ExifInterface.TAG_DATETIME,
-                                                androidx.exifinterface.media.ExifInterface.TAG_DATETIME_ORIGINAL,
-                                                androidx.exifinterface.media.ExifInterface.TAG_DATETIME_DIGITIZED,
-                                                androidx.exifinterface.media.ExifInterface.TAG_OFFSET_TIME,
-                                                androidx.exifinterface.media.ExifInterface.TAG_OFFSET_TIME_ORIGINAL
-                                            )
-                                            piiTags.forEach { tag -> exif.setAttribute(tag, null) }
-                                            exif.saveAttributes()
-                                            FileProvider.getUriForFile(
-                                                context,
-                                                "${context.packageName}.fileprovider",
-                                                tempFile
-                                            )
-                                        } catch (e: Exception) {
-                                            android.util.Log.e("CustomShareSheet", "Failed to strip metadata for $uri", e)
-                                            uri  // Fallback to original URI on error
                                         }
+                                    } else {
+                                        selectedUris.filterNotNull()
                                     }
-                                }
-                            } else {
-                                selectedUris.filterNotNull()
-                            }
 
-                            val intent = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
-                                type = "image/*"
-                                putParcelableArrayListExtra(Intent.EXTRA_STREAM, ArrayList(urisToShare))
-                                setClassName(target.activityInfo.packageName, target.activityInfo.name)
-                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                    val intent = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+                                        type = "image/*"
+                                        putParcelableArrayListExtra(Intent.EXTRA_STREAM, ArrayList(urisToShare))
+                                        setClassName(target.activityInfo.packageName, target.activityInfo.name)
+                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                    }
+                                    context.startActivity(intent)
+                                    onDismiss()
+                                }
                             }
-                            context.startActivity(intent)
-                            onDismiss()
-                        }
-                    }) {
-                        // Coil handles native Android Drawables automatically
-                        AsyncImage(model = target.loadIcon(pm), contentDescription = null, modifier = Modifier.size(60.dp).clip(CircleShape))
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(text = target.loadLabel(pm).toString(), style = MaterialTheme.typography.labelMedium, maxLines = 1)
+                            .padding(vertical = 8.dp)
+                    ) {
+                        AsyncImage(
+                            model = target.loadIcon(pm),
+                            contentDescription = null,
+                            modifier = Modifier
+                                .size(52.dp)
+                                .clip(RoundedCornerShape(14.dp))
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = target.loadLabel(pm).toString(),
+                            style = MaterialTheme.typography.labelSmall,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth()
+                        )
                     }
                 }
             }
