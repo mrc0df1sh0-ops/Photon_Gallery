@@ -22,7 +22,7 @@ import kotlinx.coroutines.sync.withPermit
 import java.io.File
 import java.security.MessageDigest
 
-private val videoDecodeSemaphore = Semaphore(3)
+private val videoDecodeSemaphore = Semaphore(4)
 
 /**
  * A custom Coil Fetcher that retrieves pre-generated thumbnails from the Android system's
@@ -35,16 +35,11 @@ private val videoDecodeSemaphore = Semaphore(3)
 class MediaStoreThumbnailFetcher(
     private val uri: Uri,
     private val options: Options,
-    private val context: Context
+    private val context: Context,
+    private val cacheEnabled: Boolean = true
 ) : Fetcher {
 
     override suspend fun fetch(): FetchResult? = withContext(Dispatchers.IO) {
-        val settings = SettingsRepository(context)
-        val cacheEnabled = try {
-            settings.cacheThumbnailsEnabledFlow.first()
-        } catch (e: Exception) {
-            true
-        }
 
         val cacheDir = context.cacheDir.resolve("media_store_thumbnails")
         if (cacheEnabled && !cacheDir.exists()) {
@@ -105,7 +100,7 @@ class MediaStoreThumbnailFetcher(
             if (cacheEnabled) {
                 try {
                     cacheFile.outputStream().use { out ->
-                        bitmap.compress(Bitmap.CompressFormat.JPEG, 85, out)
+                        bitmap.compress(Bitmap.CompressFormat.JPEG, 75, out)
                     }
                 } catch (e: Exception) {
                     android.util.Log.e("MediaStoreFetcher", "Failed to write thumbnail cache for: $uri", e)
@@ -156,6 +151,9 @@ class MediaStoreThumbnailFetcher(
     }
 
     class Factory(private val context: Context) : Fetcher.Factory<Uri> {
+        @Volatile
+        private var cachedSetting: Boolean? = null
+
         override fun create(data: Uri, options: Options, imageLoader: ImageLoader): Fetcher? {
             // Only handle local media content URIs (scheme = content, authority = media)
             val isLocalMedia = data.scheme == "content" && data.authority == "media"
@@ -164,8 +162,18 @@ class MediaStoreThumbnailFetcher(
             // Bypass this fetcher for high-res requests so Coil can decode the full image
             val width = (options.size.width as? Dimension.Pixels)?.px ?: Int.MAX_VALUE
             if (width > 1024) return null
+
+            // Read cache setting once and reuse (avoid DataStore read per fetch)
+            val cacheEnabled = cachedSetting ?: run {
+                val settings = SettingsRepository(context)
+                val value = kotlinx.coroutines.runBlocking {
+                    try { settings.cacheThumbnailsEnabledFlow.first() } catch (_: Exception) { true }
+                }
+                cachedSetting = value
+                value
+            }
             
-            return MediaStoreThumbnailFetcher(data, options, context)
+            return MediaStoreThumbnailFetcher(data, options, context, cacheEnabled)
         }
     }
 }

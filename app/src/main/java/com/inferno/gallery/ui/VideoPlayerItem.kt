@@ -43,7 +43,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 
 @Composable
-fun VideoPlayerItem(uri: Uri, isCurrentPage: Boolean, modifier: Modifier = Modifier) {
+fun VideoPlayerItem(uri: Uri, isCurrentPage: Boolean, modifier: Modifier = Modifier, onTap: (() -> Unit)? = null) {
     val context = LocalContext.current
     var resolvedPlayUri by remember(uri) { mutableStateOf<Uri?>(null) }
     var isLoadingUrl by remember(uri) { mutableStateOf(false) }
@@ -106,7 +106,8 @@ fun VideoPlayerItem(uri: Uri, isCurrentPage: Boolean, modifier: Modifier = Modif
         VideoPlayerItemWithResolvedUri(
             uri = resolvedPlayUri!!,
             isCurrentPage = isCurrentPage,
-            modifier = modifier
+            modifier = modifier,
+            onTap = onTap
         )
     } else {
         Box(
@@ -155,7 +156,7 @@ fun VideoPlayerItem(uri: Uri, isCurrentPage: Boolean, modifier: Modifier = Modif
 }
 
 @Composable
-fun VideoPlayerItemWithResolvedUri(uri: Uri, isCurrentPage: Boolean, modifier: Modifier = Modifier) {
+fun VideoPlayerItemWithResolvedUri(uri: Uri, isCurrentPage: Boolean, modifier: Modifier = Modifier, onTap: (() -> Unit)? = null) {
     val context = LocalContext.current
     val exoPlayer = remember(uri) {
         val renderersFactory = androidx.media3.exoplayer.DefaultRenderersFactory(context)
@@ -219,6 +220,7 @@ fun VideoPlayerItemWithResolvedUri(uri: Uri, isCurrentPage: Boolean, modifier: M
                 PlayerView(ctx).apply {
                     player = exoPlayer
                     useController = false
+                    setOnClickListener { onTap?.invoke() }
                 }
             },
             modifier = Modifier.fillMaxSize()

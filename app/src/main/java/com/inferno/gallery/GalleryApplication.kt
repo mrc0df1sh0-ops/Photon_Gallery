@@ -80,7 +80,7 @@ class GalleryApplication : Application(), SingletonImageLoader.Factory {
             }
             .memoryCache {
                 coil3.memory.MemoryCache.Builder()
-                    .maxSizePercent(context, 0.40) // Use 40% of available heap size
+                    .maxSizePercent(context, 0.50) // Use 50% of available heap for buttery scrolling
                     .build()
             }
             .diskCache {

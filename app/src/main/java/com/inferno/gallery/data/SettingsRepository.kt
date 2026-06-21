@@ -83,7 +83,7 @@ class SettingsRepository(private val context: Context) {
 
     val useAmoledBlackFlow: Flow<Boolean> = context.dataStore.data
         .map { preferences ->
-            preferences[USE_AMOLED_BLACK] ?: false
+            preferences[USE_AMOLED_BLACK] ?: true
         }
 
     val smartSearchAutoIndexFlow: Flow<Boolean> = context.dataStore.data
@@ -183,7 +183,7 @@ class SettingsRepository(private val context: Context) {
 
     val selectedFilterIndexFlow: Flow<Int> = context.dataStore.data
         .map { preferences ->
-            preferences[SELECTED_FILTER_INDEX] ?: 0
+            preferences[SELECTED_FILTER_INDEX] ?: 1
         }
 
     suspend fun updateSelectedFilterIndex(index: Int) {
@@ -344,7 +344,7 @@ class SettingsRepository(private val context: Context) {
 
     val stripMetadataOnShareFlow: Flow<Boolean> = context.dataStore.data
         .map { preferences ->
-            preferences[STRIP_METADATA_ON_SHARE] ?: false
+            preferences[STRIP_METADATA_ON_SHARE] ?: true
         }
 
     suspend fun updateStripMetadataOnShare(enabled: Boolean) {

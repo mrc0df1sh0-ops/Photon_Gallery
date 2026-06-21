@@ -1256,6 +1256,8 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch {
             // Instantly move to Trash bin so the UI updates
             database.mediaDao().updateBucketByUri(uriString, "Trash")
+            // Also remove from the detail pager list immediately
+            _detailMedia.value = _detailMedia.value.filter { it.uri.toString() != uriString }
             _uiEvents.send(UiEvent.DeleteSuccess)
         }
     }
