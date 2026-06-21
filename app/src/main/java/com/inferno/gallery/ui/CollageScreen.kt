@@ -222,20 +222,24 @@ fun CollageScreen(
             modifier = Modifier.fillMaxSize(),
             containerColor = Color(0xFF121212),
             topBar = {
-                CenterAlignedTopAppBar(
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = Color(0xFF1E1E1E),
-                        titleContentColor = Color.White,
-                        navigationIconContentColor = Color.White,
-                        actionIconContentColor = Color.White
-                    ),
-                    navigationIcon = {
+                Surface(color = Color(0xFF1E1E1E)) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .statusBarsPadding()
+                            .height(72.dp)
+                            .padding(horizontal = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         IconButton(onClick = onBack) {
-                            Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
+                            Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back", tint = Color.White)
                         }
-                    },
-                    title = { Text("Create Collage", fontWeight = FontWeight.Bold) },
-                    actions = {
+                        Text(
+                            "Create Collage",
+                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                            color = Color.White,
+                            modifier = Modifier.padding(start = 8.dp).weight(1f)
+                        )
                         IconButton(
                             enabled = !isSaving,
                             onClick = {
@@ -268,10 +272,10 @@ fun CollageScreen(
                                 }
                             }
                         ) {
-                            Icon(Icons.Outlined.Check, contentDescription = "Save")
+                            Icon(Icons.Outlined.Check, contentDescription = "Save", tint = Color.White)
                         }
                     }
-                )
+                }
             }
         ) { innerPadding ->
             Column(

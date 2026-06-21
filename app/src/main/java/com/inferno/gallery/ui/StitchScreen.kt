@@ -37,6 +37,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -56,7 +57,7 @@ import androidx.compose.material.icons.outlined.SwapVert
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CenterAlignedTopAppBar
+
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledIconButton
@@ -72,7 +73,7 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBarDefaults
+
 import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -191,27 +192,29 @@ fun StitchScreen(
             modifier       = Modifier.fillMaxSize(),
             containerColor = MaterialTheme.colorScheme.surface,
             topBar = {
-                CenterAlignedTopAppBar(
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor    = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        titleContentColor = MaterialTheme.colorScheme.onSurface
-                    ),
-                    navigationIcon = {
+                Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .statusBarsPadding()
+                            .height(72.dp)
+                            .padding(horizontal = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         IconButton(onClick = onBack) {
                             Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
                         }
-                    },
-                    title = {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("Stitch", fontWeight = FontWeight.Bold)
+                        Column(modifier = Modifier.padding(start = 8.dp).weight(1f)) {
+                            Text(
+                                "Stitch",
+                                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+                            )
                             Text(
                                 text  = "${stitchItems.size} image${if (stitchItems.size != 1) "s" else ""}",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                    },
-                    actions = {
                         FilledIconButton(
                             onClick  = { if (!isSaving) showSaveSheet = true },
                             enabled  = !isSaving && stitchItems.size >= 2,
@@ -223,7 +226,7 @@ fun StitchScreen(
                             Icon(Icons.Outlined.SaveAlt, contentDescription = "Save")
                         }
                     }
-                )
+                }
             }
         ) { innerPadding ->
             Column(
