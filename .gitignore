@@ -30,4 +30,6 @@ secrets.xml
 
 # Documentation files
 *.md
-docs/
+docs/releases/
+gallery_database.db
+*.apk

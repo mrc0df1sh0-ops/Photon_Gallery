@@ -96,12 +96,13 @@ interface MediaDao {
     entities = [
         CoreMediaEntity::class,
         TelegramBackupEntity::class,
-        MediaEmbeddingEntity::class
+        MediaEmbeddingEntity::class,
+        VaultMediaEntity::class
         // ImageFtsEntity is intentionally excluded: @Fts5 has a KSP 2.2.x incompatibility.
         // The FTS5 virtual table is instead created manually in DatabaseProvider's
         // RoomDatabase.Callback onCreate hook using raw CREATE VIRTUAL TABLE SQL.
     ],
-    version = 6,
+    version = 8,
     exportSchema = false
 )
 @androidx.room.TypeConverters(EmbeddingConverter::class)
@@ -109,4 +110,5 @@ abstract class GalleryDatabase : RoomDatabase() {
     abstract fun mediaDao(): MediaDao
     abstract fun telegramBackupDao(): TelegramBackupDao
     abstract fun embeddingDao(): EmbeddingDao
+    abstract fun vaultDao(): VaultDao
 }

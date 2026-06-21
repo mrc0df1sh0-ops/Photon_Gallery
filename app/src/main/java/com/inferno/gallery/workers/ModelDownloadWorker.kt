@@ -30,9 +30,9 @@ class ModelDownloadWorker(
         private const val NOTIFICATION_ID = 55
         private const val CHANNEL_ID = "model_download_channel"
 
-        private const val TEXT_MODEL_URL = "https://huggingface.co/Xenova/clip-vit-base-patch16/resolve/main/onnx/text_model_quantized.onnx"
-        private const val VISION_MODEL_URL = "https://huggingface.co/Xenova/clip-vit-base-patch16/resolve/main/onnx/vision_model_quantized.onnx"
-        private const val TOKENIZER_URL = "https://huggingface.co/Xenova/clip-vit-base-patch16/resolve/main/tokenizer.json"
+        private const val TEXT_MODEL_URL = "https://raw.githubusercontent.com/Bn5prS/Photon_Gallery/main/models/text_model_quantized.onnx"
+        private const val VISION_MODEL_URL = "https://raw.githubusercontent.com/Bn5prS/Photon_Gallery/main/models/vision_model_quantized.onnx"
+        private const val TOKENIZER_URL = "https://raw.githubusercontent.com/Bn5prS/Photon_Gallery/main/models/tokenizer.json"
 
         private const val TEXT_MODEL_NAME = "text_model_quantized.onnx"
         private const val VISION_MODEL_NAME = "vision_model_quantized.onnx"
@@ -69,7 +69,7 @@ class ModelDownloadWorker(
 
     override suspend fun doWork(): Result {
         try {
-            setForeground(createForegroundInfo("Connecting to Hugging Face…"))
+            setForeground(createForegroundInfo("Connecting…"))
 
             val modelDir = File(applicationContext.filesDir, "smart_search_model_v2")
             if (!modelDir.exists()) {
@@ -79,9 +79,9 @@ class ModelDownloadWorker(
             val client = OkHttpClient()
 
             val downloadTargets = listOf(
-                Triple(TOKENIZER_URL, TOKENIZER_NAME, 2.2 * 1024 * 1024L), // Approx tokenizer weight
-                Triple(TEXT_MODEL_URL, TEXT_MODEL_NAME, 36.3 * 1024 * 1024L), // Approx text model weight
-                Triple(VISION_MODEL_URL, VISION_MODEL_NAME, 87.7 * 1024 * 1024L) // Approx patch16 vision model weight
+                Triple(TOKENIZER_URL, TOKENIZER_NAME, 2.1 * 1024 * 1024L), // tokenizer
+                Triple(TEXT_MODEL_URL, TEXT_MODEL_NAME, 61.5 * 1024 * 1024L), // text model
+                Triple(VISION_MODEL_URL, VISION_MODEL_NAME, 83.4 * 1024 * 1024L) // vision model
             )
 
             val totalBytesExpected = downloadTargets.sumOf { it.third }

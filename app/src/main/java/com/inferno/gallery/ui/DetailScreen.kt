@@ -68,6 +68,7 @@ import androidx.compose.material.icons.outlined.Cloud
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Shield
+import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.FilledIconButton
@@ -1312,6 +1313,27 @@ fun DetailScreen(
                                                     putExtra("mimeType", "image/*")
                                                 }
                                                 context.startActivity(Intent.createChooser(intent, "Set as..."))
+                                            }
+                                        )
+                                    }
+                                    // Hide (Private Space)
+                                    if (currentItem != null) {
+                                        androidx.compose.material3.DropdownMenuItem(
+                                            text = { Text("Hide") },
+                                            leadingIcon = { Icon(Icons.Outlined.VisibilityOff, contentDescription = null) },
+                                            onClick = {
+                                                showMoreMenu = false
+                                                val activity = context as? androidx.fragment.app.FragmentActivity
+                                                if (activity != null) {
+                                                    viewModel.vaultAuthManager.authenticate(
+                                                        activity = activity,
+                                                        onSuccess = {
+                                                            viewModel.hideMedia(listOf(currentItem.uri))
+                                                            onBack()
+                                                        },
+                                                        onFailure = {}
+                                                    )
+                                                }
                                             }
                                         )
                                     }

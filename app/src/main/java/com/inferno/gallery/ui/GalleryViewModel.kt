@@ -14,6 +14,7 @@ import com.inferno.gallery.data.LocalMediaRepository
 import com.inferno.gallery.data.SettingsRepository
 import com.inferno.gallery.data.DockStyle
 import com.inferno.gallery.data.FavoritesManager
+import com.inferno.gallery.data.VaultAuthManager
 import android.util.Log
 
 import kotlinx.coroutines.Dispatchers
@@ -111,6 +112,82 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
     val settingsRepository = SettingsRepository(application)
     private val favoritesManager = FavoritesManager(application)
     private val database = DatabaseProvider.getDatabase(application)
+
+    // ── Excluded Folders ──
+    val excludedFolders: StateFlow<Set<String>> = settingsRepository.excludedFoldersFlow.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = emptySet()
+    )
+
+    fun toggleExcludedFolder(bucketName: String) {
+        viewModelScope.launch {
+            val current = excludedFolders.value.toMutableSet()
+            if (current.contains(bucketName)) current.remove(bucketName) else current.add(bucketName)
+            settingsRepository.updateExcludedFolders(current)
+        }
+    }
+
+    // ── Private Space ──
+    val vaultAuthManager = VaultAuthManager()
+    private val vaultRepository = com.inferno.gallery.data.VaultRepository(application, database.vaultDao())
+
+    val vaultItems: StateFlow<List<com.inferno.gallery.data.db.VaultMediaEntity>> = vaultRepository.vaultItems.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = emptyList()
+    )
+
+    val vaultItemCount: StateFlow<Int> = vaultRepository.vaultCount.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = 0
+    )
+
+    val isVaultUnlocked: StateFlow<Boolean> = vaultAuthManager.isAuthenticated
+
+    fun hideMedia(uris: List<Uri>) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val count = vaultRepository.hideMedia(uris)
+            withContext(Dispatchers.Main) {
+                android.widget.Toast.makeText(
+                    getApplication(),
+                    "$count item${if (count != 1) "s" else ""} hidden",
+                    android.widget.Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
+    }
+
+    fun unhideMedia(ids: List<Long>) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val count = vaultRepository.unhideMedia(ids)
+            withContext(Dispatchers.Main) {
+                android.widget.Toast.makeText(
+                    getApplication(),
+                    "$count item${if (count != 1) "s" else ""} restored",
+                    android.widget.Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
+    }
+
+    fun deleteFromVault(ids: List<Long>) {
+        viewModelScope.launch(Dispatchers.IO) {
+            vaultRepository.deleteFromVault(ids)
+            withContext(Dispatchers.Main) {
+                android.widget.Toast.makeText(
+                    getApplication(),
+                    "${ids.size} item${if (ids.size != 1) "s" else ""} permanently deleted",
+                    android.widget.Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
+    }
+
+    fun getVaultFileUri(entity: com.inferno.gallery.data.db.VaultMediaEntity): Uri {
+        return vaultRepository.getVaultFileUri(entity)
+    }
 
     private val _isScrollDockVisible = MutableStateFlow(true)
     val isScrollDockVisible: StateFlow<Boolean> = _isScrollDockVisible.asStateFlow()
@@ -592,8 +669,8 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
     }
 
     val pagedMediaRaw: Flow<PagingData<GalleryItem>> = combine(
-        _currentBucket, selectedFilterIndex, sortOrder, favoritesManager.favoritesFlow
-    ) { bucket, filterIndex, order, favs ->
+        _currentBucket, selectedFilterIndex, sortOrder, favoritesManager.favoritesFlow, excludedFolders
+    ) { bucket, filterIndex, order, favs, excluded ->
         var queryString = "SELECT cm.*, tb.telegramFileId, tb.telegramThumbFileId, tb.backupStatus FROM core_media cm LEFT JOIN telegram_backups tb ON cm.id = tb.mediaId "
         val args = mutableListOf<Any>()
         val conditions = mutableListOf<String>()
@@ -648,6 +725,13 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
             } else {
                 conditions.add("cm.bucketName != 'Trash'")
             }
+        }
+
+        // Apply excluded folders filter for main views (All, Videos, default, filter tabs)
+        val shouldApplyExclusion = bucket == null || bucket == "All" || bucket == "Videos"
+        if (shouldApplyExclusion && excluded.isNotEmpty()) {
+            val placeholders = excluded.map { "'${it.replace("'", "''")}'" }.joinToString(",")
+            conditions.add("cm.bucketName NOT IN ($placeholders)")
         }
 
         if (conditions.isNotEmpty()) {
@@ -839,7 +923,7 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
         // Not supported in Paging3 without memory indexing.
     }
 
-    val allAlbums: StateFlow<List<AlbumBucket>> = combine(database.mediaDao().observeBuckets(), albumSortOrder) { buckets, order ->
+    val allAlbums: StateFlow<List<AlbumBucket>> = combine(database.mediaDao().observeBuckets(), albumSortOrder, excludedFolders) { buckets, order, excluded ->
         val excludedKeywords = setOf("Camera", "Screenshots", "Trash", "All", "Videos")
         
         val filtered = buckets.filter { bucket ->
@@ -848,7 +932,8 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
             !bucket.bucketName.contains("Screen records", ignoreCase = true) &&
             !bucket.bucketName.contains("Screenrecords", ignoreCase = true) &&
             !bucket.bucketName.contains("ScreenRecord", ignoreCase = true) &&
-            !bucket.bucketName.contains("Screenshot", ignoreCase = true)
+            !bucket.bucketName.contains("Screenshot", ignoreCase = true) &&
+            !excluded.contains(bucket.bucketName)
         }.map { b ->
             AlbumBucket(
                 bucketName = b.bucketName,
@@ -869,6 +954,14 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
         
         sortedBuckets
     }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // All bucket names for the Settings "Excluded Folders" UI (includes all folders)
+    val allBucketNames: StateFlow<List<String>> = database.mediaDao().observeBuckets().map { buckets ->
+        buckets.map { it.bucketName }
+            .filter { it != "Trash" }
+            .distinct()
+            .sorted()
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val pinnedAlbums: StateFlow<List<AlbumBucket>> = combine(
         database.mediaDao().observeBuckets(),

@@ -88,6 +88,7 @@ fun NavigationGraph(
                         )
                         navController.navigate("stitch?uris=$encoded")
                     },
+                    onNavigateToVault = { navController.navigate("vault") },
                     viewModel = galleryViewModel
                 )
             }
@@ -157,6 +158,13 @@ fun NavigationGraph(
                 StitchScreen(
                     initialUris = uris,
                     onBack = { navController.popBackStack() }
+                )
+            }
+
+            composable("vault") {
+                com.inferno.gallery.ui.vault.PrivateSpaceScreen(
+                    viewModel = galleryViewModel,
+                    onNavigateBack = { navController.popBackStack() }
                 )
             }
         }

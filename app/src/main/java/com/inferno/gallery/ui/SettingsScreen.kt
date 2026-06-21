@@ -1,6 +1,12 @@
 package com.inferno.gallery.ui
 
 import androidx.compose.material.icons.outlined.Cloud
+import androidx.compose.material.icons.outlined.Shield
+import androidx.compose.material.icons.outlined.FolderOff
+import androidx.compose.material.icons.outlined.VisibilityOff
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.ui.draw.alpha
 import androidx.compose.material.icons.outlined.HelpOutline
 import com.inferno.gallery.ui.ConnectionTestResult
 import androidx.compose.foundation.layout.Box
@@ -123,7 +129,8 @@ fun SettingsScreen(
     contentPadding: PaddingValues = PaddingValues(0.dp),
     viewModel: SettingsViewModel = viewModel(),
     galleryViewModel: GalleryViewModel = viewModel(),
-    onBackClick: () -> Unit = {}
+    onBackClick: () -> Unit = {},
+    onNavigateToVault: () -> Unit = {}
 ) {
     val themeMode by viewModel.themeMode.collectAsState()
     val useMaterialYou by viewModel.useMaterialYou.collectAsState()
@@ -142,6 +149,7 @@ fun SettingsScreen(
     val stripMetadataOnShare by viewModel.stripMetadataOnShare.collectAsState()
     val cacheThumbnailsEnabled by viewModel.cacheThumbnailsEnabled.collectAsState()
     val maxBrightnessEnabled by viewModel.maxBrightnessEnabled.collectAsState()
+    val context = androidx.compose.ui.platform.LocalContext.current
     
     val savedTokens by viewModel.telegramBotTokens.collectAsState()
     val savedChatId by viewModel.telegramChatId.collectAsState()
@@ -359,6 +367,27 @@ fun SettingsScreen(
                             subtitle = "Telegram cloud and backup options",
                             icon = Icons.Outlined.Cloud,
                             onClick = { activeSection = "Cloud Backup" }
+                        )
+                        CategoryCard(
+                            title = "Private Space",
+                            subtitle = "Hidden photos protected with biometric lock",
+                            icon = Icons.Outlined.Shield,
+                            onClick = {
+                                val activity = context as? androidx.fragment.app.FragmentActivity
+                                if (activity != null) {
+                                    galleryViewModel.vaultAuthManager.authenticate(
+                                        activity = activity,
+                                        onSuccess = { onNavigateToVault() },
+                                        onFailure = {}
+                                    )
+                                }
+                            }
+                        )
+                        CategoryCard(
+                            title = "Excluded Folders",
+                            subtitle = "Hide folders from the main gallery",
+                            icon = Icons.Outlined.FolderOff,
+                            onClick = { activeSection = "Excluded Folders" }
                         )
                         CategoryCard(
                             title = "Smart Search & OCR",
@@ -822,6 +851,64 @@ fun SettingsScreen(
                                             onValueChange = { viewModel.setThumbnailCornerRadius(it) },
                                             valueRange = 0f..24f
                                         )
+                                    }
+                                }
+                            }
+                            "Excluded Folders" -> {
+                                val allFolders by galleryViewModel.allBucketNames.collectAsState()
+                                val excluded by galleryViewModel.excludedFolders.collectAsState()
+                                
+                                SettingsGroup(title = "Excluded Folders") {
+                                    ListItem(
+                                        headlineContent = { 
+                                            Text(
+                                                "Excluded folders won't appear in the Photos tab or Albums grid. You can still access them by searching.",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    )
+                                }
+                                
+                                if (allFolders.isEmpty()) {
+                                    SettingsGroup(title = "") {
+                                        ListItem(
+                                            headlineContent = { Text("No folders found") },
+                                            supportingContent = { Text("Media folders will appear here once scanned") }
+                                        )
+                                    }
+                                } else {
+                                    SettingsGroup(title = "${excluded.size} folder${if (excluded.size != 1) "s" else ""} excluded") {
+                                        allFolders.forEach { folderName ->
+                                            val isExcluded = excluded.contains(folderName)
+                                            ListItem(
+                                                headlineContent = { Text(folderName) },
+                                                trailingContent = {
+                                                    androidx.compose.material3.Switch(
+                                                        checked = isExcluded,
+                                                        onCheckedChange = { galleryViewModel.toggleExcludedFolder(folderName) },
+                                                        thumbContent = {
+                                                            Icon(
+                                                                imageVector = if (isExcluded) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+                                                                contentDescription = null,
+                                                                modifier = Modifier.size(16.dp)
+                                                            )
+                                                        }
+                                                    )
+                                                },
+                                                leadingContent = {
+                                                    Icon(
+                                                        imageVector = Icons.Outlined.Folder,
+                                                        contentDescription = null,
+                                                        tint = if (isExcluded) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                                                               else MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
+                                                },
+                                                modifier = Modifier.then(
+                                                    if (isExcluded) Modifier.alpha(0.6f) else Modifier
+                                                )
+                                            )
+                                        }
                                     }
                                 }
                             }

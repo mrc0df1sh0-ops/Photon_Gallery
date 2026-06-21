@@ -48,6 +48,8 @@ import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.Sort
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.VisibilityOff
+import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material.icons.outlined.CloudUpload
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.ArrowDropDown
@@ -158,6 +160,7 @@ fun MainAppLayout(
     onPhotoClick: (String, String?, String?) -> Unit,
     onCreateCollage: (List<String>) -> Unit = {},
     onCreateStitch: (List<String>) -> Unit = {},
+    onNavigateToVault: () -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: GalleryViewModel = viewModel()
 ) {
@@ -724,7 +727,8 @@ fun MainAppLayout(
                     contentPadding = innerPadding,
                     onAlbumClick = { bucketName -> 
                         nestedNavController.navigate("album/$bucketName")
-                    }
+                    },
+                    onNavigateToVault = onNavigateToVault
                 )
             }
             composable(
@@ -796,7 +800,8 @@ fun MainAppLayout(
                 SettingsScreen(
                     contentPadding = innerPadding,
                     galleryViewModel = viewModel,
-                    onBackClick = { nestedNavController.popBackStack() }
+                    onBackClick = { nestedNavController.popBackStack() },
+                    onNavigateToVault = onNavigateToVault
                 )
             }
             composable("cloud") {
@@ -873,6 +878,68 @@ fun MainAppLayout(
                         androidx.compose.foundation.lazy.LazyColumn(
                             modifier = Modifier.heightIn(max = 400.dp)
                         ) {
+                            // Private Space as first item
+                            item {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            showMoveSheet = false
+                                            val activity = context as? androidx.fragment.app.FragmentActivity
+                                            if (activity != null) {
+                                                viewModel.vaultAuthManager.authenticate(
+                                                    activity = activity,
+                                                    onSuccess = {
+                                                        val uris = selectedUris.mapNotNull { android.net.Uri.parse(it) }
+                                                        viewModel.hideMedia(uris)
+                                                        viewModel.clearSelection()
+                                                    },
+                                                    onFailure = {}
+                                                )
+                                            }
+                                        }
+                                        .padding(vertical = 14.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(40.dp)
+                                            .background(
+                                                color = MaterialTheme.colorScheme.tertiaryContainer,
+                                                shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
+                                            ),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            Icons.Outlined.Shield,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            "Private Space",
+                                            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
+                                        )
+                                        Text(
+                                            "Hidden \u00b7 Biometric protected",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    Icon(
+                                        Icons.Outlined.VisibilityOff,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                                HorizontalDivider(
+                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                                )
+                            }
                             items(albums.size) { index ->
                                 val album = albums[index]
                                 Row(
@@ -1306,30 +1373,48 @@ fun MainAppLayout(
                             Icon(Icons.Outlined.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(22.dp))
                         }
 
-                        // More (cloud actions)
-                        if (hasUnbackedUp || hasBackedUp) {
-                            Box {
-                                IconButton(onClick = { moreMenuExpanded = true }) {
-                                    Icon(Icons.Outlined.MoreVert, contentDescription = "More", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(22.dp))
+                        // More (hide + cloud actions)
+                        Box {
+                            IconButton(onClick = { moreMenuExpanded = true }) {
+                                Icon(Icons.Outlined.MoreVert, contentDescription = "More", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(22.dp))
+                            }
+                            DropdownMenu(
+                                expanded = moreMenuExpanded,
+                                onDismissRequest = { moreMenuExpanded = false }
+                            ) {
+                                // Hide (Private Space)
+                                DropdownMenuItem(
+                                    text = { Text("Hide") },
+                                    leadingIcon = { Icon(Icons.Outlined.VisibilityOff, contentDescription = null) },
+                                    onClick = {
+                                        moreMenuExpanded = false
+                                        val activity = context as? androidx.fragment.app.FragmentActivity
+                                        if (activity != null) {
+                                            viewModel.vaultAuthManager.authenticate(
+                                                activity = activity,
+                                                onSuccess = {
+                                                    val uris = selectedUris.mapNotNull { android.net.Uri.parse(it) }
+                                                    viewModel.hideMedia(uris)
+                                                    viewModel.clearSelection()
+                                                },
+                                                onFailure = {}
+                                            )
+                                        }
+                                    }
+                                )
+                                if (hasUnbackedUp) {
+                                    DropdownMenuItem(
+                                        text = { Text("Backup to Cloud") },
+                                        leadingIcon = { Icon(Icons.Outlined.CloudUpload, contentDescription = null) },
+                                        onClick = { moreMenuExpanded = false; viewModel.backupSelectedMedia() }
+                                    )
                                 }
-                                DropdownMenu(
-                                    expanded = moreMenuExpanded,
-                                    onDismissRequest = { moreMenuExpanded = false }
-                                ) {
-                                    if (hasUnbackedUp) {
-                                        DropdownMenuItem(
-                                            text = { Text("Backup to Cloud") },
-                                            leadingIcon = { Icon(Icons.Outlined.CloudUpload, contentDescription = null) },
-                                            onClick = { moreMenuExpanded = false; viewModel.backupSelectedMedia() }
-                                        )
-                                    }
-                                    if (hasBackedUp) {
-                                        DropdownMenuItem(
-                                            text = { Text("Delete from Cloud") },
-                                            leadingIcon = { Icon(Icons.Outlined.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
-                                            onClick = { moreMenuExpanded = false; showCloudDeleteDialog = true }
-                                        )
-                                    }
+                                if (hasBackedUp) {
+                                    DropdownMenuItem(
+                                        text = { Text("Delete from Cloud") },
+                                        leadingIcon = { Icon(Icons.Outlined.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+                                        onClick = { moreMenuExpanded = false; showCloudDeleteDialog = true }
+                                    )
                                 }
                             }
                         }

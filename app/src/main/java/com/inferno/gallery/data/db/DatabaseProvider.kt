@@ -21,12 +21,40 @@ object DatabaseProvider {
                 }
             }
 
+            val MIGRATION_6_7 = object : androidx.room.migration.Migration(6, 7) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL("""
+                        CREATE TABLE IF NOT EXISTS vault_media (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                            originalUri TEXT NOT NULL,
+                            originalPath TEXT NOT NULL,
+                            originalBucket TEXT NOT NULL,
+                            fileName TEXT NOT NULL,
+                            vaultFileName TEXT NOT NULL,
+                            mimeType TEXT,
+                            isVideo INTEGER NOT NULL DEFAULT 0,
+                            durationMs INTEGER,
+                            size INTEGER NOT NULL DEFAULT 0,
+                            dateAdded INTEGER NOT NULL DEFAULT 0,
+                            dateHidden INTEGER NOT NULL DEFAULT 0
+                        )
+                    """.trimIndent())
+                }
+            }
+
+            val MIGRATION_7_8 = object : androidx.room.migration.Migration(7, 8) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL("ALTER TABLE vault_media ADD COLUMN originalRelativePath TEXT NOT NULL DEFAULT ''")
+                    db.execSQL("ALTER TABLE vault_media ADD COLUMN dateModified INTEGER NOT NULL DEFAULT 0")
+                }
+            }
+
             val instance = Room.databaseBuilder(
                 context.applicationContext,
                 GalleryDatabase::class.java,
                 "gallery_database.db"
             )
-            .addMigrations(MIGRATION_4_5)
+            .addMigrations(MIGRATION_4_5, MIGRATION_6_7, MIGRATION_7_8)
             .fallbackToDestructiveMigration(dropAllTables = true)
             .addCallback(object : RoomDatabase.Callback() {
                 override fun onCreate(db: SupportSQLiteDatabase) {

@@ -46,6 +46,7 @@ class SettingsRepository(private val context: Context) {
         val AUTO_CLEAN_TRASH_DAYS = androidx.datastore.preferences.core.intPreferencesKey("auto_clean_trash_days")
         val CACHE_THUMBNAILS_ENABLED = booleanPreferencesKey("cache_thumbnails_enabled")
         val MAX_BRIGHTNESS_ENABLED = booleanPreferencesKey("max_brightness_enabled")
+        val EXCLUDED_FOLDERS = stringPreferencesKey("excluded_folders")
     }
 
     val themeModeFlow: Flow<String> = context.dataStore.data
@@ -395,6 +396,18 @@ class SettingsRepository(private val context: Context) {
     suspend fun updateMaxBrightnessEnabled(enabled: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[MAX_BRIGHTNESS_ENABLED] = enabled
+        }
+    }
+
+    val excludedFoldersFlow: Flow<Set<String>> = context.dataStore.data
+        .map { preferences ->
+            val foldersStr = preferences[EXCLUDED_FOLDERS] ?: ""
+            if (foldersStr.isBlank()) emptySet() else foldersStr.split(",").map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+        }
+
+    suspend fun updateExcludedFolders(folders: Set<String>) {
+        context.dataStore.edit { preferences ->
+            preferences[EXCLUDED_FOLDERS] = folders.joinToString(",")
         }
     }
 }
