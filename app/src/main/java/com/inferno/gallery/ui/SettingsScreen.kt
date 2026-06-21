@@ -1,6 +1,7 @@
 package com.inferno.gallery.ui
 
 import androidx.compose.material.icons.outlined.Cloud
+import androidx.compose.material.icons.outlined.HelpOutline
 import com.inferno.gallery.ui.ConnectionTestResult
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -1010,6 +1011,132 @@ fun SettingsScreen(
                                         }
                                     }
 
+                                    // ── Setup Guide ──────────────────────────────────
+                                    val guideExpanded = remember { mutableStateOf(false) }
+
+                                    Column(modifier = Modifier.fillMaxWidth()) {
+                                        ListItem(
+                                            leadingContent = { Icon(Icons.Outlined.HelpOutline, contentDescription = null) },
+                                            headlineContent = { Text("Setup Guide") },
+                                            supportingContent = { Text("Step-by-step instructions to get your bot tokens and chat ID") },
+                                            trailingContent = {
+                                                Icon(
+                                                    imageVector = if (guideExpanded.value) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                                                    contentDescription = if (guideExpanded.value) "Collapse" else "Expand"
+                                                )
+                                            },
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clickable { guideExpanded.value = !guideExpanded.value },
+                                            colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                                        )
+
+                                        androidx.compose.animation.AnimatedVisibility(
+                                            visible = guideExpanded.value
+                                        ) {
+                                            Column(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                                                    .background(
+                                                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
+                                                        shape = MaterialTheme.shapes.large
+                                                    )
+                                                    .padding(20.dp),
+                                                verticalArrangement = Arrangement.spacedBy(16.dp)
+                                            ) {
+                                                // Step 1
+                                                SetupGuideStep(
+                                                    stepNumber = 1,
+                                                    title = "Create a Telegram Bot",
+                                                    instructions = listOf(
+                                                        "Open Telegram and search for @BotFather",
+                                                        "Send /newbot and follow the prompts",
+                                                        "Choose a name (e.g., \"My Gallery Backup\")",
+                                                        "Choose a username (must end in 'bot', e.g., mygallery_backup_bot)",
+                                                        "BotFather will reply with your bot token"
+                                                    ),
+                                                    highlight = "Copy the token — it looks like:\n6123456789:AAHx...-abcdefg"
+                                                )
+
+                                                HorizontalDivider(
+                                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                                                )
+
+                                                // Step 2
+                                                SetupGuideStep(
+                                                    stepNumber = 2,
+                                                    title = "Create a Private Channel",
+                                                    instructions = listOf(
+                                                        "In Telegram, create a new Channel (private)",
+                                                        "Name it anything (e.g., \"Gallery Backup\")",
+                                                        "Go to channel settings → Administrators → Add your bot as admin",
+                                                        "Give it permission to Post Messages"
+                                                    ),
+                                                    highlight = null
+                                                )
+
+                                                HorizontalDivider(
+                                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                                                )
+
+                                                // Step 3
+                                                SetupGuideStep(
+                                                    stepNumber = 3,
+                                                    title = "Get the Chat ID",
+                                                    instructions = listOf(
+                                                        "Forward any message from your channel to @userinfobot",
+                                                        "It will reply with the channel's chat ID",
+                                                        "Channel IDs start with -100 (e.g., -1001234567890)",
+                                                        "For a private group, add the bot to the group and message @userinfobot from there"
+                                                    ),
+                                                    highlight = "Paste the full ID including the minus sign:\n-1001234567890"
+                                                )
+
+                                                HorizontalDivider(
+                                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                                                )
+
+                                                // Step 4 (Optional)
+                                                SetupGuideStep(
+                                                    stepNumber = 4,
+                                                    title = "Dual-Bot Setup (Optional)",
+                                                    instructions = listOf(
+                                                        "Create a second bot with @BotFather for faster uploads",
+                                                        "Add it as admin to the same channel",
+                                                        "Paste its token in the Secondary Bot Token field",
+                                                        "Photon will upload two files at once for 2× speed"
+                                                    ),
+                                                    highlight = null
+                                                )
+
+                                                // Tip
+                                                Surface(
+                                                    color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f),
+                                                    shape = MaterialTheme.shapes.medium
+                                                ) {
+                                                    Row(
+                                                        modifier = Modifier.padding(12.dp),
+                                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                                        verticalAlignment = Alignment.Top
+                                                    ) {
+                                                        Icon(
+                                                            Icons.Outlined.Info,
+                                                            contentDescription = null,
+                                                            modifier = Modifier.size(18.dp),
+                                                            tint = MaterialTheme.colorScheme.onTertiaryContainer
+                                                        )
+                                                        Text(
+                                                            "After setup, hit \"Test Connection\" above to verify everything works. Your media stays private — only you and your bot can see the channel.",
+                                                            style = MaterialTheme.typography.bodySmall,
+                                                            color = MaterialTheme.colorScheme.onTertiaryContainer
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+
                                     HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
 
                                     val localContext = androidx.compose.ui.platform.LocalContext.current
@@ -1918,3 +2045,70 @@ val GithubIcon: ImageVector = ImageVector.Builder(
     curveTo(22f, 6.477f, 17.522f, 2f, 12f, 2f)
     close()
 }.build()
+
+@Composable
+private fun SetupGuideStep(
+    stepNumber: Int,
+    title: String,
+    instructions: List<String>,
+    highlight: String?
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(26.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                    Text(
+                        "$stepNumber",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.onPrimary
+                    )
+                }
+            }
+            Text(
+                title,
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
+            )
+        }
+
+        Column(
+            modifier = Modifier.padding(start = 36.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            instructions.forEach { instruction ->
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("•", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        instruction,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            if (highlight != null) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Surface(
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                    shape = MaterialTheme.shapes.small
+                ) {
+                    Text(
+                        highlight,
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                            fontWeight = FontWeight.Medium
+                        ),
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                    )
+                }
+            }
+        }
+    }
+}
