@@ -1901,7 +1901,7 @@ fun SettingsScreen(
                                                         fontWeight = FontWeight.Medium
                                                     )
                                                     Text(
-                                                        text = String.format("%.2f", smartSearchThreshold),
+                                                        text = String.format(java.util.Locale.US, "%.2f", smartSearchThreshold),
                                                         style = MaterialTheme.typography.titleMedium,
                                                         fontWeight = FontWeight.Bold,
                                                         color = MaterialTheme.colorScheme.primary

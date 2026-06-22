@@ -758,7 +758,7 @@ fun GalleryGridItem(
                     .align(Alignment.BottomStart)
                     .padding(6.dp)
             ) {
-                val formattedScore = String.format("%.3f", item.searchScore)
+                val formattedScore = String.format(java.util.Locale.US, "%.3f", item.searchScore)
                 Text(
                     text = "Score: $formattedScore",
                     style = MaterialTheme.typography.labelSmall,
@@ -775,8 +775,8 @@ fun formatDuration(millis: Long?): String {
     val seconds = (millis / 1000) % 60
     val minutes = (millis / (1000 * 60)) % 60
     val hours = (millis / (1000 * 60 * 60))
-    return if (hours > 0) String.format("%d:%02d:%02d", hours, minutes, seconds)
-    else String.format("%02d:%02d", minutes, seconds)
+    return if (hours > 0) String.format(java.util.Locale.US, "%d:%02d:%02d", hours, minutes, seconds)
+    else String.format(java.util.Locale.US, "%02d:%02d", minutes, seconds)
 }
 
 

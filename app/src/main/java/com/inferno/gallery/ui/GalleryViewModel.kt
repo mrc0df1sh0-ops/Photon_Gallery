@@ -459,24 +459,16 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
                         }
                     }
                 } catch (securityException: SecurityException) {
-                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-                        val recoverable = securityException as? android.app.RecoverableSecurityException
-                        if (recoverable != null) {
-                            withContext(Dispatchers.Main) {
-                                onSecurityException(recoverable.userAction.actionIntent)
-                            }
-                        } else {
-                            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-                                val pendingIntent = android.provider.MediaStore.createWriteRequest(context.contentResolver, listOf(uri))
-                                withContext(Dispatchers.Main) {
-                                    onSecurityException(pendingIntent)
-                                }
-                            } else {
-                                throw securityException
-                            }
+                    val recoverable = securityException as? android.app.RecoverableSecurityException
+                    if (recoverable != null) {
+                        withContext(Dispatchers.Main) {
+                            onSecurityException(recoverable.userAction.actionIntent)
                         }
                     } else {
-                        throw securityException
+                        val pendingIntent = android.provider.MediaStore.createWriteRequest(context.contentResolver, listOf(uri))
+                        withContext(Dispatchers.Main) {
+                            onSecurityException(pendingIntent)
+                        }
                     }
                 }
             } catch (e: Exception) {
@@ -550,27 +542,17 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
                 val fileUrl = getTelegramFileUrl(fileId) ?: throw Exception("Failed to resolve URL")
                 
                 val collection = if (item.isVideo) {
-                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-                        android.provider.MediaStore.Video.Media.getContentUri(android.provider.MediaStore.VOLUME_EXTERNAL_PRIMARY)
-                    } else {
-                        android.provider.MediaStore.Video.Media.EXTERNAL_CONTENT_URI
-                    }
+                    android.provider.MediaStore.Video.Media.getContentUri(android.provider.MediaStore.VOLUME_EXTERNAL_PRIMARY)
                 } else {
-                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-                        android.provider.MediaStore.Images.Media.getContentUri(android.provider.MediaStore.VOLUME_EXTERNAL_PRIMARY)
-                    } else {
-                        android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI
-                    }
+                    android.provider.MediaStore.Images.Media.getContentUri(android.provider.MediaStore.VOLUME_EXTERNAL_PRIMARY)
                 }
 
                 val values = android.content.ContentValues().apply {
                     put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, item.name)
                     val mimeType = if (item.isVideo) "video/mp4" else "image/jpeg"
                     put(android.provider.MediaStore.MediaColumns.MIME_TYPE, mimeType)
-                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-                        put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, android.os.Environment.DIRECTORY_PICTURES + "/PhotonGallery")
-                        put(android.provider.MediaStore.MediaColumns.IS_PENDING, 1)
-                    }
+                    put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, android.os.Environment.DIRECTORY_PICTURES + "/PhotonGallery")
+                    put(android.provider.MediaStore.MediaColumns.IS_PENDING, 1)
                 }
 
                 val resolver = context.contentResolver
@@ -582,11 +564,9 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
                     client.downloadFileStream(fileUrl, outputStream)
                 }
 
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-                    values.clear()
-                    values.put(android.provider.MediaStore.MediaColumns.IS_PENDING, 0)
-                    resolver.update(uri, values, null, null)
-                }
+                values.clear()
+                values.put(android.provider.MediaStore.MediaColumns.IS_PENDING, 0)
+                resolver.update(uri, values, null, null)
 
                 withContext(Dispatchers.Main) {
                     showToast("Download complete")
@@ -1207,7 +1187,6 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
 
         viewModelScope.launch {
             try {
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
                     val resolver = getApplication<android.app.Application>().contentResolver
                     for (uriString in selected) {
                         val uri = Uri.parse(uriString)
@@ -1227,11 +1206,6 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
                     withContext(Dispatchers.Main) {
                         showToast("Moved to $targetBucket")
                     }
-                } else {
-                    withContext(Dispatchers.Main) {
-                        showToast("Move not supported on this Android version")
-                    }
-                }
             } catch (e: Exception) {
                 android.util.Log.e("GalleryViewModel", "Error moving media: ${e.message}", e)
             }
@@ -1244,7 +1218,6 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
 
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
                     val resolver = getApplication<android.app.Application>().contentResolver
                     var successCount = 0
                     for (uriString in selected) {
@@ -1323,11 +1296,6 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
                     withContext(Dispatchers.Main) {
                         showToast("Copied $successCount items to $targetBucket")
                     }
-                } else {
-                    withContext(Dispatchers.Main) {
-                        showToast("Copy not supported on this Android version")
-                    }
-                }
             } catch (e: Exception) {
                 android.util.Log.e("GalleryViewModel", "Error copying media: ${e.message}", e)
             }

@@ -80,11 +80,7 @@ class GalleryApplication : Application(), SingletonImageLoader.Factory {
                 // Support streaming directly from Telegram Cloud
                 add(TelegramCoilFetcher.Factory(SettingsRepository.getInstance(context)))
                 // Support GIFs, Animated WebP, and Animated HEIF
-                if (SDK_INT >= 28) {
-                    add(AnimatedImageDecoder.Factory())
-                } else {
-                    add(GifDecoder.Factory())
-                }
+                add(AnimatedImageDecoder.Factory())
                 // Support SVGs
                 add(SvgDecoder.Factory())
                 // Support Video Frame extraction

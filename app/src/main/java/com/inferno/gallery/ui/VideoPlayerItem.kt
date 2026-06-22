@@ -155,6 +155,7 @@ fun VideoPlayerItem(uri: Uri, isCurrentPage: Boolean, modifier: Modifier = Modif
     }
 }
 
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @Composable
 fun VideoPlayerItemWithResolvedUri(uri: Uri, isCurrentPage: Boolean, modifier: Modifier = Modifier, onTap: (() -> Unit)? = null) {
     val context = LocalContext.current

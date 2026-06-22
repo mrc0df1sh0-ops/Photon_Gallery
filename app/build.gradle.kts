@@ -110,8 +110,6 @@ dependencies {
     // ── ONNX Runtime ──
     implementation(libs.onnxruntime.android)
 
-    // ── HuggingFace Tokenizer (DJL) ──
-    // Replaced by custom BPETokenizer since DJL tokenizers fail to load JNI on Android
 
     // ── WorkManager ──
     implementation(libs.androidx.work.runtime.ktx)

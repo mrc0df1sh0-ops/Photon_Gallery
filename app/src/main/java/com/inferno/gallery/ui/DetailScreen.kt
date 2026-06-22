@@ -1129,7 +1129,7 @@ fun DetailScreen(
                         if (bucketName == "Trash") {
                             IconButton(
                                 onClick = {
-                                    if (currentItem != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                                    if (currentItem != null) {
                                         val isMediaStoreUri = currentItem.uri.toString().startsWith("content://")
                                         if (isMediaStoreUri) {
                                             pendingDeleteItem = currentItem
@@ -1144,7 +1144,7 @@ fun DetailScreen(
                             }
                             IconButton(
                                 onClick = {
-                                    if (currentItem != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                                    if (currentItem != null) {
                                         val isMediaStoreUri = currentItem.uri.toString().startsWith("content://")
                                         if (isMediaStoreUri) {
                                             pendingDeleteItem = currentItem
@@ -1216,7 +1216,7 @@ fun DetailScreen(
                                     if (currentItem != null) {
                                         if (bucketName == "telegram_cloud") {
                                             showCloudDeleteConfirmDialog = true
-                                        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                                        } else {
                                             val isMediaStoreUri = currentItem.uri.toString().startsWith("content://")
                                             if (!isMediaStoreUri) {
                                                 android.widget.Toast.makeText(context, "Cannot delete this item", android.widget.Toast.LENGTH_SHORT).show()
