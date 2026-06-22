@@ -23,7 +23,7 @@ import com.inferno.gallery.data.db.DatabaseProvider
 import kotlinx.coroutines.withContext
 
 class SettingsViewModel(application: Application) : AndroidViewModel(application) {
-    private val repository = SettingsRepository(application)
+    private val repository = SettingsRepository.getInstance(application)
     private val db = DatabaseProvider.getDatabase(application)
 
     private val _isLoading = MutableStateFlow(true)

@@ -93,6 +93,9 @@ import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import com.inferno.gallery.ui.DetectedChatsResult
 import androidx.compose.material3.TextButton
 import androidx.compose.foundation.shape.RoundedCornerShape
+import com.inferno.gallery.ui.theme.ShapeLarge
+import com.inferno.gallery.ui.theme.ShapeLargeIncreased3
+import com.inferno.gallery.ui.theme.ShapeExtraLarge
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.togetherWith
@@ -313,34 +316,28 @@ fun SettingsScreen(
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
                         CategoryCard(
-                            title = "About",
-                            subtitle = "App information, updates, and licenses",
-                            icon = Icons.Outlined.Info,
-                            onClick = { onActiveSectionChange("About") }
+                            title = "Look \u0026 Feel",
+                            subtitle = "Theme, colors, and display preferences",
+                            icon = Icons.Outlined.Palette,
+                            onClick = { onActiveSectionChange("Look \u0026 Feel") }
+                        )
+                        CategoryCard(
+                            title = "Layout \u0026 Navigation",
+                            subtitle = "Grid size, dock style, and shapes",
+                            icon = Icons.Outlined.Tune,
+                            onClick = { onActiveSectionChange("Layout \u0026 Navigation") }
                         )
                         CategoryCard(
                             title = "General",
-                            subtitle = "App preferences and customizations",
+                            subtitle = "Full screen, brightness, and performance",
                             icon = Icons.Outlined.Settings,
                             onClick = { onActiveSectionChange("General") }
                         )
                         CategoryCard(
-                            title = "Privacy & Security",
-                            subtitle = "Fine grained control over your data",
-                            icon = Icons.Outlined.Shield,
-                            onClick = { onActiveSectionChange("Privacy & Security") }
-                        )
-                        CategoryCard(
-                            title = "Look & Feel",
-                            subtitle = "Autoplay preferences and playback options",
-                            icon = Icons.Outlined.Palette,
-                            onClick = { onActiveSectionChange("Look & Feel") }
-                        )
-                        CategoryCard(
-                            title = "Layout & Navigation",
-                            subtitle = "Customize app dock, grid size, and shapes",
-                            icon = Icons.Outlined.Tune,
-                            onClick = { onActiveSectionChange("Layout & Navigation") }
+                            title = "Smart Search \u0026 OCR",
+                            subtitle = "AI-powered search and text recognition",
+                            icon = Icons.Outlined.AutoAwesome,
+                            onClick = { onActiveSectionChange("Smart Search \u0026 OCR") }
                         )
                         CategoryCard(
                             title = "Cloud Backup",
@@ -349,9 +346,15 @@ fun SettingsScreen(
                             onClick = { onActiveSectionChange("Cloud Backup") }
                         )
                         CategoryCard(
+                            title = "Privacy \u0026 Security",
+                            subtitle = "Metadata stripping, deletion, and data control",
+                            icon = Icons.Outlined.Shield,
+                            onClick = { onActiveSectionChange("Privacy \u0026 Security") }
+                        )
+                        CategoryCard(
                             title = "Private Space",
                             subtitle = "Hidden photos protected with biometric lock",
-                            icon = Icons.Outlined.Shield,
+                            icon = Icons.Outlined.Lock,
                             onClick = {
                                 val activity = context as? androidx.fragment.app.FragmentActivity
                                 if (activity != null) {
@@ -370,10 +373,10 @@ fun SettingsScreen(
                             onClick = { onActiveSectionChange("Excluded Folders") }
                         )
                         CategoryCard(
-                            title = "Smart Search & OCR",
-                            subtitle = "Local text search and semantic search options",
-                            icon = Icons.Outlined.AutoAwesome,
-                            onClick = { onActiveSectionChange("Smart Search & OCR") }
+                            title = "About",
+                            subtitle = "App information, updates, and licenses",
+                            icon = Icons.Outlined.Info,
+                            onClick = { onActiveSectionChange("About") }
                         )
                     }
                 } else {
@@ -2082,7 +2085,7 @@ fun SettingsScreen(
                                 ) {
                                     // 1. Placeholder app icon in the top center
                                     Card(
-                                        shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+                                        shape = ShapeLargeIncreased3 as RoundedCornerShape,
                                         colors = CardDefaults.cardColors(
                                             containerColor = MaterialTheme.colorScheme.primaryContainer,
                                             contentColor = MaterialTheme.colorScheme.onPrimaryContainer
@@ -2122,7 +2125,7 @@ fun SettingsScreen(
                                     
                                     // 3. Card below them (containing dev name and github icon next to the name)
                                     Card(
-                                        shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                                        shape = ShapeLarge as RoundedCornerShape,
                                         colors = CardDefaults.cardColors(
                                             containerColor = MaterialTheme.colorScheme.surfaceVariant,
                                             contentColor = MaterialTheme.colorScheme.onSurfaceVariant
@@ -2230,7 +2233,7 @@ fun SettingsGroup(
         )
         Surface(
             modifier = Modifier.fillMaxWidth(),
-            shape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp),
+            shape = ShapeExtraLarge as RoundedCornerShape,
             color = MaterialTheme.colorScheme.surface,
             tonalElevation = 0.dp
         ) {
@@ -2267,7 +2270,7 @@ fun CategoryCard(
     Card(
         onClick = onClick,
         interactionSource = interactionSource,
-        shape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp),
+        shape = ShapeExtraLarge as RoundedCornerShape,
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface,
             contentColor = MaterialTheme.colorScheme.onSurface

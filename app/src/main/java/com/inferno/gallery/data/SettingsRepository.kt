@@ -13,8 +13,17 @@ enum class DockStyle { PILL, FULL_WIDTH }
 
 val Context.dataStore by preferencesDataStore(name = "user_settings")
 
-class SettingsRepository(private val context: Context) {
+class SettingsRepository private constructor(private val context: Context) {
     companion object {
+        @Volatile
+        private var INSTANCE: SettingsRepository? = null
+
+        fun getInstance(context: Context): SettingsRepository {
+            return INSTANCE ?: synchronized(this) {
+                INSTANCE ?: SettingsRepository(context.applicationContext).also { INSTANCE = it }
+            }
+        }
+
         val THEME_MODE = stringPreferencesKey("theme_mode")
         val VIEW_MODE = stringPreferencesKey("view_mode")
         val SORT_ORDER = stringPreferencesKey("sort_order")
