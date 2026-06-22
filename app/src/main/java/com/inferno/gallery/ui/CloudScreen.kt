@@ -64,9 +64,16 @@ fun CloudScreen(
 
     val galleryItems = remember(cloudMedia) {
         cloudMedia.map { item ->
+            val uri = Uri.parse(item.uriString)
+            val exists = java.io.File(item.filePath).exists()
+            val resolved = when {
+                item.telegramThumbFileId != null && !exists -> Uri.parse("telegram://${item.telegramThumbFileId}")
+                item.telegramFileId != null && !exists -> Uri.parse("telegram://${item.telegramFileId}")
+                else -> uri
+            }
             GalleryItem(
                 id = item.id.toString(),
-                uri = Uri.parse(item.uriString),
+                uri = uri,
                 bucketName = item.bucketName,
                 dateAdded = item.dateAdded,
                 size = item.size,
@@ -76,7 +83,9 @@ fun CloudScreen(
                 isVideo = item.isVideo,
                 durationMs = item.durationMs,
                 telegramFileId = item.telegramFileId,
-                telegramThumbFileId = item.telegramThumbFileId
+                telegramThumbFileId = item.telegramThumbFileId,
+                localExists = exists,
+                resolvedUri = resolved
             )
         }
     }

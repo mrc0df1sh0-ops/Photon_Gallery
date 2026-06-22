@@ -67,7 +67,7 @@ object SyncManifestManager {
             Log.d(TAG, "Sync manifest updated successfully. New pinned message ID: ${uploadResult.messageId}")
         } catch (e: com.inferno.gallery.data.network.TelegramMigrationException) {
             Log.i(TAG, "Group chat migrated to supergroup! Updating chat ID to ${e.newChatId}")
-            com.inferno.gallery.data.SettingsRepository(context).updateTelegramChatId(e.newChatId.toString())
+            com.inferno.gallery.data.SettingsRepository.getInstance(context).updateTelegramChatId(e.newChatId.toString())
             // Retry once with new chat ID — temp file still exists here
             try {
                 val retryClient = TelegramClient(botToken, e.newChatId.toString())

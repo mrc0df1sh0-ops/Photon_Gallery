@@ -46,7 +46,6 @@ room {
 }
 
 ksp {
-    arg("room.schemaLocation", "$projectDir/schemas")
     // Force Kotlin codegen — avoids 'unexpected jvm signature V' KSP bug with suspend Unit DAOs
     arg("room.generateKotlin", "true")
 }

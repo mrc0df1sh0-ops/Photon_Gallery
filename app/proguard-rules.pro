@@ -32,4 +32,9 @@
 
 # Keep ONNX Runtime JNI components
 -keep class ai.onnxruntime.** { *; }
+-keepclassmembers class ai.onnxruntime.** { *; }
 -dontwarn ai.onnxruntime.**
+
+# Preserve line numbers for meaningful crash stack traces in release builds
+-keepattributes SourceFile,LineNumberTable
+-renamesourcefileattribute SourceFile

@@ -15,6 +15,8 @@ import com.inferno.gallery.data.SettingsRepository
 import com.inferno.gallery.data.DockStyle
 import com.inferno.gallery.data.FavoritesManager
 import com.inferno.gallery.data.VaultAuthManager
+import com.inferno.gallery.data.BucketNames
+import com.inferno.gallery.data.MediaQueryBuilder
 import android.util.Log
 
 import kotlinx.coroutines.Dispatchers
@@ -65,7 +67,11 @@ data class GalleryItem(
     val durationMs: Long? = null,
     val searchScore: Float? = null,
     val telegramFileId: String? = null,
-    val telegramThumbFileId: String? = null
+    val telegramThumbFileId: String? = null,
+    /** Pre-computed on IO: whether the local file exists on disk. */
+    val localExists: Boolean = true,
+    /** Pre-computed on IO: the URI to use for thumbnail loading (local or telegram). */
+    val resolvedUri: Uri = uri
 )
 
 data class BackupProgress(
@@ -109,9 +115,62 @@ enum class SearchMode { SMART, FTS }
 class GalleryViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository = LocalMediaRepository(application.contentResolver)
-    val settingsRepository = SettingsRepository(application)
+    val settingsRepository = SettingsRepository.getInstance(application)
     private val favoritesManager = FavoritesManager(application)
     private val database = DatabaseProvider.getDatabase(application)
+
+    // ── Toast Event Channel ──
+    private val _toastEvent = kotlinx.coroutines.channels.Channel<String>(kotlinx.coroutines.channels.Channel.BUFFERED)
+    val toastEvent = _toastEvent.receiveAsFlow()
+
+    private fun showToast(message: String) {
+        _toastEvent.trySend(message)
+    }
+
+    /**
+     * Resolves localExists and resolvedUri for a GalleryItem.
+     * Skips File.exists() entirely for local-only items (no Telegram backup)
+     * to avoid unnecessary disk I/O in hot paths like paging.
+     */
+    private fun resolveItemFields(
+        uri: Uri,
+        path: String,
+        telegramThumbFileId: String?,
+        telegramFileId: String?
+    ): Pair<Boolean, Uri> {
+        // Fast path: no Telegram backup → always local, skip disk check
+        if (telegramThumbFileId == null && telegramFileId == null) {
+            return true to uri
+        }
+        // Slow path: has Telegram backup → check if local file still exists
+        val exists = java.io.File(path).exists()
+        val resolved = when {
+            telegramThumbFileId != null && !exists -> Uri.parse("telegram://$telegramThumbFileId")
+            telegramFileId != null && !exists -> Uri.parse("telegram://$telegramFileId")
+            else -> uri
+        }
+        return exists to resolved
+    }
+
+    // ── Shared SQL Query Builder ──
+    // Delegates to MediaQueryBuilder for testability
+    private fun buildMediaConditions(
+        bucket: String?,
+        filterIndex: Int,
+        excluded: Set<String> = emptySet(),
+        favIds: Set<String> = emptySet(),
+        ftsIds: List<String> = emptyList(),
+        smartIds: List<String> = emptyList()
+    ): MediaQueryBuilder.QueryConditions {
+        return MediaQueryBuilder.buildMediaConditions(bucket, filterIndex, excluded, favIds, ftsIds, smartIds)
+    }
+
+    private fun buildWhereClause(qc: MediaQueryBuilder.QueryConditions): String {
+        return MediaQueryBuilder.buildWhereClause(qc)
+    }
+
+    private fun buildOrderClause(order: SortOrder): String = MediaQueryBuilder.buildOrderClause(order.name)
+
 
     // ── Excluded Folders ──
     val excludedFolders: StateFlow<Set<String>> = settingsRepository.excludedFoldersFlow.stateIn(
@@ -149,39 +208,21 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
     fun hideMedia(uris: List<Uri>) {
         viewModelScope.launch(Dispatchers.IO) {
             val count = vaultRepository.hideMedia(uris)
-            withContext(Dispatchers.Main) {
-                android.widget.Toast.makeText(
-                    getApplication(),
-                    "$count item${if (count != 1) "s" else ""} hidden",
-                    android.widget.Toast.LENGTH_SHORT
-                ).show()
-            }
+            showToast("$count item${if (count != 1) "s" else ""} hidden")
         }
     }
 
     fun unhideMedia(ids: List<Long>) {
         viewModelScope.launch(Dispatchers.IO) {
             val count = vaultRepository.unhideMedia(ids)
-            withContext(Dispatchers.Main) {
-                android.widget.Toast.makeText(
-                    getApplication(),
-                    "$count item${if (count != 1) "s" else ""} restored",
-                    android.widget.Toast.LENGTH_SHORT
-                ).show()
-            }
+            showToast("$count item${if (count != 1) "s" else ""} restored")
         }
     }
 
     fun deleteFromVault(ids: List<Long>) {
         viewModelScope.launch(Dispatchers.IO) {
             vaultRepository.deleteFromVault(ids)
-            withContext(Dispatchers.Main) {
-                android.widget.Toast.makeText(
-                    getApplication(),
-                    "${ids.size} item${if (ids.size != 1) "s" else ""} permanently deleted",
-                    android.widget.Toast.LENGTH_SHORT
-                ).show()
-            }
+            showToast("${ids.size} item${if (ids.size != 1) "s" else ""} permanently deleted")
         }
     }
 
@@ -272,9 +313,11 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
         val cloudMap = cloudItems.associateBy { it.id }
         entities.map { entity ->
             val cloudItem = cloudMap[entity.id]
+            val uri = Uri.parse(entity.uriString)
+            val (exists, resolved) = resolveItemFields(uri, entity.filePath, cloudItem?.telegramThumbFileId, cloudItem?.telegramFileId)
             GalleryItem(
                 id = entity.id.toString(),
-                uri = Uri.parse(entity.uriString),
+                uri = uri,
                 bucketName = entity.bucketName,
                 dateAdded = entity.dateAdded,
                 size = entity.size,
@@ -284,25 +327,27 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
                 isVideo = entity.isVideo,
                 durationMs = entity.durationMs,
                 telegramFileId = cloudItem?.telegramFileId,
-                telegramThumbFileId = cloudItem?.telegramThumbFileId
+                telegramThumbFileId = cloudItem?.telegramThumbFileId,
+                localExists = exists,
+                resolvedUri = resolved
             )
         }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    }.flowOn(Dispatchers.IO).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _detailMedia = MutableStateFlow<List<GalleryItem>>(emptyList())
     val detailMedia: StateFlow<List<GalleryItem>> = _detailMedia.asStateFlow()
 
     fun loadDetailMedia(mediaId: String, bucketName: String?) {
         viewModelScope.launch(Dispatchers.IO) {
-            if (bucketName == "search_text") {
+            if (bucketName == BucketNames.SEARCH_TEXT) {
                 _detailMedia.value = _ftsSearchResults.value
                 return@launch
             }
-            if (bucketName == "search_smart") {
+            if (bucketName == BucketNames.SEARCH_SMART) {
                 _detailMedia.value = _smartSearchResults.value
                 return@launch
             }
-            if (bucketName == "Favorites") {
+            if (bucketName == BucketNames.FAVORITES) {
                 _detailMedia.value = favoriteMedia.value
                 return@launch
             }
@@ -311,55 +356,22 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
             val filterIndex = selectedFilterIndex.value
             val order = sortOrder.value
             
-            var queryString = "SELECT cm.*, tb.telegramFileId, tb.telegramThumbFileId, tb.backupStatus FROM core_media cm LEFT JOIN telegram_backups tb ON cm.id = tb.mediaId "
-            val args = mutableListOf<Any>()
-            val conditions = mutableListOf<String>()
+            val qc = buildMediaConditions(bucket = bucketName, filterIndex = filterIndex)
+            val queryString = "SELECT cm.*, tb.telegramFileId, tb.telegramThumbFileId, tb.backupStatus FROM core_media cm LEFT JOIN telegram_backups tb ON cm.id = tb.mediaId " +
+                buildWhereClause(qc) + buildOrderClause(order)
 
-            val folderName = when (filterIndex) {
-                1 -> "Camera"
-                2 -> "Screenshots"
-                else -> null
-            }
-            
-            if (bucketName == "All") {
-                conditions.add("cm.bucketName != 'Trash'")
-            } else if (bucketName == "telegram_cloud") {
-                conditions.add("tb.backupStatus = 'SUCCESS'")
-            } else if (bucketName == "Videos") {
-                conditions.add("cm.isVideo = 1")
-                conditions.add("cm.bucketName != 'Trash'")
-            } else if (bucketName != null) {
-                conditions.add("cm.bucketName = ?")
-                args.add(bucketName)
-            } else if (folderName != null) {
-                conditions.add("cm.bucketName = ?")
-                args.add(folderName)
-            } else {
-                conditions.add("cm.bucketName != 'Trash'")
-            }
-
-            if (conditions.isNotEmpty()) {
-                queryString += "WHERE " + conditions.joinToString(" AND ") + " "
-            }
-
-            when (order) {
-                SortOrder.NewToOld -> queryString += "ORDER BY cm.dateAdded DESC"
-                SortOrder.OldToNew -> queryString += "ORDER BY cm.dateAdded ASC"
-                SortOrder.SmallToBig -> queryString += "ORDER BY cm.size ASC"
-                SortOrder.BigToSmall -> queryString += "ORDER BY cm.size DESC"
-                SortOrder.NameAsc -> queryString += "ORDER BY cm.name ASC"
-            }
-
-            val query = androidx.sqlite.db.SimpleSQLiteQuery(queryString, args.toTypedArray())
+            val query = androidx.sqlite.db.SimpleSQLiteQuery(queryString, qc.args.toTypedArray())
             val entities = try {
                 database.mediaDao().getMediaRaw(query)
             } catch (e: Exception) {
                 emptyList()
             }
             val items = entities.map { entity ->
+                val uri = Uri.parse(entity.uriString)
+                val (exists, resolved) = resolveItemFields(uri, entity.filePath, entity.telegramThumbFileId, entity.telegramFileId)
                 GalleryItem(
                     id = entity.id.toString(),
-                    uri = Uri.parse(entity.uriString),
+                    uri = uri,
                     bucketName = entity.bucketName,
                     dateAdded = entity.dateAdded,
                     size = entity.size,
@@ -369,7 +381,9 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
                     isVideo = entity.isVideo,
                     durationMs = entity.durationMs,
                     telegramFileId = entity.telegramFileId,
-                    telegramThumbFileId = entity.telegramThumbFileId
+                    telegramThumbFileId = entity.telegramThumbFileId,
+                    localExists = exists,
+                    resolvedUri = resolved
                 )
             }
             
@@ -382,9 +396,11 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
                 val entity = idLong?.let { database.mediaDao().getMediaById(it) }
                 if (entity != null) {
                     val cloudItem = database.telegramBackupDao().getBackupForMedia(entity.id)
+                    val uri = Uri.parse(entity.uriString)
+                    val (exists, resolved) = resolveItemFields(uri, entity.filePath, cloudItem?.telegramThumbFileId, cloudItem?.telegramFileId)
                     val fallbackItem = GalleryItem(
                         id = entity.id.toString(),
-                        uri = Uri.parse(entity.uriString),
+                        uri = uri,
                         bucketName = entity.bucketName,
                         dateAdded = entity.dateAdded,
                         size = entity.size,
@@ -394,7 +410,9 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
                         isVideo = entity.isVideo,
                         durationMs = entity.durationMs,
                         telegramFileId = cloudItem?.telegramFileId,
-                        telegramThumbFileId = cloudItem?.telegramThumbFileId
+                        telegramThumbFileId = cloudItem?.telegramThumbFileId,
+                        localExists = exists,
+                        resolvedUri = resolved
                     )
                     _detailMedia.value = listOf(fallbackItem)
                 } else {
@@ -433,11 +451,11 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
                         _detailMedia.value = updatedList
                         
                         withContext(Dispatchers.Main) {
-                            android.widget.Toast.makeText(context, "Renamed to $newName", android.widget.Toast.LENGTH_SHORT).show()
+                            showToast("Renamed to $newName")
                         }
                     } else {
                         withContext(Dispatchers.Main) {
-                            android.widget.Toast.makeText(context, "Failed to rename: 0 rows updated", android.widget.Toast.LENGTH_SHORT).show()
+                            showToast("Failed to rename: 0 rows updated")
                         }
                     }
                 } catch (securityException: SecurityException) {
@@ -463,7 +481,7 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
-                    android.widget.Toast.makeText(context, "Error renaming: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+                    showToast("Error renaming: ${e.message}")
                 }
             }
         }
@@ -571,11 +589,11 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
                 }
 
                 withContext(Dispatchers.Main) {
-                    android.widget.Toast.makeText(context, "Download complete", android.widget.Toast.LENGTH_SHORT).show()
+                    showToast("Download complete")
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
-                    android.widget.Toast.makeText(context, "Download failed: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+                    showToast("Download failed: ${e.message}")
                 }
             }
         }
@@ -685,82 +703,18 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
     val pagedMediaRaw: Flow<PagingData<GalleryItem>> = combine(
         _currentBucket, selectedFilterIndex, sortOrder, favoritesManager.favoritesFlow, excludedFolders
     ) { bucket, filterIndex, order, favs, excluded ->
-        var queryString = "SELECT cm.*, tb.telegramFileId, tb.telegramThumbFileId, tb.backupStatus FROM core_media cm LEFT JOIN telegram_backups tb ON cm.id = tb.mediaId "
-        val args = mutableListOf<Any>()
-        val conditions = mutableListOf<String>()
+        val qc = buildMediaConditions(
+            bucket = bucket,
+            filterIndex = filterIndex,
+            excluded = excluded,
+            favIds = favs,
+            ftsIds = ftsSearchResults.value.map { it.id },
+            smartIds = smartSearchResults.value.map { it.id }
+        )
+        val queryString = "SELECT cm.*, tb.telegramFileId, tb.telegramThumbFileId, tb.backupStatus FROM core_media cm LEFT JOIN telegram_backups tb ON cm.id = tb.mediaId " +
+            buildWhereClause(qc) + buildOrderClause(order)
 
-        val folderName = when (filterIndex) {
-            1 -> "Camera"
-            2 -> "Screenshots"
-            else -> null
-        }
-        if (bucket == "search_text") {
-            val ids = ftsSearchResults.value.map { it.id }
-            if (ids.isEmpty()) {
-                conditions.add("cm.id IN (0)")
-            } else {
-                conditions.add("cm.id IN (${ids.joinToString(",")})")
-                conditions.add("cm.bucketName != 'Trash'")
-            }
-        } else if (bucket == "search_smart") {
-            val ids = smartSearchResults.value.map { it.id }
-            if (ids.isEmpty()) {
-                conditions.add("cm.id IN (0)")
-            } else {
-                conditions.add("cm.id IN (${ids.joinToString(",")})")
-                conditions.add("cm.bucketName != 'Trash'")
-            }
-        } else if (bucket == "Favorites") {
-            if (favs.isEmpty()) {
-                conditions.add("cm.id IN (0)")
-            } else {
-                val ids = favs.mapNotNull { it.toLongOrNull() }
-                if (ids.isEmpty()) {
-                    conditions.add("cm.id IN (0)")
-                } else {
-                    conditions.add("cm.id IN (${ids.joinToString(",")})")
-                    conditions.add("cm.bucketName != 'Trash'")
-                }
-            }
-        } else {
-            if (bucket == "All") {
-                conditions.add("cm.bucketName != 'Trash'")
-            } else if (bucket == "telegram_cloud") {
-                conditions.add("tb.backupStatus = 'SUCCESS'")
-            } else if (bucket == "Videos") {
-                conditions.add("cm.isVideo = 1")
-                conditions.add("cm.bucketName != 'Trash'")
-            } else if (bucket != null) {
-                conditions.add("cm.bucketName = ?")
-                args.add(bucket)
-            } else if (folderName != null) {
-                conditions.add("cm.bucketName = ?")
-                args.add(folderName)
-            } else {
-                conditions.add("cm.bucketName != 'Trash'")
-            }
-        }
-
-        // Apply excluded folders filter for main views (All, Videos, default, filter tabs)
-        val shouldApplyExclusion = bucket == null || bucket == "All" || bucket == "Videos"
-        if (shouldApplyExclusion && excluded.isNotEmpty()) {
-            val placeholders = excluded.map { "'${it.replace("'", "''")}'" }.joinToString(",")
-            conditions.add("cm.bucketName NOT IN ($placeholders)")
-        }
-
-        if (conditions.isNotEmpty()) {
-            queryString += "WHERE " + conditions.joinToString(" AND ") + " "
-        }
-
-        when (order) {
-            SortOrder.NewToOld -> queryString += "ORDER BY cm.dateAdded DESC"
-            SortOrder.OldToNew -> queryString += "ORDER BY cm.dateAdded ASC"
-            SortOrder.SmallToBig -> queryString += "ORDER BY cm.size ASC"
-            SortOrder.BigToSmall -> queryString += "ORDER BY cm.size DESC"
-            SortOrder.NameAsc -> queryString += "ORDER BY cm.name ASC"
-        }
-
-        androidx.sqlite.db.SimpleSQLiteQuery(queryString, args.toTypedArray())
+        androidx.sqlite.db.SimpleSQLiteQuery(queryString, qc.args.toTypedArray())
     }.flatMapLatest { query ->
         Pager(
             config = PagingConfig(pageSize = 60, enablePlaceholders = true)
@@ -769,9 +723,11 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
         }.flow
     }.map { pagingData ->
         pagingData.map { entity ->
+            val uri = Uri.parse(entity.uriString)
+            val (exists, resolved) = resolveItemFields(uri, entity.filePath, entity.telegramThumbFileId, entity.telegramFileId)
             GalleryItem(
                 id = entity.id.toString(),
-                uri = Uri.parse(entity.uriString),
+                uri = uri,
                 bucketName = entity.bucketName,
                 dateAdded = entity.dateAdded,
                 size = entity.size,
@@ -781,7 +737,9 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
                 isVideo = entity.isVideo,
                 durationMs = entity.durationMs,
                 telegramFileId = entity.telegramFileId,
-                telegramThumbFileId = entity.telegramThumbFileId
+                telegramThumbFileId = entity.telegramThumbFileId,
+                localExists = exists,
+                resolvedUri = resolved
             )
         }
     }.cachedIn(viewModelScope)
@@ -873,48 +831,16 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
             val bucket = _currentBucket.value
             val filterIndex = selectedFilterIndex.value
             
-            var queryString = "SELECT cm.uriString FROM core_media cm LEFT JOIN telegram_backups tb ON cm.id = tb.mediaId "
-            val args = mutableListOf<Any>()
-            val conditions = mutableListOf<String>()
-
-            val folderName = when (filterIndex) {
-                1 -> "Camera"
-                2 -> "Screenshots"
-                else -> null
-            }
-            if (bucket == "search_text") {
-                val ids = ftsSearchResults.value.map { it.id }
-                if (ids.isEmpty()) {
-                    conditions.add("cm.id IN (0)")
-                } else {
-                    conditions.add("cm.id IN (${ids.joinToString(",")})")
-                    conditions.add("cm.bucketName != 'Trash'")
-                }
-            } else {
-                if (bucket == "All" || bucket == null) {
-                    conditions.add("cm.bucketName != 'Trash'")
-                } else if (bucket == "telegram_cloud") {
-                    conditions.add("tb.backupStatus = 'SUCCESS'")
-                } else if (bucket == "Videos") {
-                    conditions.add("cm.isVideo = 1")
-                    conditions.add("cm.bucketName != 'Trash'")
-                } else {
-                    conditions.add("cm.bucketName = ?")
-                    args.add(bucket)
-                }
-                
-                if (folderName != null) {
-                    conditions.add("cm.bucketName = ?")
-                    args.add(folderName)
-                }
-            }
-
-            if (conditions.isNotEmpty()) {
-                queryString += "WHERE " + conditions.joinToString(" AND ")
-            }
+            val qc = buildMediaConditions(
+                bucket = bucket,
+                filterIndex = filterIndex,
+                ftsIds = ftsSearchResults.value.map { it.id }
+            )
+            val queryString = "SELECT cm.uriString FROM core_media cm LEFT JOIN telegram_backups tb ON cm.id = tb.mediaId " +
+                buildWhereClause(qc)
             
             try {
-                val dbQuery = androidx.sqlite.db.SimpleSQLiteQuery(queryString, args.toTypedArray())
+                val dbQuery = androidx.sqlite.db.SimpleSQLiteQuery(queryString, qc.args.toTypedArray())
                 val allUris = database.mediaDao().getUrisRaw(dbQuery).toSet()
                 
                 val currentSelected = _selectedUris.value
@@ -938,15 +864,15 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
     }
 
     val allAlbums: StateFlow<List<AlbumBucket>> = combine(database.mediaDao().observeBuckets(), albumSortOrder, excludedFolders) { buckets, order, excluded ->
-        val excludedKeywords = setOf("Camera", "Screenshots", "Trash", "All", "Videos")
+        val excludedKeywords = setOf(BucketNames.CAMERA, BucketNames.SCREENSHOTS, BucketNames.TRASH, BucketNames.ALL, BucketNames.VIDEOS)
         
         val filtered = buckets.filter { bucket ->
             !excludedKeywords.contains(bucket.bucketName) && 
-            !bucket.bucketName.contains("Screenrecordings", ignoreCase = true) &&
-            !bucket.bucketName.contains("Screen records", ignoreCase = true) &&
-            !bucket.bucketName.contains("Screenrecords", ignoreCase = true) &&
-            !bucket.bucketName.contains("ScreenRecord", ignoreCase = true) &&
-            !bucket.bucketName.contains("Screenshot", ignoreCase = true) &&
+            !bucket.bucketName.contains(BucketNames.SCREENRECORDINGS, ignoreCase = true) &&
+            !bucket.bucketName.contains(BucketNames.SCREEN_RECORDS, ignoreCase = true) &&
+            !bucket.bucketName.contains(BucketNames.SCREEN_RECORDS_NO_SPACE, ignoreCase = true) &&
+            !bucket.bucketName.contains(BucketNames.SCREEN_RECORD, ignoreCase = true) &&
+            !bucket.bucketName.contains(BucketNames.SCREENSHOT, ignoreCase = true) &&
             !excluded.contains(bucket.bucketName)
         }.map { b ->
             AlbumBucket(
@@ -979,58 +905,57 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
 
     val pinnedAlbums: StateFlow<List<AlbumBucket>> = combine(
         database.mediaDao().observeBuckets(),
-        database.mediaDao().observeAllMedia(),
+        database.mediaDao().observeAllMediaStats(),
+        database.mediaDao().observeVideoStats(),
+        database.mediaDao().observeTopCoverUris(),
         favoriteMedia
-    ) { buckets, allMedia, favMedia ->
-        val validMedia = allMedia.filter { it.bucketName != "Trash" }
-        
+    ) { buckets, allStats, videoStats, topCoverUris, favMedia ->
         val allBucket = AlbumBucket(
             bucketName = "All",
-            coverUri = validMedia.firstOrNull()?.uriString?.let { Uri.parse(it) } ?: Uri.EMPTY,
-            itemCount = validMedia.size,
-            totalSizeBytes = validMedia.sumOf { it.size },
-            maxDate = validMedia.maxOfOrNull { it.dateAdded } ?: 0L,
-            coverUris = validMedia.take(4).map { Uri.parse(it.uriString) }
+            coverUri = allStats.coverUriString?.let { Uri.parse(it) } ?: Uri.EMPTY,
+            itemCount = allStats.itemCount,
+            totalSizeBytes = allStats.totalSizeBytes,
+            maxDate = allStats.maxDate,
+            coverUris = topCoverUris.map { Uri.parse(it) }
         )
 
-        val cameraItems = buckets.filter { it.bucketName.equals("Camera", ignoreCase = true) }
+        val cameraItems = buckets.filter { it.bucketName.equals(BucketNames.CAMERA, ignoreCase = true) }
         val cameraBucket = AlbumBucket(
-            bucketName = cameraItems.firstOrNull()?.bucketName ?: "Camera",
+            bucketName = cameraItems.firstOrNull()?.bucketName ?: BucketNames.CAMERA,
             coverUri = cameraItems.maxByOrNull { it.maxDate }?.coverUriString?.let { Uri.parse(it) } ?: Uri.EMPTY,
             itemCount = cameraItems.sumOf { it.itemCount },
             totalSizeBytes = cameraItems.sumOf { it.totalSizeBytes },
             maxDate = cameraItems.maxOfOrNull { it.maxDate } ?: 0L
         )
         
-        val videos = validMedia.filter { it.isVideo }
         val videosBucket = AlbumBucket(
-            bucketName = "Videos",
-            coverUri = videos.firstOrNull()?.uriString?.let { Uri.parse(it) } ?: Uri.EMPTY,
-            itemCount = videos.size,
-            totalSizeBytes = videos.sumOf { it.size },
-            maxDate = videos.maxOfOrNull { it.dateAdded } ?: 0L
+            bucketName = BucketNames.VIDEOS,
+            coverUri = videoStats.coverUriString?.let { Uri.parse(it) } ?: Uri.EMPTY,
+            itemCount = videoStats.itemCount,
+            totalSizeBytes = videoStats.totalSizeBytes,
+            maxDate = videoStats.maxDate
         )
 
         val favoritesBucket = AlbumBucket(
-            bucketName = "Favorites",
+            bucketName = BucketNames.FAVORITES,
             coverUri = favMedia.firstOrNull()?.uri ?: Uri.EMPTY,
             itemCount = favMedia.size,
             totalSizeBytes = favMedia.sumOf { it.size },
             maxDate = favMedia.maxOfOrNull { it.dateAdded } ?: 0L
         )
 
-        val screenshotsItems = buckets.filter { it.bucketName.contains("Screenshots", ignoreCase = true) || it.bucketName.contains("Screenshot", ignoreCase = true) }
+        val screenshotsItems = buckets.filter { it.bucketName.contains(BucketNames.SCREENSHOTS, ignoreCase = true) || it.bucketName.contains(BucketNames.SCREENSHOT, ignoreCase = true) }
         val screenshotsBucket = AlbumBucket(
-            bucketName = screenshotsItems.firstOrNull()?.bucketName ?: "Screenshots",
+            bucketName = screenshotsItems.firstOrNull()?.bucketName ?: BucketNames.SCREENSHOTS,
             coverUri = screenshotsItems.maxByOrNull { it.maxDate }?.coverUriString?.let { Uri.parse(it) } ?: Uri.EMPTY,
             itemCount = screenshotsItems.sumOf { it.itemCount },
             totalSizeBytes = screenshotsItems.sumOf { it.totalSizeBytes },
             maxDate = screenshotsItems.maxOfOrNull { it.maxDate } ?: 0L
         )
 
-        val screenrecordingsItems = buckets.filter { it.bucketName.contains("Screenrecordings", ignoreCase = true) || it.bucketName.contains("Screen records", ignoreCase = true) || it.bucketName.contains("Screenrecords", ignoreCase = true) || it.bucketName.contains("ScreenRecord", ignoreCase = true) }
+        val screenrecordingsItems = buckets.filter { it.bucketName.contains(BucketNames.SCREENRECORDINGS, ignoreCase = true) || it.bucketName.contains(BucketNames.SCREEN_RECORDS, ignoreCase = true) || it.bucketName.contains(BucketNames.SCREEN_RECORDS_NO_SPACE, ignoreCase = true) || it.bucketName.contains(BucketNames.SCREEN_RECORD, ignoreCase = true) }
         val screenrecordingsBucket = AlbumBucket(
-            bucketName = screenrecordingsItems.firstOrNull()?.bucketName ?: "Screenrecordings",
+            bucketName = screenrecordingsItems.firstOrNull()?.bucketName ?: BucketNames.SCREENRECORDINGS,
             coverUri = screenrecordingsItems.maxByOrNull { it.maxDate }?.coverUriString?.let { Uri.parse(it) } ?: Uri.EMPTY,
             itemCount = screenrecordingsItems.sumOf { it.itemCount },
             totalSizeBytes = screenrecordingsItems.sumOf { it.totalSizeBytes },
@@ -1044,7 +969,7 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
             favoritesBucket,
             screenshotsBucket,
             screenrecordingsBucket
-        ).filter { it.bucketName == "Favorites" || it.itemCount > 0 }
+        ).filter { it.bucketName == BucketNames.FAVORITES || it.itemCount > 0 }
     }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // User-pinned folders (from Settings, not the hardcoded system buckets)
@@ -1079,10 +1004,10 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
             searchJob?.cancel()
             return
         }
-        // Debounce: wait 500ms after user stops typing, then fire searches
+        // Debounce: wait 300ms after user stops typing, then fire searches
         searchJob?.cancel()
         searchJob = viewModelScope.launch {
-            kotlinx.coroutines.delay(500)
+            kotlinx.coroutines.delay(300)
             performUnifiedSearch(query)
         }
     }
@@ -1095,6 +1020,12 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
 
     private val _isSearching = MutableStateFlow(false)
     val isSearching: StateFlow<Boolean> = _isSearching.asStateFlow()
+
+    /** Whether the smart search ONNX model is downloaded and ready for inference. */
+    val isSmartSearchReady: StateFlow<Boolean> = kotlinx.coroutines.flow.flow {
+        val engine = com.inferno.gallery.data.ai.SmartSearchEngine.getInstance(getApplication())
+        emit(engine.isModelDownloaded())
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     private fun performUnifiedSearch(query: String) {
         viewModelScope.launch {
@@ -1117,9 +1048,11 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
                             val backupMap = backups.associateBy { it.mediaId }
                             ftsEntities.map { entity ->
                                 val backup = backupMap[entity.id]
+                                val uri = Uri.parse(entity.uriString)
+                                val (exists, resolved) = resolveItemFields(uri, entity.filePath, backup?.telegramThumbFileId, backup?.telegramFileId)
                                 GalleryItem(
                                     id = entity.id.toString(),
-                                    uri = Uri.parse(entity.uriString),
+                                    uri = uri,
                                     bucketName = entity.bucketName,
                                     dateAdded = entity.dateAdded,
                                     size = entity.size,
@@ -1129,7 +1062,9 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
                                     isVideo = entity.isVideo,
                                     durationMs = entity.durationMs,
                                     telegramFileId = backup?.telegramFileId,
-                                    telegramThumbFileId = backup?.telegramThumbFileId
+                                    telegramThumbFileId = backup?.telegramThumbFileId,
+                                    localExists = exists,
+                                    resolvedUri = resolved
                                 )
                             }
                         } catch (e: Exception) {
@@ -1173,9 +1108,11 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
 
                                     orderedEntities.map { entity ->
                                         val backup = backupMap[entity.id]
+                                        val uri = Uri.parse(entity.uriString)
+                                        val (exists, resolved) = resolveItemFields(uri, entity.filePath, backup?.telegramThumbFileId, backup?.telegramFileId)
                                         GalleryItem(
                                             id = entity.id.toString(),
-                                            uri = Uri.parse(entity.uriString),
+                                            uri = uri,
                                             bucketName = entity.bucketName,
                                             dateAdded = entity.dateAdded,
                                             size = entity.size,
@@ -1185,7 +1122,9 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
                                             isVideo = entity.isVideo,
                                             durationMs = entity.durationMs,
                                             telegramFileId = backup?.telegramFileId,
-                                            telegramThumbFileId = backup?.telegramThumbFileId
+                                            telegramThumbFileId = backup?.telegramThumbFileId,
+                                            localExists = exists,
+                                            resolvedUri = resolved
                                         )
                                     }
                                 } else {
@@ -1286,11 +1225,11 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
                     }
                     clearSelection()
                     withContext(Dispatchers.Main) {
-                        android.widget.Toast.makeText(getApplication(), "Moved to $targetBucket", android.widget.Toast.LENGTH_SHORT).show()
+                        showToast("Moved to $targetBucket")
                     }
                 } else {
                     withContext(Dispatchers.Main) {
-                        android.widget.Toast.makeText(getApplication(), "Move not supported on this Android version", android.widget.Toast.LENGTH_SHORT).show()
+                        showToast("Move not supported on this Android version")
                     }
                 }
             } catch (e: Exception) {
@@ -1382,11 +1321,11 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
 
                     clearSelection()
                     withContext(Dispatchers.Main) {
-                        android.widget.Toast.makeText(getApplication(), "Copied $successCount items to $targetBucket", android.widget.Toast.LENGTH_SHORT).show()
+                        showToast("Copied $successCount items to $targetBucket")
                     }
                 } else {
                     withContext(Dispatchers.Main) {
-                        android.widget.Toast.makeText(getApplication(), "Copy not supported on this Android version", android.widget.Toast.LENGTH_SHORT).show()
+                        showToast("Copy not supported on this Android version")
                     }
                 }
             } catch (e: Exception) {
@@ -1774,11 +1713,7 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
                 if (skippedDuplicate > 0) messages.add("$skippedDuplicate already backed up")
                 if (messages.isNotEmpty()) {
                     val skipMsg = "Skipped: ${messages.joinToString(", ")}"
-                    android.widget.Toast.makeText(
-                        getApplication(),
-                        skipMsg,
-                        android.widget.Toast.LENGTH_LONG
-                    ).show()
+                    showToast(skipMsg)
                 }
             }
             

@@ -22,7 +22,7 @@ import kotlinx.coroutines.sync.withPermit
 import java.io.File
 import java.security.MessageDigest
 
-private val videoDecodeSemaphore = Semaphore(4)
+private val videoDecodeSemaphore = Semaphore(6)
 
 /**
  * A custom Coil Fetcher that retrieves pre-generated thumbnails from the Android system's
@@ -165,7 +165,7 @@ class MediaStoreThumbnailFetcher(
 
             // Read cache setting once and reuse (avoid DataStore read per fetch)
             val cacheEnabled = cachedSetting ?: run {
-                val settings = SettingsRepository(context)
+                val settings = SettingsRepository.getInstance(context)
                 val value = kotlinx.coroutines.runBlocking {
                     try { settings.cacheThumbnailsEnabledFlow.first() } catch (_: Exception) { true }
                 }

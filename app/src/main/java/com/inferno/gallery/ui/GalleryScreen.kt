@@ -74,8 +74,8 @@ import androidx.compose.material.icons.outlined.CloudUpload
 import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material.icons.outlined.Warning
-import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.outlined.KeyboardArrowUp
+import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.runtime.mutableFloatStateOf
@@ -92,12 +92,11 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
+
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.setValue
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+
 import android.graphics.Bitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.Alignment
@@ -145,6 +144,8 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import com.inferno.gallery.data.db.DatabaseProvider
 import com.inferno.gallery.data.SettingsRepository
+import com.inferno.gallery.ui.theme.ShapeExtraSmall
+import com.inferno.gallery.ui.theme.ShapeMedium
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -208,7 +209,6 @@ fun GalleryScreen(
         }
     }
     val totalItems = pagedMedia.itemCount
-    val isScrollInProgress = lazyGridState.isScrollInProgress
     val context = LocalContext.current
 
     BackHandler(enabled = isSelectionMode) {
@@ -253,7 +253,7 @@ fun GalleryScreen(
                 key = pagedMedia.itemKey { item ->
                     when (item) {
                         is GalleryListItem.Header -> "header_${item.title}"
-                        is GalleryListItem.Item -> item.galleryItem.uri.toString()
+                        is GalleryListItem.Item -> item.galleryItem.id
                     }
                 },
                 contentType = pagedMedia.itemContentType { item: GalleryListItem ->
@@ -263,6 +263,7 @@ fun GalleryScreen(
                 val listItem = pagedMedia[index]
                 if (listItem is GalleryListItem.Item) {
                     val item = listItem.galleryItem
+                    val uriString = remember(item.id) { item.uri.toString() }
                     GalleryGridItem(
                         item = item,
                         sharedTransitionScope = sharedTransitionScope,
@@ -270,13 +271,12 @@ fun GalleryScreen(
                         onClick = onMediaClick,
                         onLongClick = onMediaLongClick,
                         modifier = Modifier,
-                        isSelected = selectedUris.contains(item.uri.toString()),
+                        isSelected = selectedUris.contains(uriString),
                         gridAutoPlay = gridAutoPlay,
                         gridCellsCount = gridCellsCount,
                         thumbnailCornerRadius = thumbnailCornerRadius,
                         cacheThumbnailsEnabled = cacheThumbnailsEnabled,
-                        backupStatus = backupStatuses[item.id.toLongOrNull() ?: -1L],
-                        isScrollInProgress = isScrollInProgress
+                        backupStatus = backupStatuses[item.id.toLongOrNull() ?: -1L]
                     )
                 }
             }
@@ -286,7 +286,7 @@ fun GalleryScreen(
                 key = pagedMedia.itemKey { item ->
                     when (item) {
                         is GalleryListItem.Header -> "header_${item.title}"
-                        is GalleryListItem.Item -> item.galleryItem.uri.toString()
+                        is GalleryListItem.Item -> item.galleryItem.id
                     }
                 },
                 contentType = pagedMedia.itemContentType { item: GalleryListItem ->
@@ -309,13 +309,14 @@ fun GalleryScreen(
                             text = listItem.title.uppercase(),
                             style = MaterialTheme.typography.titleSmall.copy(
                                 fontWeight = FontWeight.Bold,
-                                letterSpacing = 1.sp
+                                letterSpacing = 0.8.sp
                             ),
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 } else if (listItem is GalleryListItem.Item) {
                     val item = listItem.galleryItem
+                    val uriString = remember(item.id) { item.uri.toString() }
                     GalleryGridItem(
                         item = item,
                         sharedTransitionScope = sharedTransitionScope,
@@ -323,13 +324,12 @@ fun GalleryScreen(
                         onClick = onMediaClick,
                         onLongClick = onMediaLongClick,
                         modifier = Modifier,
-                        isSelected = selectedUris.contains(item.uri.toString()),
+                        isSelected = selectedUris.contains(uriString),
                         gridAutoPlay = gridAutoPlay,
                         gridCellsCount = gridCellsCount,
                         thumbnailCornerRadius = thumbnailCornerRadius,
                         cacheThumbnailsEnabled = cacheThumbnailsEnabled,
-                        backupStatus = backupStatuses[item.id.toLongOrNull() ?: -1L],
-                        isScrollInProgress = isScrollInProgress
+                        backupStatus = backupStatuses[item.id.toLongOrNull() ?: -1L]
                     )
                 }
             }
@@ -340,9 +340,9 @@ fun GalleryScreen(
         val isNotLoading = pagedMedia.loadState.refresh is androidx.paging.LoadState.NotLoading
         AnimatedVisibility(
             visible = totalItems == 0 && isNotLoading,
-            enter = fadeIn(spring(stiffness = Spring.StiffnessMediumLow)) +
-                    scaleIn(spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow), initialScale = 0.7f),
-            exit  = fadeOut(spring(stiffness = Spring.StiffnessMedium)),
+            enter = fadeIn(spring(stiffness = Spring.StiffnessHigh)) +
+                    scaleIn(spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessHigh), initialScale = 0.7f),
+            exit  = fadeOut(spring(stiffness = Spring.StiffnessHigh)),
             modifier = Modifier
                 .fillMaxSize()
                 .padding(contentPadding)
@@ -408,12 +408,17 @@ fun GalleryScreen(
             }
         }
 
+        // Derive scroller dates list lazily — avoids re-mapping the entire snapshot on every recomposition.
+        // Only extract dateAdded (the only field FastScroller uses) as lightweight Long pairs.
+        val scrollerImages by remember {
+            derivedStateOf {
+                pagedMedia.itemSnapshotList.items.mapNotNull { (it as? GalleryListItem.Item)?.galleryItem }
+            }
+        }
         FastScroller(
             lazyGridState = lazyGridState,
             totalItems = totalItems,
-            images = remember(pagedMedia.itemSnapshotList) {
-                pagedMedia.itemSnapshotList.mapNotNull { (it as? GalleryListItem.Item)?.galleryItem }
-            },
+            images = scrollerImages,
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .padding(
@@ -438,27 +443,12 @@ fun GalleryGridItem(
     gridCellsCount: Int = 3,
     thumbnailCornerRadius: Float = 0f,
     cacheThumbnailsEnabled: Boolean = true,
-    backupStatus: String? = null,
-    isScrollInProgress: Boolean = false
+    backupStatus: String? = null
 ) {
     val context = LocalContext.current
-    val resolvedUri by produceState(initialValue = item.uri, key1 = item) {
-        value = withContext(Dispatchers.IO) {
-            if (item.telegramThumbFileId != null && !java.io.File(item.path).exists()) {
-                Uri.parse("telegram://${item.telegramThumbFileId}")
-            } else if (item.telegramFileId != null && !java.io.File(item.path).exists()) {
-                Uri.parse("telegram://${item.telegramFileId}")
-            } else {
-                item.uri
-            }
-        }
-    }
-
-    val localExists by produceState(initialValue = true, key1 = item.path) {
-        value = withContext(Dispatchers.IO) {
-            java.io.File(item.path).exists()
-        }
-    }
+    // Use pre-computed fields from ViewModel (resolved on IO during list building)
+    val resolvedUri = item.resolvedUri
+    val localExists = item.localExists
 
     val request = remember<ImageRequest>(resolvedUri, gridAutoPlay, cacheThumbnailsEnabled) {
         val cachePolicy = if (cacheThumbnailsEnabled) CachePolicy.ENABLED else CachePolicy.DISABLED
@@ -495,38 +485,49 @@ fun GalleryGridItem(
     }
     val scale by animateFloatAsState(
         targetValue = targetScale,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessHigh),
+        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = 12000f),
         label = "scale"
     )
-    
-    val combinedScale = scale
 
     val painter = rememberAsyncImagePainter(
         model = request,
         filterQuality = androidx.compose.ui.graphics.FilterQuality.Low
     )
 
-    val painterState by painter.state.collectAsState()
+    // Only observe painter state and run GIF autoplay effect for animated formats.
+    // For the 99% of cells that are static images/videos, skip the StateFlow collection
+    // and LaunchedEffect entirely to avoid unnecessary recompositions.
+    val ext = remember(item.name) { item.name.substringAfterLast('.', "").lowercase() }
+    val isAnimatedFormat = ext == "gif" || ext == "webp"
+    val painterState = if (isAnimatedFormat) {
+        painter.state.collectAsState().value
+    } else {
+        null // Don't collect — avoids Loading→Success recomposition for static images
+    }
 
-    LaunchedEffect(gridAutoPlay, painterState) {
-        val state = painterState
-        if (state is AsyncImagePainter.State.Success) {
-            val image = state.result.image
-            val drawable = (image as? coil3.DrawableImage)?.drawable
-            @Suppress("USELESS_IS_CHECK")
-            if (drawable is Animatable) {
-                if (gridAutoPlay) {
-                    drawable.start()
-                } else {
-                    drawable.stop()
+    if (isAnimatedFormat) {
+        LaunchedEffect(gridAutoPlay, painterState) {
+            val state = painterState
+            if (state is AsyncImagePainter.State.Success) {
+                val image = state.result.image
+                val drawable = (image as? coil3.DrawableImage)?.drawable
+                @Suppress("USELESS_IS_CHECK")
+                if (drawable is Animatable) {
+                    if (gridAutoPlay) {
+                        drawable.start()
+                    } else {
+                        drawable.stop()
+                    }
                 }
             }
         }
     }
 
-    Box(modifier = modifier.scale(combinedScale)) {
-        val isSkeletonVisible = painterState !is AsyncImagePainter.State.Success
-        val skeletonColor = if (isSkeletonVisible) MaterialTheme.colorScheme.surfaceContainerHigh else Color.Transparent
+    Box(modifier = modifier.scale(scale)) {
+        // For non-animated formats, we don't collect painterState, so always show skeleton briefly.
+        // The skeleton is just a background color that becomes transparent once the image loads.
+        val isSkeletonVisible = painterState != null && painterState !is AsyncImagePainter.State.Success
+        val skeletonColor = if (isSkeletonVisible || painterState == null) MaterialTheme.colorScheme.surfaceContainerHigh else Color.Transparent
 
         with(sharedTransitionScope) {
             val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
@@ -628,10 +629,10 @@ fun GalleryGridItem(
         // Spring-animated selection overlay — pops in/out with scale + fade on selection
         AnimatedVisibility(
             visible = isSelected,
-            enter = fadeIn(spring(stiffness = Spring.StiffnessHigh)) +
-                    scaleIn(spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessHigh), initialScale = 0.6f),
-            exit  = fadeOut(spring(stiffness = Spring.StiffnessHigh)) +
-                    scaleOut(spring(stiffness = Spring.StiffnessHigh), targetScale = 0.6f)
+            enter = fadeIn(spring(stiffness = 12000f)) +
+                    scaleIn(spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = 12000f), initialScale = 0.6f),
+            exit  = fadeOut(spring(stiffness = 12000f)) +
+                    scaleOut(spring(stiffness = 12000f), targetScale = 0.6f)
         ) {
             Box(modifier = Modifier.matchParentSize()) {
                 // Thick primary border inside the bounds
@@ -722,7 +723,7 @@ fun GalleryGridItem(
             }
         }
 
-        val ext = remember(item.name) { item.name.substringAfterLast('.', "").lowercase() }
+        // Reuse 'ext' already computed above for animated format detection
         val badgeText = when (ext) {
             "gif", "webp" -> "GIF"
             "svg" -> "SVG"
@@ -734,7 +735,7 @@ fun GalleryGridItem(
             Surface(
                 color = MaterialTheme.colorScheme.surfaceContainerHigh,
                 contentColor = MaterialTheme.colorScheme.onSurface,
-                shape = androidx.compose.foundation.shape.RoundedCornerShape(4.dp),
+                shape = ShapeExtraSmall,
                 modifier = Modifier
                     .align(Alignment.BottomStart)
                     .padding(6.dp)
@@ -752,7 +753,7 @@ fun GalleryGridItem(
             Surface(
                 color = MaterialTheme.colorScheme.primaryContainer,
                 contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                shape = androidx.compose.foundation.shape.RoundedCornerShape(4.dp),
+                shape = ShapeExtraSmall,
                 modifier = Modifier
                     .align(Alignment.BottomStart)
                     .padding(6.dp)
@@ -870,13 +871,28 @@ fun FastScroller(
         derivedStateOf {
             if (totalItems <= 0 || boxHeight <= pillHeight) return@derivedStateOf 0f
             val layoutInfo = lazyGridState.layoutInfo
-            val firstItem = layoutInfo.visibleItemsInfo.firstOrNull()
+            val visibleItems = layoutInfo.visibleItemsInfo
+            val firstItem = visibleItems.firstOrNull()
                 ?: return@derivedStateOf 0f
+
+            // Find the first item that is physically in the next row
+            val firstItemOfNextRow = visibleItems.firstOrNull { it.offset.y > firstItem.offset.y }
+            // How many items are currently in this row? (handles variable spans seamlessly)
+            val itemsInCurrentRow = if (firstItemOfNextRow != null) {
+                firstItemOfNextRow.index - firstItem.index
+            } else {
+                1
+            }
+
             val itemHeight = firstItem.size.height.toFloat().coerceAtLeast(1f)
-            // Pixel-precise: how far the first visible item is scrolled off the top
+            // Pixel-precise: how far the first visible row is scrolled off the top
             val scrolledPx = -firstItem.offset.y.toFloat()
             val fraction = scrolledPx / itemHeight
-            val pct = (firstItem.index + fraction) / totalItems
+
+            // Smoothly interpolate the index using the row's item count
+            val continuousIndex = firstItem.index + fraction * itemsInCurrentRow
+            val pct = (continuousIndex / totalItems).coerceIn(0f, 1f)
+
             (pct * (boxHeight - pillHeight)).coerceIn(0f, boxHeight - pillHeight)
         }
     }
@@ -895,7 +911,19 @@ fun FastScroller(
         }
     }
 
-    val effectiveOffset = if (isDragging) dragOffset else passiveOffset
+    // Smooth out the passive offset calculation. Because headers and images take up different 
+    // amounts of physical height per "item", the raw index-based offset changes at varying speeds.
+    // The spring animation absorbs these speed changes, making the pill glide perfectly smoothly.
+    val smoothPassiveOffset by animateFloatAsState(
+        targetValue = passiveOffset,
+        animationSpec = spring(
+            stiffness = Spring.StiffnessMedium, 
+            dampingRatio = Spring.DampingRatioNoBouncy
+        ),
+        label = "smoothPassiveOffset"
+    )
+
+    val effectiveOffset = if (isDragging) dragOffset else smoothPassiveOffset
 
     var targetIndex by remember { mutableStateOf(-1) }
     LaunchedEffect(targetIndex) {
@@ -917,10 +945,10 @@ fun FastScroller(
 
     AnimatedVisibility(
         visible = showScroller,
-        enter = fadeIn(spring(stiffness = Spring.StiffnessMedium)) +
-                slideInHorizontally(spring(stiffness = Spring.StiffnessMedium)) { it },
-        exit = fadeOut(spring(stiffness = Spring.StiffnessLow)) +
-                slideOutHorizontally(spring(stiffness = Spring.StiffnessLow)) { it },
+        enter = fadeIn(spring(stiffness = Spring.StiffnessHigh)) +
+                slideInHorizontally(spring(stiffness = Spring.StiffnessHigh)) { it },
+        exit = fadeOut(spring(stiffness = Spring.StiffnessMedium)) +
+                slideOutHorizontally(spring(stiffness = Spring.StiffnessMedium)) { it },
         modifier = modifier
     ) {
         Box(
@@ -946,7 +974,7 @@ fun FastScroller(
                     }
             ) {
                 Surface(
-                    shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+                    shape = ShapeMedium,
                     color = MaterialTheme.colorScheme.inverseSurface,
                     contentColor = MaterialTheme.colorScheme.inverseOnSurface,
                     shadowElevation = 8.dp
@@ -983,13 +1011,13 @@ fun FastScroller(
                     val arrowColor = if (isDragging) MaterialTheme.colorScheme.onPrimary
                                      else MaterialTheme.colorScheme.surface
                     Icon(
-                        imageVector = Icons.Filled.KeyboardArrowUp,
+                        imageVector = Icons.Outlined.KeyboardArrowUp,
                         contentDescription = null,
                         tint = arrowColor,
                         modifier = Modifier.size(20.dp)
                     )
                     Icon(
-                        imageVector = Icons.Filled.KeyboardArrowDown,
+                        imageVector = Icons.Outlined.KeyboardArrowDown,
                         contentDescription = null,
                         tint = arrowColor,
                         modifier = Modifier.size(20.dp)
