@@ -32,8 +32,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.outlined.Pause
+import androidx.compose.material.icons.outlined.PlayArrow
 
 import androidx.compose.material.icons.outlined.CameraAlt
 import androidx.compose.material.icons.outlined.Close
@@ -140,6 +140,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.runtime.LaunchedEffect
+import com.inferno.gallery.ui.theme.ShapeLargeIncreased3
+import com.inferno.gallery.ui.theme.ShapeExtraLarge
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.core.content.FileProvider
@@ -173,6 +175,7 @@ fun MainAppLayout(
     val dockStyle by viewModel.dockStyle.collectAsState()
     val gridAutoPlay by viewModel.gridAutoPlay.collectAsState()
     val nestedNavController = rememberNavController()
+
     var showMenu by remember { mutableStateOf(false) }
     var showCreateAlbumDialog by remember { mutableStateOf(false) }
     var newAlbumName by remember { mutableStateOf("") }
@@ -189,6 +192,13 @@ fun MainAppLayout(
     val coroutineScope = rememberCoroutineScope()
 
     val context = LocalContext.current
+
+    // Collect toast events from ViewModel
+    LaunchedEffect(Unit) {
+        viewModel.toastEvent.collect { message ->
+            android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
     val onboardingCompleted by viewModel.onboardingCompleted.collectAsState()
     val lifecycleOwner = LocalLifecycleOwner.current
 
@@ -487,7 +497,7 @@ fun MainAppLayout(
                                             DropdownMenu(
                                                 expanded = showPhotoSortMenu,
                                                 onDismissRequest = { showPhotoSortMenu = false },
-                                                shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+                                                shape = ShapeExtraLarge,
                                                 containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
                                             ) {
                                                 DropdownMenuItem(
@@ -559,7 +569,7 @@ fun MainAppLayout(
                                         DropdownMenu(
                                             expanded = showMenu,
                                             onDismissRequest = { showMenu = false },
-                                            shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+                                            shape = ShapeLargeIncreased3,
                                             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
                                         ) {
                                             if (currentRoute == "photos") {

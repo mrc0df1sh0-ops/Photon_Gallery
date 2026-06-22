@@ -155,12 +155,12 @@ fun PhotonGalleryTheme(
             background = Color.Black,
             surface = Color.Black,
             surfaceDim = Color.Black,
-            surfaceBright = Color.Black,
-            surfaceContainer = Color.Black,
-            surfaceContainerLow = Color.Black,
+            surfaceBright = Color(0xFF1A1A1A),
+            surfaceContainer = Color(0xFF0A0A0A),
+            surfaceContainerLow = Color(0xFF050505),
             surfaceContainerLowest = Color.Black,
-            surfaceContainerHigh = Color.Black,
-            surfaceContainerHighest = Color.Black
+            surfaceContainerHigh = Color(0xFF141414),
+            surfaceContainerHighest = Color(0xFF1E1E1E),
         )
     }
 
@@ -168,7 +168,7 @@ fun PhotonGalleryTheme(
         colorScheme = colorScheme,
         shapes = AppShapes,
         typography = AppTypography,
-        motionScheme = MotionScheme.standard(),
+        motionScheme = MotionScheme.expressive(),
         content = content,
     )
 }

@@ -1,5 +1,7 @@
 package com.inferno.gallery.ui
 
+import com.inferno.gallery.ui.theme.ShapeMedium
+
 import android.content.ContentValues
 import android.content.Context
 import android.graphics.Bitmap
@@ -521,13 +523,13 @@ private fun ReorderableThumbnailStrip(
                             shadowElevation = liftElevation.toPx()
                         }
                         .zIndex(if (isDragging) 10f else 0f)
-                        .shadow(liftElevation, RoundedCornerShape(12.dp))
-                        .clip(RoundedCornerShape(12.dp))
+                        .shadow(liftElevation, ShapeMedium)
+                        .clip(ShapeMedium)
                         .border(
                             width  = if (isDragging) 2.dp else 0.dp,
                             color  = if (isDragging) MaterialTheme.colorScheme.primary
                                      else Color.Transparent,
-                            shape  = RoundedCornerShape(12.dp)
+                            shape  = ShapeMedium
                         )
                         // Long-press → drag-to-reorder
                         .pointerInput(index, items.size) {
@@ -633,11 +635,11 @@ private fun ReorderableThumbnailStrip(
             Box(
                 modifier = Modifier
                     .size(72.dp)
-                    .clip(RoundedCornerShape(12.dp))
+                    .clip(ShapeMedium)
                     .border(
                         width  = 1.5.dp,
                         color  = MaterialTheme.colorScheme.outlineVariant,
-                        shape  = RoundedCornerShape(12.dp)
+                        shape  = ShapeMedium
                     )
                     .clickable { onAddMore() },
                 contentAlignment = Alignment.Center

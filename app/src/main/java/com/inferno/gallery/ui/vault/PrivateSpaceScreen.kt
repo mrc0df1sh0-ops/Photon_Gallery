@@ -13,6 +13,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import com.inferno.gallery.ui.theme.ShapeExtraSmall
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.filled.Lock
@@ -293,7 +294,7 @@ fun PrivateSpaceScreen(
                             Box(
                                 modifier = Modifier
                                     .aspectRatio(1f)
-                                    .clip(RoundedCornerShape(4.dp))
+                                    .clip(ShapeExtraSmall)
                                     .combinedClickable(
                                         onClick = {
                                             if (isSelectionMode) {
@@ -364,7 +365,7 @@ fun PrivateSpaceScreen(
                                         modifier = Modifier
                                             .align(Alignment.BottomEnd)
                                             .padding(4.dp),
-                                        shape = RoundedCornerShape(4.dp),
+                                        shape = ShapeExtraSmall,
                                         color = MaterialTheme.colorScheme.scrim.copy(alpha = 0.6f)
                                     ) {
                                         Text(

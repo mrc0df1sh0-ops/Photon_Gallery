@@ -59,6 +59,9 @@ import coil3.request.crossfade
 import coil3.size.Precision
 import coil3.size.Size
 import com.inferno.gallery.ui.theme.AppShapes
+import com.inferno.gallery.ui.theme.ShapeLarge
+import com.inferno.gallery.ui.theme.ShapeExtraLarge
+import com.inferno.gallery.ui.theme.ShapeLargeIncreased3
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.FavoriteBorder
@@ -192,11 +195,11 @@ fun AlbumsScreen(
             AnimatedVisibility(
                 visible = showPrivateSpaceCard,
                 enter = expandVertically(
-                    animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium)
-                ) + fadeIn(),
+                    animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessHigh)
+                ) + fadeIn(spring(stiffness = Spring.StiffnessHigh)),
                 exit = shrinkVertically(
-                    animationSpec = spring(stiffness = Spring.StiffnessMedium)
-                ) + fadeOut()
+                    animationSpec = spring(stiffness = Spring.StiffnessHigh)
+                ) + fadeOut(spring(stiffness = Spring.StiffnessHigh))
             ) {
                 Surface(
                     onClick = {
@@ -212,7 +215,7 @@ fun AlbumsScreen(
                             )
                         }
                     },
-                    shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                    shape = ShapeLarge as androidx.compose.foundation.shape.RoundedCornerShape,
                     color = MaterialTheme.colorScheme.surfaceContainerHigh,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -271,7 +274,7 @@ fun AlbumsScreen(
                 // Favorites card
                 Surface(
                     onClick = { onAlbumClick("Favorites") },
-                    shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                    shape = ShapeLarge as androidx.compose.foundation.shape.RoundedCornerShape,
                     color = MaterialTheme.colorScheme.surfaceContainerHigh,
                     modifier = Modifier
                         .weight(1f)
@@ -340,7 +343,7 @@ fun AlbumsScreen(
                 // Trash card
                 Surface(
                     onClick = { onAlbumClick("Trash") },
-                    shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                    shape = ShapeLarge as androidx.compose.foundation.shape.RoundedCornerShape,
                     color = MaterialTheme.colorScheme.surfaceContainerHigh,
                     modifier = Modifier
                         .weight(1f)
@@ -396,7 +399,7 @@ fun AlbumsScreen(
                         androidx.compose.material3.DropdownMenu(
                             expanded = showUnpinMenu,
                             onDismissRequest = { showUnpinMenu = false },
-                            shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                            shape = ShapeLarge as androidx.compose.foundation.shape.RoundedCornerShape,
                             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
                         ) {
                             androidx.compose.material3.DropdownMenuItem(
@@ -442,7 +445,7 @@ fun AlbumsScreen(
                     androidx.compose.material3.DropdownMenu(
                         expanded = showOverflowMenu,
                         onDismissRequest = { showOverflowMenu = false },
-                        shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                        shape = ShapeLarge as androidx.compose.foundation.shape.RoundedCornerShape,
                         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
                     ) {
                         overflowPinned.forEach { bucket ->
@@ -507,7 +510,7 @@ fun AlbumsScreen(
                         androidx.compose.material3.DropdownMenu(
                             expanded = showSortMenu,
                             onDismissRequest = { showSortMenu = false },
-                            shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+                            shape = ShapeLargeIncreased3 as androidx.compose.foundation.shape.RoundedCornerShape,
                             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
                         ) {
                             androidx.compose.material3.DropdownMenuItem(
@@ -584,7 +587,7 @@ fun AlbumsScreen(
                     androidx.compose.material3.DropdownMenu(
                         expanded = showPinMenu,
                         onDismissRequest = { showPinMenu = false },
-                        shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                        shape = ShapeLarge as androidx.compose.foundation.shape.RoundedCornerShape,
                         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
                     ) {
                         val isPinned = bucket.bucketName in userPinnedNames
@@ -620,7 +623,7 @@ fun Modifier.expressiveClick(onClick: () -> Unit, onLongPress: (() -> Unit)? = n
         targetValue = if (isPressed) 0.97f else 1f,
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioNoBouncy,
-            stiffness = Spring.StiffnessHigh
+            stiffness = 15000f
         ),
         label = "expressiveClickScale"
     )

@@ -83,62 +83,61 @@ private fun labelFontFamily(weight: Int = 500, width: Float = 95f, opticalSize: 
 // ─────────────────────────────────────────────────────────────────────────────
 //  M3 Expressive Typography Scale — Emphasized
 //
-//  Each role dynamically shifts font weight AND width to create visual
-//  hierarchy, as prescribed by the M3 Expressive spec. The display &
-//  headline families use wider glyphs for presence, while body & label
-//  families stay compact for readability.
+//  Toned down from the original scale: display & headline sizes reduced for
+//  a less overwhelming page presence while retaining the variable-font
+//  character (weight + width shifts). Body & label kept compact.
 // ─────────────────────────────────────────────────────────────────────────────
 val AppTypography = Typography(
     // ── Display ─────────────────────────────────────────────────────────────
     displayLarge = TextStyle(
-        fontFamily = displayFontFamily(weight = 700, width = 125f, opticalSize = 57f),
+        fontFamily = displayFontFamily(weight = 650, width = 118f, opticalSize = 48f),
         fontWeight = FontWeight.Bold,
-        fontSize = 52.sp,
-        lineHeight = 58.sp,
+        fontSize = 46.sp,
+        lineHeight = 52.sp,
         letterSpacing = (-0.25).sp,
     ),
     displayMedium = TextStyle(
-        fontFamily = displayFontFamily(weight = 650, width = 120f, opticalSize = 45f),
-        fontWeight = FontWeight.Bold,
-        fontSize = 40.sp,
-        lineHeight = 46.sp,
+        fontFamily = displayFontFamily(weight = 600, width = 112f, opticalSize = 36f),
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 34.sp,
+        lineHeight = 40.sp,
         letterSpacing = 0.sp,
     ),
     displaySmall = TextStyle(
-        fontFamily = displayFontFamily(weight = 600, width = 115f, opticalSize = 36f),
-        fontWeight = FontWeight.SemiBold,
-        fontSize = 32.sp,
-        lineHeight = 38.sp,
+        fontFamily = displayFontFamily(weight = 550, width = 108f, opticalSize = 28f),
+        fontWeight = FontWeight.Medium,
+        fontSize = 28.sp,
+        lineHeight = 34.sp,
         letterSpacing = 0.sp,
     ),
 
     // ── Headline ────────────────────────────────────────────────────────────
     headlineLarge = TextStyle(
-        fontFamily = displayFontFamily(weight = 650, width = 120f, opticalSize = 32f),
-        fontWeight = FontWeight.Bold,
-        fontSize = 28.sp,
-        lineHeight = 34.sp,
+        fontFamily = displayFontFamily(weight = 600, width = 112f, opticalSize = 28f),
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 26.sp,
+        lineHeight = 32.sp,
         letterSpacing = 0.sp,
     ),
     headlineMedium = TextStyle(
-        fontFamily = displayFontFamily(weight = 600, width = 115f, opticalSize = 28f),
-        fontWeight = FontWeight.SemiBold,
-        fontSize = 24.sp,
-        lineHeight = 30.sp,
+        fontFamily = displayFontFamily(weight = 550, width = 108f, opticalSize = 24f),
+        fontWeight = FontWeight.Medium,
+        fontSize = 22.sp,
+        lineHeight = 28.sp,
         letterSpacing = 0.sp,
     ),
     headlineSmall = TextStyle(
-        fontFamily = titleFontFamily(weight = 600, width = 115f, opticalSize = 24f),
-        fontWeight = FontWeight.SemiBold,
-        fontSize = 20.sp,
-        lineHeight = 26.sp,
+        fontFamily = titleFontFamily(weight = 550, width = 108f, opticalSize = 20f),
+        fontWeight = FontWeight.Medium,
+        fontSize = 19.sp,
+        lineHeight = 25.sp,
         letterSpacing = 0.sp,
     ),
 
     // ── Title ───────────────────────────────────────────────────────────────
     titleLarge = TextStyle(
-        fontFamily = titleFontFamily(weight = 650, width = 120f, opticalSize = 22f),
-        fontWeight = FontWeight.Bold,
+        fontFamily = titleFontFamily(weight = 600, width = 112f, opticalSize = 22f),
+        fontWeight = FontWeight.SemiBold,
         fontSize = 20.sp,
         lineHeight = 25.sp,
         letterSpacing = 0.sp,

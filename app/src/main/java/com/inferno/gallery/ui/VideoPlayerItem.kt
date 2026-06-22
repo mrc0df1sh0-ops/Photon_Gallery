@@ -57,7 +57,7 @@ fun VideoPlayerItem(uri: Uri, isCurrentPage: Boolean, modifier: Modifier = Modif
             try {
                 val fileId = uri.host
                 if (fileId != null) {
-                    val settings = com.inferno.gallery.data.SettingsRepository(context)
+                    val settings = com.inferno.gallery.data.SettingsRepository.getInstance(context)
                     val botTokens = settings.telegramBotTokensFlow.first()
                     if (botTokens.isNotEmpty()) {
                         val client = com.inferno.gallery.data.network.TelegramClient(botTokens.first(), "")
@@ -175,7 +175,7 @@ fun VideoPlayerItemWithResolvedUri(uri: Uri, isCurrentPage: Boolean, modifier: M
     var currentPosition by remember { mutableStateOf(0L) }
     var videoDuration by remember { mutableStateOf(0L) }
     var dragPosition by remember { mutableStateOf<Long?>(null) }
-    val settings = remember { com.inferno.gallery.data.SettingsRepository(context) }
+    val settings = remember { com.inferno.gallery.data.SettingsRepository.getInstance(context) }
     val autoplayWithSound by settings.autoplayWithSoundEnabledFlow.collectAsState(initial = false)
     var isMuted by remember(autoplayWithSound) { mutableStateOf(!autoplayWithSound) }
 

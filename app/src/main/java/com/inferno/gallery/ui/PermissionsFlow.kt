@@ -21,6 +21,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import com.inferno.gallery.ui.theme.ShapeExtraExtraLargeIncreased3
+import com.inferno.gallery.ui.theme.ShapeLargeIncreased3
+import com.inferno.gallery.ui.theme.ShapeExtraLarge
+import com.inferno.gallery.ui.theme.ShapeLargeIncreased
+import com.inferno.gallery.ui.theme.ShapeMedium
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Folder
@@ -135,7 +140,7 @@ fun PermissionOnboardingScreen(
             modifier = Modifier
                 .fillMaxWidth(0.92f)
                 .padding(vertical = 16.dp),
-            shape = RoundedCornerShape(36.dp),
+            shape = ShapeExtraExtraLargeIncreased3,
             color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.85f),
             border = androidx.compose.foundation.BorderStroke(
                 width = 1.dp,
@@ -155,7 +160,7 @@ fun PermissionOnboardingScreen(
                         .graphicsLayer(scaleX = iconScale, scaleY = iconScale)
                         .background(
                             color = if (allGranted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primaryContainer,
-                            shape = RoundedCornerShape(24.dp)
+                            shape = ShapeLargeIncreased3
                         ),
                     contentAlignment = Alignment.Center
                 ) {
@@ -229,7 +234,7 @@ fun PermissionOnboardingScreen(
                 Button(
                     onClick = onContinueClick,
                     enabled = allGranted,
-                    shape = RoundedCornerShape(28.dp),
+                    shape = ShapeExtraLarge,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.primary,
                         contentColor = MaterialTheme.colorScheme.onPrimary,
@@ -259,7 +264,7 @@ fun PermissionRowItem(
     onClick: () -> Unit
 ) {
     Surface(
-        shape = RoundedCornerShape(20.dp),
+        shape = ShapeLargeIncreased,
         color = MaterialTheme.colorScheme.surfaceContainer,
         modifier = Modifier.fillMaxWidth().clickable(enabled = !isGranted) { onClick() }
     ) {
@@ -272,7 +277,7 @@ fun PermissionRowItem(
                     .size(44.dp)
                     .background(
                         color = if (isGranted) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceContainerHigh,
-                        shape = RoundedCornerShape(12.dp)
+                        shape = ShapeMedium
                     ),
                 contentAlignment = Alignment.Center
             ) {
@@ -303,7 +308,7 @@ fun PermissionRowItem(
 
             if (isGranted) {
                 Surface(
-                    shape = RoundedCornerShape(12.dp),
+                    shape = ShapeMedium,
                     color = MaterialTheme.colorScheme.primary,
                     contentColor = MaterialTheme.colorScheme.onPrimary,
                     modifier = Modifier.height(28.dp)
@@ -319,7 +324,7 @@ fun PermissionRowItem(
                 }
             } else {
                 Surface(
-                    shape = RoundedCornerShape(12.dp),
+                    shape = ShapeMedium,
                     color = MaterialTheme.colorScheme.primaryContainer,
                     contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
                     modifier = Modifier.height(28.dp).clickable { onClick() }
