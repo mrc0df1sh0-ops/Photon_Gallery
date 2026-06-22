@@ -36,7 +36,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.work.WorkInfo
+
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalSharedTransitionApi::class)
 @Composable
@@ -53,9 +53,7 @@ fun SearchScreen(
     val ftsResults by viewModel.ftsSearchResults.collectAsState()
     val smartResults by viewModel.smartSearchResults.collectAsState()
     val isSearching by viewModel.isSearching.collectAsState()
-    val ocrIndexWorkInfo by viewModel.ocrIndexWorkInfo.collectAsState(initial = null)
-    val unindexedOcrCount by viewModel.unindexedOcrImagesCount.collectAsState()
-    val totalImagesCount by viewModel.totalImagesCount.collectAsState()
+
 
     val hasAnyResults = ftsResults.isNotEmpty() || smartResults.isNotEmpty()
 
@@ -99,6 +97,70 @@ fun SearchScreen(
                 .padding(horizontal = 16.dp, vertical = 8.dp)
         ) {}
 
+        // ── Search Scope Indicator ──────────────────────────────────────────────
+        val isSmartReady by viewModel.isSmartSearchReady.collectAsState()
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // OCR/Text scope — always active
+            SuggestionChip(
+                onClick = {},
+                label = { Text("Text (OCR)", style = MaterialTheme.typography.labelSmall) },
+                icon = {
+                    Icon(
+                        imageVector = Icons.Outlined.Search,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp)
+                    )
+                },
+                colors = SuggestionChipDefaults.suggestionChipColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f),
+                    labelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    iconContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                ),
+                border = null,
+                modifier = Modifier.height(28.dp)
+            )
+            // Semantic/AI scope — shows status
+            SuggestionChip(
+                onClick = {},
+                label = {
+                    Text(
+                        text = if (isSmartReady) "Semantic (AI)" else "Semantic — not installed",
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                },
+                icon = {
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (isSmartReady) androidx.compose.ui.graphics.Color(0xFF4CAF50)
+                                else MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+                            )
+                    )
+                },
+                colors = SuggestionChipDefaults.suggestionChipColors(
+                    containerColor = if (isSmartReady)
+                        MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f)
+                    else
+                        MaterialTheme.colorScheme.surfaceContainerHigh,
+                    labelColor = if (isSmartReady)
+                        MaterialTheme.colorScheme.onSecondaryContainer
+                    else
+                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                    iconContentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                ),
+                border = null,
+                modifier = Modifier.height(28.dp)
+            )
+        }
+
         // ── Results Area ────────────────────────────────────────────────────────
         AnimatedContent(
             targetState = Triple(query.isBlank(), isSearching, hasAnyResults),
@@ -111,14 +173,7 @@ fun SearchScreen(
             modifier = Modifier.fillMaxSize()
         ) { (isBlank, searching, hasResults) ->
             when {
-                isBlank -> EmptySearchState(
-                    ocrIndexWorkInfo = ocrIndexWorkInfo,
-                    unindexedOcrCount = unindexedOcrCount,
-                    totalCount = totalImagesCount,
-                    onStartOcr = { viewModel.startOcrIndexing() },
-                    onStopOcr = { viewModel.stopOcrIndexing() },
-                    onClearOcr = { viewModel.clearOcrIndexAndReindex() }
-                )
+                isBlank -> EmptySearchState()
                 searching -> SearchingState()
                 !hasResults -> NoResultsState(query)
                 else -> SearchResultsList(
@@ -137,14 +192,7 @@ fun SearchScreen(
 }
 
 @Composable
-private fun EmptySearchState(
-    ocrIndexWorkInfo: WorkInfo?,
-    unindexedOcrCount: Int,
-    totalCount: Int,
-    onStartOcr: () -> Unit,
-    onStopOcr: () -> Unit,
-    onClearOcr: () -> Unit
-) {
+private fun EmptySearchState() {
     Box(modifier = Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
         Surface(
             shape = MaterialTheme.shapes.extraLarge,
@@ -178,31 +226,16 @@ private fun EmptySearchState(
                     )
                 }
                 Text(
-                    text = "Text Search",
+                    text = "Search",
                     style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                     textAlign = TextAlign.Center
                 )
                 Text(
-                    text = "Search for any text contained within your images.",
+                    text = "Search by text, scene description, or content.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center
                 )
-
-                val isOcrWorkerRunning = ocrIndexWorkInfo?.state == WorkInfo.State.RUNNING || ocrIndexWorkInfo?.state == WorkInfo.State.ENQUEUED
-                if (unindexedOcrCount > 0 || isOcrWorkerRunning) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    IndexingCard(
-                        title = "Text Indexing",
-                        workInfo = ocrIndexWorkInfo,
-                        unindexedCount = unindexedOcrCount,
-                        totalCount = totalCount,
-                        onStart = onStartOcr,
-                        onStop = onStopOcr,
-                        onClearAndReindex = onClearOcr,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
             }
         }
     }
@@ -478,120 +511,3 @@ private fun SearchResultsList(
     }
 }
 
-@Composable
-private fun IndexingCard(
-    title: String,
-    workInfo: WorkInfo?,
-    unindexedCount: Int,
-    totalCount: Int,
-    onStart: () -> Unit,
-    onStop: () -> Unit,
-    onClearAndReindex: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val isRunning = workInfo?.state == WorkInfo.State.RUNNING || workInfo?.state == WorkInfo.State.ENQUEUED
-    val progress = workInfo?.progress
-    val dbIndexed = totalCount - unindexedCount
-    val workerIndexed = progress?.getInt("progress", 0) ?: 0
-    val indexed = maxOf(dbIndexed, workerIndexed)
-    val total = if (totalCount > 0) totalCount else (progress?.getInt("total", 0) ?: 0)
-
-    var showConfirmDialog by remember { mutableStateOf(false) }
-
-    if (showConfirmDialog) {
-        androidx.compose.material3.AlertDialog(
-            onDismissRequest = { showConfirmDialog = false },
-            title = { Text("Reindex Text") },
-            text = { Text("This will clear all currently indexed text search data and scan all your images again. This process uses battery and CPU. Are you sure you want to continue?") },
-            confirmButton = {
-                androidx.compose.material3.TextButton(
-                    onClick = {
-                        showConfirmDialog = false
-                        onClearAndReindex()
-                    }
-                ) {
-                    Text("Reindex", color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = {
-                androidx.compose.material3.TextButton(onClick = { showConfirmDialog = false }) {
-                    Text("Cancel")
-                }
-            }
-        )
-    }
-
-    Surface(
-        modifier = modifier,
-        shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.surface
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                color = MaterialTheme.colorScheme.primary
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            
-            if (isRunning) {
-                FilledTonalButton(onClick = onStop, modifier = Modifier.height(36.dp), contentPadding = PaddingValues(horizontal = 16.dp)) {
-                    Text("Stop", style = MaterialTheme.typography.labelMedium)
-                }
-            } else {
-                FilledTonalButton(onClick = onStart, modifier = Modifier.height(36.dp), contentPadding = PaddingValues(horizontal = 16.dp)) {
-                    Text("Start", style = MaterialTheme.typography.labelMedium)
-                }
-            }
-            
-            Spacer(modifier = Modifier.height(16.dp))
-
-            val statusDescription = when {
-                workInfo?.state == WorkInfo.State.RUNNING -> {
-                    val currentImage = progress?.getString("current_image")
-                    if (currentImage != null) "Scanning: $currentImage" else "Scanning images for text…"
-                }
-                workInfo?.state == WorkInfo.State.ENQUEUED -> "Preparing text indexing…"
-                unindexedCount == 0 -> "All images indexed"
-                else -> "Indexing paused"
-            }
-
-            Text(
-                text = statusDescription,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(bottom = 8.dp),
-                textAlign = TextAlign.Center,
-                maxLines = 1,
-                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-            )
-
-            val progressFloat = if (total > 0) indexed.toFloat() / total.toFloat() else 0f
-            LinearProgressIndicator(
-                progress = { progressFloat },
-                modifier = Modifier.fillMaxWidth().height(6.dp).clip(CircleShape),
-                trackColor = MaterialTheme.colorScheme.surfaceVariant,
-                color = MaterialTheme.colorScheme.primary,
-            )
-            Spacer(modifier = Modifier.height(6.dp))
-            Text(
-                "$indexed / $total", 
-                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            TextButton(
-                onClick = { showConfirmDialog = true },
-                modifier = Modifier.fillMaxWidth().height(36.dp),
-                colors = androidx.compose.material3.ButtonDefaults.textButtonColors(
-                    contentColor = MaterialTheme.colorScheme.error
-                )
-            ) {
-                Text("Reindex", style = MaterialTheme.typography.labelMedium)
-            }
-        }
-    }
-}

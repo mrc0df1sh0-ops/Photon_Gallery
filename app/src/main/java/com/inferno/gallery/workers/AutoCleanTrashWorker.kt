@@ -24,7 +24,7 @@ class AutoCleanTrashWorker(
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         try {
             Log.d(TAG, "Starting AutoCleanTrashWorker...")
-            val settings = SettingsRepository(applicationContext)
+            val settings = SettingsRepository.getInstance(applicationContext)
             val enabled = settings.autoCleanTrashEnabledFlow.first()
             if (!enabled) {
                 Log.d(TAG, "Auto clean trash is disabled. Exiting.")

@@ -90,6 +90,15 @@ interface MediaDao {
 
     @Query("UPDATE core_media SET name = :newName WHERE id = :id")
     suspend fun updateMediaName(id: Long, newName: String)
+
+    @Query("SELECT COUNT(*) as itemCount, COALESCE(SUM(size), 0) as totalSizeBytes, COALESCE(MAX(dateAdded), 0) as maxDate, (SELECT uriString FROM core_media WHERE bucketName != 'Trash' ORDER BY dateAdded DESC LIMIT 1) as coverUriString FROM core_media WHERE bucketName != 'Trash'")
+    fun observeAllMediaStats(): Flow<MediaAggregateStats>
+
+    @Query("SELECT COUNT(*) as itemCount, COALESCE(SUM(size), 0) as totalSizeBytes, COALESCE(MAX(dateAdded), 0) as maxDate, (SELECT uriString FROM core_media WHERE isVideo = 1 AND bucketName != 'Trash' ORDER BY dateAdded DESC LIMIT 1) as coverUriString FROM core_media WHERE isVideo = 1 AND bucketName != 'Trash'")
+    fun observeVideoStats(): Flow<MediaAggregateStats>
+
+    @Query("SELECT uriString FROM core_media WHERE bucketName != 'Trash' ORDER BY dateAdded DESC LIMIT 4")
+    fun observeTopCoverUris(): Flow<List<String>>
 }
 
 @Database(
@@ -103,7 +112,7 @@ interface MediaDao {
         // RoomDatabase.Callback onCreate hook using raw CREATE VIRTUAL TABLE SQL.
     ],
     version = 8,
-    exportSchema = false
+    exportSchema = true
 )
 @androidx.room.TypeConverters(EmbeddingConverter::class)
 abstract class GalleryDatabase : RoomDatabase() {

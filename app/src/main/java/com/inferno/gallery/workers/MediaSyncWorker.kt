@@ -67,7 +67,7 @@ class MediaSyncWorker(
                 Log.d("MediaSyncWorker", "Inserting ${toInsert.size} new items into Room SSOT.")
                 database.mediaDao().insertAll(toInsert)
 
-                val settingsRepo = SettingsRepository(applicationContext)
+                val settingsRepo = SettingsRepository.getInstance(applicationContext)
                 val autoBackupEnabled = settingsRepo.telegramBackupEnabledFlow.first()
                 if (autoBackupEnabled) {
                     val autoBackupFolders = settingsRepo.telegramAutoBackupFoldersFlow.first()

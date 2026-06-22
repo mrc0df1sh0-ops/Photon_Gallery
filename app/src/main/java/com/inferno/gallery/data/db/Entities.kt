@@ -64,3 +64,10 @@ data class BucketMetadata(
     val coverUriString: String?,
     val isVideo: Boolean?
 )
+
+data class MediaAggregateStats(
+    val itemCount: Int,
+    val totalSizeBytes: Long,
+    val maxDate: Long,
+    val coverUriString: String?
+)

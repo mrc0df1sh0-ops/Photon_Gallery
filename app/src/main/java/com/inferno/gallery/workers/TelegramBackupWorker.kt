@@ -84,7 +84,7 @@ class TelegramBackupWorker(
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         val database = DatabaseProvider.getDatabase(applicationContext)
-        val settings = SettingsRepository(applicationContext)
+        val settings = SettingsRepository.getInstance(applicationContext)
 
         val batteryPauseEnabled = settings.telegramAutoBackupBatteryLowPauseFlow.first()
         if (batteryPauseEnabled && isBatteryTooLow(applicationContext)) {

@@ -15,9 +15,55 @@ object DatabaseProvider {
 
     fun getDatabase(context: Context): GalleryDatabase {
         return INSTANCE ?: synchronized(this) {
+            // ── Database Migrations ──
+            // Migrations 1→4 cover early schema evolution before public release.
+            // These are no-ops since any user on v1-3 already went through destructive
+            // fallback. They exist to maintain a complete migration chain going forward.
+            val MIGRATION_1_2 = object : androidx.room.migration.Migration(1, 2) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    // Early dev: no schema changes tracked
+                }
+            }
+            val MIGRATION_2_3 = object : androidx.room.migration.Migration(2, 3) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    // Early dev: no schema changes tracked
+                }
+            }
+            val MIGRATION_3_4 = object : androidx.room.migration.Migration(3, 4) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    // Telegram backups table + embeddings table added
+                    db.execSQL("""
+                        CREATE TABLE IF NOT EXISTS telegram_backups (
+                            mediaId INTEGER PRIMARY KEY NOT NULL,
+                            telegramFileId TEXT,
+                            telegramThumbFileId TEXT,
+                            telegramMessageId INTEGER,
+                            backupStatus TEXT NOT NULL,
+                            backupTimestamp INTEGER NOT NULL
+                        )
+                    """.trimIndent())
+                    db.execSQL("""
+                        CREATE TABLE IF NOT EXISTS media_embeddings (
+                            mediaId INTEGER PRIMARY KEY NOT NULL,
+                            embedding BLOB NOT NULL
+                        )
+                    """.trimIndent())
+                }
+            }
             val MIGRATION_4_5 = object : androidx.room.migration.Migration(4, 5) {
                 override fun migrate(db: SupportSQLiteDatabase) {
                     db.execSQL("ALTER TABLE telegram_backups ADD COLUMN telegramMessageId INTEGER DEFAULT NULL")
+                }
+            }
+            val MIGRATION_5_6 = object : androidx.room.migration.Migration(5, 6) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    // Ensure embeddings table exists for smart search
+                    db.execSQL("""
+                        CREATE TABLE IF NOT EXISTS media_embeddings (
+                            mediaId INTEGER PRIMARY KEY NOT NULL,
+                            embedding BLOB NOT NULL
+                        )
+                    """.trimIndent())
                 }
             }
 
@@ -54,8 +100,7 @@ object DatabaseProvider {
                 GalleryDatabase::class.java,
                 "gallery_database.db"
             )
-            .addMigrations(MIGRATION_4_5, MIGRATION_6_7, MIGRATION_7_8)
-            .fallbackToDestructiveMigration(dropAllTables = true)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
             .addCallback(object : RoomDatabase.Callback() {
                 override fun onCreate(db: SupportSQLiteDatabase) {
                     super.onCreate(db)
@@ -89,7 +134,20 @@ object DatabaseProvider {
 
                 override fun onOpen(db: SupportSQLiteDatabase) {
                     super.onOpen(db)
-                    // Ensure trigger exists for existing users
+                    // Create FTS table if it doesn't exist — in onOpen (not just onCreate)
+                    // so that users who upgraded through migrations also get the table.
+                    db.execSQL(
+                        """
+                        CREATE VIRTUAL TABLE IF NOT EXISTS image_fts
+                        USING fts4(
+                            mediaId,
+                            extractedText,
+                            generatedTags,
+                            tokenize=porter
+                        )
+                        """.trimIndent()
+                    )
+                    // Ensure trigger exists for cleaning up FTS index on media deletion
                     db.execSQL(
                         """
                         CREATE TRIGGER IF NOT EXISTS core_media_fts_delete 

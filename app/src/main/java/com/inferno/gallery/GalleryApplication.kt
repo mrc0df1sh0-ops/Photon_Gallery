@@ -25,11 +25,15 @@ import okio.Path.Companion.toPath
 class GalleryApplication : Application(), SingletonImageLoader.Factory {
     override fun onCreate() {
         super.onCreate()
-        // Chain: MediaStore sync → AI embedding indexing
-        val syncWorkRequest = OneTimeWorkRequestBuilder<MediaSyncWorker>().build()
-        WorkManager.getInstance(this).enqueueUniqueWork("MediaSyncWorker", androidx.work.ExistingWorkPolicy.KEEP, syncWorkRequest)
+        // Chain: MediaStore sync → OCR indexing (OCR must wait for sync to populate the DB)
+        val syncWorkRequest = OneTimeWorkRequestBuilder<MediaSyncWorker>()
+            .setBackoffCriteria(
+                androidx.work.BackoffPolicy.EXPONENTIAL,
+                30, java.util.concurrent.TimeUnit.SECONDS
+            )
+            .build()
 
-        val settingsRepo = SettingsRepository(this)
+        val settingsRepo = SettingsRepository.getInstance(this)
         kotlinx.coroutines.MainScope().launch {
             val ocrEnabled = settingsRepo.ocrIndexingEnabledFlow.first()
 
@@ -37,7 +41,15 @@ class GalleryApplication : Application(), SingletonImageLoader.Factory {
                 val ocrIndexRequest = androidx.work.OneTimeWorkRequestBuilder<OcrIndexWorker>()
                     .setExpedited(androidx.work.OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
                     .build()
-                WorkManager.getInstance(this@GalleryApplication).enqueueUniqueWork("OcrIndexWorker", androidx.work.ExistingWorkPolicy.KEEP, ocrIndexRequest)
+                // Chain: sync first, then OCR — prevents OCR from seeing an empty DB
+                WorkManager.getInstance(this@GalleryApplication)
+                    .beginUniqueWork("MediaSyncWorker", androidx.work.ExistingWorkPolicy.KEEP, syncWorkRequest)
+                    .then(ocrIndexRequest)
+                    .enqueue()
+            } else {
+                // No OCR needed, just run sync alone
+                WorkManager.getInstance(this@GalleryApplication)
+                    .enqueueUniqueWork("MediaSyncWorker", androidx.work.ExistingWorkPolicy.KEEP, syncWorkRequest)
             }
 
             val autoCleanEnabled = settingsRepo.autoCleanTrashEnabledFlow.first()
@@ -66,7 +78,7 @@ class GalleryApplication : Application(), SingletonImageLoader.Factory {
                 // Support high-performance system thumbnails for local MediaStore items
                 add(MediaStoreThumbnailFetcher.Factory(context))
                 // Support streaming directly from Telegram Cloud
-                add(TelegramCoilFetcher.Factory(SettingsRepository(context)))
+                add(TelegramCoilFetcher.Factory(SettingsRepository.getInstance(context)))
                 // Support GIFs, Animated WebP, and Animated HEIF
                 if (SDK_INT >= 28) {
                     add(AnimatedImageDecoder.Factory())

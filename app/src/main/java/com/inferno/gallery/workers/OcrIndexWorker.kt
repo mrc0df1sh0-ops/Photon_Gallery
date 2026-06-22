@@ -262,10 +262,11 @@ class OcrIndexWorker(
 
                         if (!embedded.extractedText.isNullOrBlank()) {
                             DatabaseProvider.insertFtsRow(db, embedded.entity.id, embedded.extractedText, "")
-                            ocrIndexedBatch.add(embedded.entity.id)
-                        } else if (embedded.extractedText != null) {
-                            ocrIndexedBatch.add(embedded.entity.id)
                         }
+                        // Always mark as indexed — even if text is null (ML failure) or blank (no text found).
+                        // Without this, failed images stay "unindexed" forever, causing the progress
+                        // to get stuck at 99% / last item since they re-fail on every retry.
+                        ocrIndexedBatch.add(embedded.entity.id)
 
                         processedCount++
                         recentUris.addLast(embedded.entity.uriString)
