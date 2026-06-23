@@ -12,6 +12,7 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 
@@ -128,6 +129,7 @@ private val DarkColorScheme = darkColorScheme(
 //      remaining 27 via granular vals in Shape.kt)
 //    • AppTypography — Emphasized Typography with Google Sans Flex variable font
 //    • Dynamic Color — wallpaper-derived palette on Android 12+ (S+)
+//    • Harmonized Colors — accent colors blended toward dynamic primary
 // ─────────────────────────────────────────────────────────────────────────────
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
@@ -169,6 +171,12 @@ fun PhotonGalleryTheme(
         shapes = AppShapes,
         typography = AppTypography,
         motionScheme = MotionScheme.expressive(),
-        content = content,
-    )
+    ) {
+        // Provide harmonized accent colors blended toward dynamic primary
+        val harmonized = harmonizedColors()
+        CompositionLocalProvider(
+            LocalHarmonizedColors provides harmonized,
+            content = content,
+        )
+    }
 }
