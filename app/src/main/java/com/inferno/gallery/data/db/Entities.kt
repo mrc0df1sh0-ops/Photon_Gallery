@@ -17,7 +17,11 @@ data class CoreMediaEntity(
     val mimeType: String?,
     val isVideo: Boolean,
     val durationMs: Long?,
-    @ColumnInfo(name = "is_indexed_ocr") val isIndexedOcr: Boolean = false
+    @ColumnInfo(name = "is_indexed_ocr") val isIndexedOcr: Boolean = false,
+    val pHash: Long? = null,
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+    val fileHash: String? = null
 )
 
 data class MediaWithBackup(
@@ -35,7 +39,10 @@ data class MediaWithBackup(
     val isIndexedOcr: Boolean = false,
     val telegramFileId: String?,
     val telegramThumbFileId: String?,
-    val backupStatus: String?
+    val backupStatus: String?,
+    val pHash: Long? = null,
+    val latitude: Double? = null,
+    val longitude: Double? = null
 )
 
 

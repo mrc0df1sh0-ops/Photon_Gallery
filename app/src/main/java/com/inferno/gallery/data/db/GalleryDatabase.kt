@@ -99,6 +99,12 @@ interface MediaDao {
 
     @Query("SELECT uriString FROM core_media WHERE bucketName != 'Trash' ORDER BY dateAdded DESC LIMIT 4")
     fun observeTopCoverUris(): Flow<List<String>>
+
+    @Query("SELECT * FROM core_media WHERE fileHash IN (SELECT fileHash FROM core_media WHERE fileHash IS NOT NULL AND bucketName != 'Trash' GROUP BY fileHash HAVING COUNT(id) > 1) AND bucketName != 'Trash' ORDER BY fileHash, dateAdded DESC")
+    fun observeExactDuplicates(): Flow<List<CoreMediaEntity>>
+
+    @Query("SELECT * FROM core_media WHERE pHash IS NOT NULL AND isVideo = 0 AND bucketName != 'Trash' ORDER BY dateAdded DESC")
+    fun observeAllHashedMedia(): Flow<List<CoreMediaEntity>>
 }
 
 @Database(
@@ -111,7 +117,7 @@ interface MediaDao {
         // The FTS5 virtual table is instead created manually in DatabaseProvider's
         // RoomDatabase.Callback onCreate hook using raw CREATE VIRTUAL TABLE SQL.
     ],
-    version = 8,
+    version = 10,
     exportSchema = true
 )
 @androidx.room.TypeConverters(EmbeddingConverter::class)
