@@ -71,7 +71,11 @@ data class GalleryItem(
     /** Pre-computed on IO: whether the local file exists on disk. */
     val localExists: Boolean = true,
     /** Pre-computed on IO: the URI to use for thumbnail loading (local or telegram). */
-    val resolvedUri: Uri = uri
+    val resolvedUri: Uri = uri,
+    val pHash: Long? = null,
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+    val fileHash: String? = null
 )
 
 data class BackupProgress(
@@ -109,6 +113,18 @@ data class AlbumBucket(
     val maxDate: Long = 0L,
     val coverUris: List<Uri> = emptyList()
 )
+
+@Immutable
+data class DuplicateGroup(
+    val pHash: Long,
+    val items: List<GalleryItem>
+)
+
+sealed class DuplicateScanState {
+    data object Idle : DuplicateScanState()
+    data class Scanning(val processed: Int, val total: Int) : DuplicateScanState()
+    data object Done : DuplicateScanState()
+}
 
 enum class SearchMode { SMART, FTS }
 
@@ -843,7 +859,12 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
         // Not supported in Paging3 without memory indexing.
     }
 
-    val allAlbums: StateFlow<List<AlbumBucket>> = combine(database.mediaDao().observeBuckets(), albumSortOrder, excludedFolders) { buckets, order, excluded ->
+    val allAlbums: StateFlow<List<AlbumBucket>> = combine(
+        database.mediaDao().observeBuckets(), 
+        albumSortOrder, 
+        excludedFolders,
+        settingsRepository.showHiddenAlbumsFlow
+    ) { buckets, order, excluded, showHidden ->
         val excludedKeywords = setOf(BucketNames.CAMERA, BucketNames.SCREENSHOTS, BucketNames.TRASH, BucketNames.ALL, BucketNames.VIDEOS)
         
         val filtered = buckets.filter { bucket ->
@@ -853,7 +874,8 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
             !bucket.bucketName.contains(BucketNames.SCREEN_RECORDS_NO_SPACE, ignoreCase = true) &&
             !bucket.bucketName.contains(BucketNames.SCREEN_RECORD, ignoreCase = true) &&
             !bucket.bucketName.contains(BucketNames.SCREENSHOT, ignoreCase = true) &&
-            !excluded.contains(bucket.bucketName)
+            !excluded.contains(bucket.bucketName) &&
+            (showHidden || !bucket.bucketName.startsWith("."))
         }.map { b ->
             AlbumBucket(
                 bucketName = b.bucketName,
@@ -876,12 +898,179 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
     }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // All bucket names for the Settings "Excluded Folders" UI (includes all folders)
-    val allBucketNames: StateFlow<List<String>> = database.mediaDao().observeBuckets().map { buckets ->
+    val allBucketNames: StateFlow<List<String>> = combine(
+        database.mediaDao().observeBuckets(),
+        settingsRepository.showHiddenAlbumsFlow
+    ) { buckets, showHidden ->
         buckets.map { it.bucketName }
-            .filter { it != "Trash" }
+            .filter { it != "Trash" && (showHidden || !it.startsWith(".")) }
             .distinct()
             .sorted()
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val duplicates: StateFlow<List<DuplicateGroup>> = database.mediaDao().observeExactDuplicates()
+        .map { entities ->
+            entities.map { entity ->
+                val uri = Uri.parse(entity.uriString)
+                val exists = java.io.File(entity.filePath).exists()
+                GalleryItem(
+                    id = entity.id.toString(),
+                    uri = uri,
+                    bucketName = entity.bucketName,
+                    dateAdded = entity.dateAdded,
+                    size = entity.size,
+                    name = entity.name,
+                    dateModified = entity.dateModified,
+                    path = entity.filePath,
+                    isVideo = entity.isVideo,
+                    durationMs = entity.durationMs,
+                    localExists = exists,
+                    resolvedUri = uri,
+                    pHash = entity.pHash,
+                    latitude = entity.latitude,
+                    longitude = entity.longitude,
+                    fileHash = entity.fileHash
+                )
+            }.filter { it.fileHash != null }
+            .groupBy { it.fileHash!! }
+            .filter { it.value.size > 1 }
+            .map { (_, items) -> DuplicateGroup(items.first().pHash ?: 0L, items) }
+            .sortedByDescending { group -> group.items.sumOf { it.size } }
+        }.flowOn(Dispatchers.IO).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val similarPhotos: StateFlow<List<DuplicateGroup>> = database.mediaDao().observeAllHashedMedia()
+        .map { entities ->
+            val items = entities.map { entity ->
+                val uri = Uri.parse(entity.uriString)
+                val exists = java.io.File(entity.filePath).exists()
+                GalleryItem(
+                    id = entity.id.toString(),
+                    uri = uri,
+                    bucketName = entity.bucketName,
+                    dateAdded = entity.dateAdded,
+                    size = entity.size,
+                    name = entity.name,
+                    dateModified = entity.dateModified,
+                    path = entity.filePath,
+                    isVideo = entity.isVideo,
+                    durationMs = entity.durationMs,
+                    localExists = exists,
+                    resolvedUri = uri,
+                    pHash = entity.pHash,
+                    latitude = entity.latitude,
+                    longitude = entity.longitude,
+                    fileHash = entity.fileHash
+                )
+            }
+            
+            // Build set of exact duplicate fileHash values to exclude pure-copy groups
+            val exactDuplicateHashes = items
+                .filter { it.fileHash != null }
+                .groupBy { it.fileHash!! }
+                .filter { it.value.size > 1 }
+                .keys
+            
+            val groups = mutableListOf<List<GalleryItem>>()
+            val visited = BooleanArray(items.size)
+            
+            for (i in items.indices) {
+                if (visited[i]) continue
+                val h1 = items[i].pHash ?: continue
+                
+                val currentGroup = mutableListOf(items[i])
+                visited[i] = true
+                
+                for (j in i + 1 until items.size) {
+                    if (visited[j]) continue
+                    val h2 = items[j].pHash ?: continue
+                    
+                    val distance = com.inferno.gallery.utils.HashUtils.hammingDistance(h1, h2)
+                    // dHash distance 0-4: visually very similar
+                    if (distance <= 4) {
+                        currentGroup.add(items[j])
+                        visited[j] = true
+                    }
+                }
+                
+                if (currentGroup.size > 1) {
+                    // Skip groups where ALL items share the same fileHash (those are exact copies, already shown in other tab)
+                    val uniqueFileHashes = currentGroup.mapNotNull { it.fileHash }.toSet()
+                    val allSameHash = uniqueFileHashes.size == 1 && uniqueFileHashes.first() in exactDuplicateHashes
+                    if (!allSameHash) {
+                        groups.add(currentGroup)
+                    }
+                }
+            }
+            
+            groups.map { DuplicateGroup(it.first().pHash ?: 0L, it) }
+                .sortedByDescending { group -> group.items.sumOf { it.size } }
+        }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // ── Duplicate Scan State ──
+    private val _duplicateScanState = MutableStateFlow<DuplicateScanState>(DuplicateScanState.Idle)
+    val duplicateScanState: StateFlow<DuplicateScanState> = _duplicateScanState.asStateFlow()
+
+    fun scanForDuplicates() {
+        if (_duplicateScanState.value is DuplicateScanState.Scanning) return
+        viewModelScope.launch(Dispatchers.IO) {
+            _duplicateScanState.value = DuplicateScanState.Scanning(0, 0)
+            try {
+                val allMedia = database.mediaDao().getAllMedia()
+                val needsHash = allMedia.filter { it.fileHash == null || (!it.isVideo && it.pHash == null) }
+                val total = needsHash.size
+
+                if (total == 0) {
+                    _duplicateScanState.value = DuplicateScanState.Done
+                    return@launch
+                }
+
+                val app = getApplication<Application>()
+                val batchSize = 50
+                var processed = 0
+
+                for (batch in needsHash.chunked(batchSize)) {
+                    val updates = batch.mapNotNull { entity ->
+                        var fileHash = entity.fileHash
+                        var pHash = entity.pHash
+
+                        val file = if (entity.filePath.isNotEmpty()) java.io.File(entity.filePath) else null
+
+                        // Compute MD5 fileHash
+                        if (fileHash == null && file != null && file.exists()) {
+                            fileHash = com.inferno.gallery.utils.HashUtils.computeFileHash(file)
+                        }
+
+                        // Compute dHash (pHash) for images
+                        if (!entity.isVideo && pHash == null) {
+                            try {
+                                val uri = Uri.parse(entity.uriString)
+                                val thumbnail = app.contentResolver.loadThumbnail(
+                                    uri, android.util.Size(128, 128), null
+                                )
+                                pHash = com.inferno.gallery.utils.HashUtils.generatePerceptualHash(thumbnail)
+                            } catch (_: Exception) {}
+                        }
+
+                        if (fileHash != entity.fileHash || pHash != entity.pHash) {
+                            entity.copy(fileHash = fileHash, pHash = pHash)
+                        } else null
+                    }
+
+                    if (updates.isNotEmpty()) {
+                        database.mediaDao().insertAll(updates)
+                    }
+
+                    processed += batch.size
+                    _duplicateScanState.value = DuplicateScanState.Scanning(processed, total)
+                }
+
+                _duplicateScanState.value = DuplicateScanState.Done
+            } catch (e: Exception) {
+                e.printStackTrace()
+                _duplicateScanState.value = DuplicateScanState.Done
+            }
+        }
+    }
 
     val pinnedAlbums: StateFlow<List<AlbumBucket>> = combine(
         database.mediaDao().observeBuckets(),
