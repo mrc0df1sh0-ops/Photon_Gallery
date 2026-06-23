@@ -64,10 +64,11 @@ import com.inferno.gallery.ui.theme.ShapeLarge
 import com.inferno.gallery.ui.theme.ShapeExtraLarge
 import com.inferno.gallery.ui.theme.ShapeLargeIncreased3
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material.icons.outlined.FavoriteBorder
-import androidx.compose.material.icons.outlined.Folder
-import androidx.compose.material.icons.automirrored.outlined.Sort
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.FavoriteBorder
+import androidx.compose.material.icons.rounded.Folder
+import androidx.compose.material.icons.rounded.Map
+import androidx.compose.material.icons.automirrored.rounded.Sort
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -79,14 +80,14 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Shadow
 import coil3.gif.repeatCount
 import coil3.video.videoFrameMillis
-import androidx.compose.material.icons.filled.Shield
-import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.rounded.Security
+import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
@@ -101,7 +102,8 @@ fun AlbumsScreen(
     contentPadding: PaddingValues = PaddingValues(0.dp),
     onAlbumClick: (String) -> Unit = {},
     onNavigateToVault: () -> Unit = {},
-    onNavigateToDuplicateCleaner: () -> Unit = {}
+    onNavigateToDuplicateCleaner: () -> Unit = {},
+    onNavigateToPhotoMap: () -> Unit = {}
 ) {
     val albums by viewModel.allAlbums.collectAsState()
     val pinnedAlbums by viewModel.pinnedAlbums.collectAsState()
@@ -151,7 +153,7 @@ fun AlbumsScreen(
 
     val lazyGridState = rememberLazyGridState()
     
-    // ── Pull-down to reveal Private Space ──
+    // -- Pull-down to reveal Private Space --
     var showPrivateSpaceCard by remember { mutableStateOf(false) }
     var pullAccumulator by remember { mutableStateOf(0f) }
     val pullThreshold = 150f // pixels of overscroll needed
@@ -195,7 +197,7 @@ fun AlbumsScreen(
             .padding(horizontal = 16.dp)
             .nestedScroll(pullToRevealConnection)
     ) {
-        // ── Private Space Card (pull-down to reveal) ──
+        // -- Private Space Card (pull-down to reveal) --
         item(span = { GridItemSpan(maxLineSpan) }) {
             AnimatedVisibility(
                 visible = showPrivateSpaceCard,
@@ -245,7 +247,7 @@ fun AlbumsScreen(
                         ) {
                             Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
                                 Icon(
-                                    Icons.Filled.Shield,
+                                    Icons.Rounded.Security,
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.onTertiaryContainer,
                                     modifier = Modifier.size(20.dp)
@@ -264,7 +266,7 @@ fun AlbumsScreen(
                             )
                         }
                         Icon(
-                            Icons.Filled.Lock,
+                            Icons.Rounded.Lock,
                             contentDescription = "Locked",
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(20.dp)
@@ -273,7 +275,7 @@ fun AlbumsScreen(
                 }
             }
         }
-        // ── Favorites + Trash side-by-side cards ──
+        // -- Favorites + Trash side-by-side cards --
         item(span = { GridItemSpan(maxLineSpan) }) {
             Row(
                 modifier = Modifier
@@ -343,7 +345,7 @@ fun AlbumsScreen(
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
-                                    Icons.Outlined.FavoriteBorder,
+                                    Icons.Rounded.FavoriteBorder,
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f),
                                     modifier = Modifier.size(32.dp)
@@ -358,7 +360,7 @@ fun AlbumsScreen(
                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             Icon(
-                                Icons.Outlined.FavoriteBorder,
+                                Icons.Rounded.FavoriteBorder,
                                 contentDescription = null,
                                 tint = if (favoriteItems.isNotEmpty()) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.size(14.dp)
@@ -407,7 +409,7 @@ fun AlbumsScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                Icons.Outlined.Delete,
+                                Icons.Rounded.Delete,
                                 contentDescription = null,
                                 tint = com.inferno.gallery.ui.theme.LocalHarmonizedColors.current.error.copy(alpha = 0.18f),
                                 modifier = Modifier.size(32.dp)
@@ -435,7 +437,7 @@ fun AlbumsScreen(
                 }
             }
         }
-        // ── Pinned albums (system + user-pinned, max 8 visible) ──
+        // -- Pinned albums (system + user-pinned, max 8 visible) --
         if (visiblePinned.isNotEmpty()) {
             items(
                 items = visiblePinned,
@@ -469,7 +471,7 @@ fun AlbumsScreen(
                                 text = { Text("Unpin Album") },
                                 leadingIcon = {
                                     Icon(
-                                        imageVector = Icons.Outlined.Folder,
+                                        imageVector = Icons.Rounded.Folder,
                                         contentDescription = null,
                                         modifier = Modifier.size(20.dp)
                                     )
@@ -491,7 +493,7 @@ fun AlbumsScreen(
             }
         }
 
-        // ── Overflow pinned albums (>8) dropdown ──
+        // -- Overflow pinned albums (>8) dropdown --
         if (overflowPinned.isNotEmpty()) {
             item(span = { GridItemSpan(maxLineSpan) }) {
                 Box {
@@ -514,7 +516,7 @@ fun AlbumsScreen(
                         overflowPinned.forEach { bucket ->
                             androidx.compose.material3.DropdownMenuItem(
                                 text = { Text(bucket.bucketName) },
-                                leadingIcon = { Icon(Icons.Outlined.Folder, contentDescription = null, modifier = Modifier.size(20.dp)) },
+                                leadingIcon = { Icon(Icons.Rounded.Folder, contentDescription = null, modifier = Modifier.size(20.dp)) },
                                 trailingIcon = { Text("${bucket.itemCount}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) },
                                 onClick = {
                                     showOverflowMenu = false
@@ -527,7 +529,7 @@ fun AlbumsScreen(
             }
         }
         
-        // ── More albums (excluding user-pinned to avoid duplication) ──
+        // -- More albums (excluding user-pinned to avoid duplication) --
         val unpinnedAlbums = albums.filter { it.bucketName != "Favorites" && it.bucketName !in userPinnedNames }
 
         if (unpinnedAlbums.isNotEmpty()) {
@@ -560,11 +562,14 @@ fun AlbumsScreen(
                     }
                     Box {
                         androidx.compose.material3.IconButton(
-                            onClick = { showSortMenu = true },
+                            onClick = { 
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                showSortMenu = true 
+                            },
                             modifier = Modifier.size(38.dp)
                         ) {
                             androidx.compose.material3.Icon(
-                                imageVector = Icons.AutoMirrored.Outlined.Sort,
+                                imageVector = Icons.AutoMirrored.Rounded.Sort,
                                 contentDescription = "Sort",
                                 tint = MaterialTheme.colorScheme.onSurface,
                                 modifier = Modifier.size(24.dp)
@@ -658,7 +663,7 @@ fun AlbumsScreen(
                             text = { Text(if (isPinned) "Unpin Album" else "Pin Album") },
                             leadingIcon = {
                                 Icon(
-                                    imageVector = Icons.Outlined.Folder,
+                                    imageVector = Icons.Rounded.Folder,
                                     contentDescription = null,
                                     modifier = Modifier.size(20.dp)
                                 )
@@ -673,61 +678,114 @@ fun AlbumsScreen(
             }
         }
 
+        // -- Tools: Clean + Map side-by-side --
         item(span = { GridItemSpan(maxLineSpan) }) {
             Spacer(modifier = Modifier.height(16.dp))
-            // Clean card (Duplicate Cleaner)
-            Surface(
-                onClick = onNavigateToDuplicateCleaner,
-                shape = ShapeLarge as androidx.compose.foundation.shape.RoundedCornerShape,
-                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(70.dp)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Box(modifier = Modifier.fillMaxSize()) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(
-                                brush = androidx.compose.ui.graphics.Brush.linearGradient(
-                                    colors = listOf(
-                                        MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.25f),
-                                        MaterialTheme.colorScheme.surfaceContainerHigh
+                // Clean card (Duplicate Cleaner)
+                Surface(
+                    onClick = onNavigateToDuplicateCleaner,
+                    shape = ShapeLarge as androidx.compose.foundation.shape.RoundedCornerShape,
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(70.dp)
+                ) {
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(
+                                    brush = androidx.compose.ui.graphics.Brush.linearGradient(
+                                        colors = listOf(
+                                            MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.25f),
+                                            MaterialTheme.colorScheme.surfaceContainerHigh
+                                        )
                                     )
-                                )
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            Icons.Outlined.AutoAwesome,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.2f),
-                            modifier = Modifier.size(32.dp)
-                        )
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Rounded.AutoAwesome,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.2f),
+                                modifier = Modifier.size(32.dp)
+                            )
+                        }
+                        Row(
+                            modifier = Modifier
+                                .align(Alignment.BottomStart)
+                                .padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.AutoAwesome,
+                                contentDescription = "Clean",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Text(
+                                "Clean",
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
                     }
-                    Row(
-                        modifier = Modifier
-                            .align(Alignment.BottomStart)
-                            .padding(10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.AutoAwesome,
-                            contentDescription = "Clean",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Text(
-                            "Clean",
-                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            "Duplicates & Similar",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                }
+
+                // Map card (Photo Map)
+                Surface(
+                    onClick = onNavigateToPhotoMap,
+                    shape = ShapeLarge as androidx.compose.foundation.shape.RoundedCornerShape,
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(70.dp)
+                ) {
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(
+                                    brush = androidx.compose.ui.graphics.Brush.linearGradient(
+                                        colors = listOf(
+                                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f),
+                                            MaterialTheme.colorScheme.surfaceContainerHigh
+                                        )
+                                    )
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Rounded.Map,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
+                                modifier = Modifier.size(32.dp)
+                            )
+                        }
+                        Row(
+                            modifier = Modifier
+                                .align(Alignment.BottomStart)
+                                .padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Map,
+                                contentDescription = "Map",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Text(
+                                "Map",
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
                     }
                 }
             }
@@ -758,7 +816,7 @@ fun Modifier.expressiveClick(onClick: () -> Unit, onLongPress: (() -> Unit)? = n
                     isPressed = false
                 },
                 onTap = {
-                    haptic.tick()
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                     onClick()
                 },
                 onLongPress = if (onLongPress != null) {{
@@ -910,9 +968,9 @@ fun AlbumCard(
                     )
                 } else if (bucket.coverUri == Uri.EMPTY) {
                     val icon = if (bucket.bucketName == "Favorites") {
-                        Icons.Outlined.FavoriteBorder
+                        Icons.Rounded.FavoriteBorder
                     } else {
-                        Icons.Outlined.Folder
+                        Icons.Rounded.Folder
                     }
                     androidx.compose.material3.Icon(
                         imageVector = icon,
@@ -988,7 +1046,7 @@ fun TrashCard(
                 contentAlignment = Alignment.Center
             ) {
                 androidx.compose.material3.Icon(
-                    imageVector = Icons.Outlined.Delete,
+                    imageVector = Icons.Rounded.Delete,
                     contentDescription = "Recycle Bin",
                     tint = com.inferno.gallery.ui.theme.LocalHarmonizedColors.current.error,
                     modifier = Modifier.size(48.dp)

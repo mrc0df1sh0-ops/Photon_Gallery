@@ -4,8 +4,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.runtime.Composable
@@ -18,10 +18,10 @@ import androidx.compose.ui.unit.dp
 fun MagicSearchIcon(modifier: Modifier = Modifier, tint: Color = LocalContentColor.current) {
     Box(modifier = modifier, contentAlignment = Alignment.Center) {
         // Base Search Icon
-        Icon(Icons.Default.Search, contentDescription = null, tint = tint)
+        Icon(Icons.Rounded.Search, contentDescription = null, tint = tint)
         // The Sparkle (Material 3 AutoAwesome) positioned at the top right
         Icon(
-            imageVector = Icons.Default.AutoAwesome,
+            imageVector = Icons.Rounded.AutoAwesome,
             contentDescription = null,
             tint = tint,
             modifier = Modifier

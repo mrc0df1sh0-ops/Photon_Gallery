@@ -50,12 +50,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.SaveAlt
-import androidx.compose.material.icons.outlined.SwapHoriz
-import androidx.compose.material.icons.outlined.SwapVert
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.SaveAlt
+import androidx.compose.material.icons.rounded.SwapHoriz
+import androidx.compose.material.icons.rounded.SwapVert
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -112,7 +112,7 @@ import coil3.compose.AsyncImage
 import coil3.request.CachePolicy
 import coil3.request.ImageRequest
 import com.inferno.gallery.data.db.DatabaseProvider
-import com.inferno.gallery.ui.components.WavyProgressIndicator
+import com.inferno.gallery.ui.components.ShapeMorphLoadingIndicator
 import com.inferno.gallery.workers.MediaSyncWorker
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -194,7 +194,7 @@ fun StitchScreen(
             modifier       = Modifier.fillMaxSize(),
             containerColor = MaterialTheme.colorScheme.surface,
             topBar = {
-                Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh) {
+                Surface(color = MaterialTheme.colorScheme.surfaceContainerLow) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -204,7 +204,7 @@ fun StitchScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         IconButton(onClick = onBack) {
-                            Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
+                            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
                         }
                         Column(modifier = Modifier.padding(start = 8.dp).weight(1f)) {
                             Text(
@@ -225,7 +225,7 @@ fun StitchScreen(
                                 contentColor   = MaterialTheme.colorScheme.onPrimary
                             )
                         ) {
-                            Icon(Icons.Outlined.SaveAlt, contentDescription = "Save")
+                            Icon(Icons.Rounded.SaveAlt, contentDescription = "Save")
                         }
                     }
                 }
@@ -249,7 +249,10 @@ fun StitchScreen(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
-                            WavyProgressIndicator(modifier = Modifier.size(56.dp))
+                            ShapeMorphLoadingIndicator(
+                                modifier = Modifier.size(56.dp),
+                                contained = true
+                            )
                             Text(
                                 text  = "Stitching…",
                                 style = MaterialTheme.typography.titleMedium,
@@ -622,7 +625,7 @@ private fun ReorderableThumbnailStrip(
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector        = Icons.Outlined.Close,
+                            imageVector        = Icons.Rounded.Close,
                             contentDescription = "Remove",
                             tint               = MaterialTheme.colorScheme.onErrorContainer,
                             modifier           = Modifier.size(11.dp)
@@ -649,7 +652,7 @@ private fun ReorderableThumbnailStrip(
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     Icon(
-                        imageVector = Icons.Outlined.Add,
+                        imageVector = Icons.Rounded.Add,
                         contentDescription = "Add images",
                         tint     = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(22.dp)
@@ -721,7 +724,7 @@ private fun StitchControlsPanel(
                             icon     = {}
                         ) {
                             Icon(
-                                Icons.Outlined.SwapVert,
+                                Icons.Rounded.SwapVert,
                                 contentDescription = null,
                                 modifier = Modifier.size(14.dp)
                             )
@@ -735,7 +738,7 @@ private fun StitchControlsPanel(
                             icon     = {}
                         ) {
                             Icon(
-                                Icons.Outlined.SwapHoriz,
+                                Icons.Rounded.SwapHoriz,
                                 contentDescription = null,
                                 modifier = Modifier.size(14.dp)
                             )
@@ -979,7 +982,7 @@ private fun SaveFormatCard(
                 )
             }
             Icon(
-                imageVector = Icons.Outlined.SaveAlt,
+                imageVector = Icons.Rounded.SaveAlt,
                 contentDescription = null,
                 modifier = Modifier.size(20.dp)
             )

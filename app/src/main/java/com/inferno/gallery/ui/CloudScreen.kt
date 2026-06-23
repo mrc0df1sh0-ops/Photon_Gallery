@@ -22,10 +22,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Refresh
-import androidx.compose.material.icons.outlined.CloudUpload
-import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material.icons.outlined.Warning
+import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Security
+import androidx.compose.material.icons.rounded.CloudUpload
+import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -61,6 +62,8 @@ fun CloudScreen(
     val systemStatus by viewModel.systemStatus.collectAsState()
     val failedBackups by viewModel.failedBackups.collectAsState()
     val gridState = rememberLazyGridState()
+    var showDisclaimerDialog by remember { mutableStateOf(false) }
+    var showTipDialog by remember { mutableStateOf(false) }
 
     val galleryItems = remember(cloudMedia) {
         cloudMedia.map { item ->
@@ -115,7 +118,7 @@ fun CloudScreen(
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     Icon(
-                        imageVector = Icons.Outlined.CloudUpload,
+                        imageVector = Icons.Rounded.CloudUpload,
                         contentDescription = "Cloud Upload",
                         tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(64.dp)
@@ -146,7 +149,7 @@ fun CloudScreen(
     }
 
     LazyVerticalGrid(
-        columns = GridCells.Fixed(3),
+        columns = GridCells.Fixed(4),
         state = gridState,
         contentPadding = PaddingValues(
             top = contentPadding.calculateTopPadding() + 8.dp,
@@ -233,10 +236,10 @@ fun CloudScreen(
                                 )
                             )
                         )
-                        .padding(20.dp)
+                        .padding(12.dp)
                 ) {
                     Column(
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -245,7 +248,7 @@ fun CloudScreen(
                         ) {
                             Text(
                                 text = "Telegram Cloud Storage",
-                                style = MaterialTheme.typography.titleMedium.copy(
+                                style = MaterialTheme.typography.titleSmall.copy(
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onPrimaryContainer
                                 )
@@ -264,7 +267,7 @@ fun CloudScreen(
                                     modifier = Modifier.size(32.dp)
                                 ) {
                                     Icon(
-                                        imageVector = Icons.Outlined.Refresh,
+                                        imageVector = Icons.Rounded.Refresh,
                                         contentDescription = "Refresh",
                                         tint = MaterialTheme.colorScheme.onPrimaryContainer,
                                         modifier = Modifier.size(20.dp)
@@ -280,12 +283,12 @@ fun CloudScreen(
                             Column {
                                 Text(
                                     text = "Synced Items",
-                                    style = MaterialTheme.typography.labelMedium,
+                                    style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
                                 )
                                 Text(
                                     text = "${galleryItems.size}",
-                                    style = MaterialTheme.typography.headlineLarge.copy(
+                                    style = MaterialTheme.typography.titleLarge.copy(
                                         fontWeight = FontWeight.Black,
                                         color = MaterialTheme.colorScheme.onPrimaryContainer
                                     )
@@ -295,12 +298,12 @@ fun CloudScreen(
                             Column(horizontalAlignment = Alignment.End) {
                                 Text(
                                     text = "Storage Used",
-                                    style = MaterialTheme.typography.labelMedium,
+                                    style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
                                 )
                                 Text(
                                     text = formatSize(totalSizeBytes),
-                                    style = MaterialTheme.typography.headlineLarge.copy(
+                                    style = MaterialTheme.typography.titleLarge.copy(
                                         fontWeight = FontWeight.Black,
                                         color = MaterialTheme.colorScheme.onPrimaryContainer
                                     )
@@ -360,8 +363,8 @@ fun CloudScreen(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(10.dp)
-                                .clip(RoundedCornerShape(5.dp))
+                                .height(6.dp)
+                                .clip(RoundedCornerShape(3.dp))
                                 .background(MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.15f))
                         ) {
                             if (storageBreakdown.totalBytes > 0L) {
@@ -446,7 +449,7 @@ fun CloudScreen(
 
                             Column(
                                 modifier = Modifier.fillMaxWidth(),
-                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
@@ -471,8 +474,8 @@ fun CloudScreen(
                                     progress = { animatedProgress },
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .height(8.dp)
-                                        .clip(RoundedCornerShape(4.dp)),
+                                        .height(6.dp)
+                                        .clip(RoundedCornerShape(3.dp)),
                                     color = MaterialTheme.colorScheme.onPrimaryContainer,
                                     trackColor = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.2f)
                                 )
@@ -597,33 +600,64 @@ fun CloudScreen(
             Spacer(modifier = Modifier.height(8.dp))
         }
 
-        // Warning/Disclaimer Item
+        // Warning/Disclaimer and Tip Chips
         item(span = { GridItemSpan(maxLineSpan) }) {
-            Card(
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.15f)
-                ),
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 4.dp)
+                    .padding(vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Row(
-                    modifier = Modifier.padding(12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f))
+                        .clickable { showDisclaimerDialog = true }
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Info,
-                        contentDescription = "Disclaimer",
-                        tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Text(
-                        text = "Do not delete backup database or manifest files from your Telegram chat. Deleting them will erase your cloud synchronization index, item counts, and storage usage statistics.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onErrorContainer
-                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Warning,
+                            contentDescription = "Disclaimer",
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = "Disclaimer",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    }
+                }
+
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f))
+                        .clickable { showTipDialog = true }
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                ) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Security,
+                            contentDescription = "Security Tip",
+                            tint = MaterialTheme.colorScheme.tertiary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = "Security Tip",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer
+                        )
+                    }
                 }
             }
         }
@@ -654,7 +688,7 @@ fun CloudScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Icon(
-                                    imageVector = androidx.compose.material.icons.Icons.Outlined.Warning,
+                                    imageVector = androidx.compose.material.icons.Icons.Rounded.Warning,
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.onErrorContainer,
                                     modifier = Modifier.size(20.dp)
@@ -675,7 +709,7 @@ fun CloudScreen(
                                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
                                 modifier = Modifier.height(32.dp)
                             ) {
-                                Icon(Icons.Outlined.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Icon(Icons.Rounded.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text("Retry All", style = MaterialTheme.typography.labelMedium)
                             }
@@ -739,11 +773,39 @@ fun CloudScreen(
                     },
                     isSelected = selectedUris.contains(item.uri.toString()),
                     gridAutoPlay = gridAutoPlay,
-                    gridCellsCount = 3,
+                    gridCellsCount = 4,
                     thumbnailCornerRadius = thumbnailCornerRadius
                 )
             }
         }
+    }
+
+    if (showDisclaimerDialog) {
+        AlertDialog(
+            onDismissRequest = { showDisclaimerDialog = false },
+            icon = { Icon(Icons.Rounded.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+            title = { Text("Disclaimer") },
+            text = { Text("Do not delete backup database or manifest files from your Telegram chat. Deleting them will erase your cloud synchronization index, item counts, and storage usage statistics.") },
+            confirmButton = {
+                TextButton(onClick = { showDisclaimerDialog = false }) {
+                    Text("Got it")
+                }
+            }
+        )
+    }
+
+    if (showTipDialog) {
+        AlertDialog(
+            onDismissRequest = { showTipDialog = false },
+            icon = { Icon(Icons.Rounded.Security, contentDescription = null, tint = MaterialTheme.colorScheme.tertiary) },
+            title = { Text("Security Tip") },
+            text = { Text("Enable Two-Factor Authentication (2FA) for your Telegram account to ensure maximum security and prevent unauthorized access to your cloud backups.") },
+            confirmButton = {
+                TextButton(onClick = { showTipDialog = false }) {
+                    Text("Got it")
+                }
+            }
+        )
     }
 }
 

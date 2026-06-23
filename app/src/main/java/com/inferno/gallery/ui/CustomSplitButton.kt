@@ -11,7 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.ArrowDropDown
+import androidx.compose.material.icons.rounded.ArrowDropDown
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -29,7 +29,7 @@ fun CustomSplitButton(
     leadingText: String,
     onLeadingClick: () -> Unit,
     onTrailingClick: () -> Unit,
-    trailingIcon: @Composable () -> Unit = { Icon(Icons.Outlined.ArrowDropDown, contentDescription = null) },
+    trailingIcon: @Composable () -> Unit = { Icon(Icons.Rounded.ArrowDropDown, contentDescription = null) },
     containerColor: Color = MaterialTheme.colorScheme.primaryContainer,
     contentColor: Color = MaterialTheme.colorScheme.onPrimaryContainer
 ) {

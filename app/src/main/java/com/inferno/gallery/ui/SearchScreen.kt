@@ -23,8 +23,8 @@ import kotlinx.coroutines.flow.collectLatest
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.rounded.Clear
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -73,7 +73,7 @@ fun SearchScreen(
                     onExpandedChange = {},
                     leadingIcon = {
                         Icon(
-                            imageVector = Icons.Outlined.Search,
+                            imageVector = Icons.Rounded.Search,
                             contentDescription = "Search",
                             modifier = Modifier.size(24.dp)
                         )
@@ -81,7 +81,7 @@ fun SearchScreen(
                     trailingIcon = {
                         if (query.isNotEmpty()) {
                             IconButton(onClick = { viewModel.updateSearchQuery("") }) {
-                                Icon(Icons.Default.Clear, contentDescription = "Clear")
+                                Icon(Icons.Rounded.Clear, contentDescription = "Clear")
                             }
                         }
                     },
@@ -112,7 +112,7 @@ fun SearchScreen(
                 label = { Text("Text (OCR)", style = MaterialTheme.typography.labelSmall) },
                 icon = {
                     Icon(
-                        imageVector = Icons.Outlined.Search,
+                        imageVector = Icons.Rounded.Search,
                         contentDescription = null,
                         modifier = Modifier.size(14.dp)
                     )
@@ -219,7 +219,7 @@ private fun EmptySearchState() {
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = Icons.Outlined.Search,
+                        imageVector = Icons.Rounded.Search,
                         contentDescription = null,
                         modifier = Modifier.size(36.dp),
                         tint = MaterialTheme.colorScheme.onPrimaryContainer

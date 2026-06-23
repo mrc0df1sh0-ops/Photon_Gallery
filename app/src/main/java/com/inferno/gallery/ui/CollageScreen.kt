@@ -29,8 +29,8 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.outlined.*
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.runtime.*
@@ -220,9 +220,9 @@ fun CollageScreen(
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
             modifier = Modifier.fillMaxSize(),
-            containerColor = Color(0xFF121212),
+            containerColor = MaterialTheme.colorScheme.surface,
             topBar = {
-                Surface(color = Color(0xFF1E1E1E)) {
+                Surface(color = MaterialTheme.colorScheme.surfaceContainerLow) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -232,12 +232,12 @@ fun CollageScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         IconButton(onClick = onBack) {
-                            Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back", tint = Color.White)
+                            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back", tint = MaterialTheme.colorScheme.onSurface)
                         }
                         Text(
                             "Create Collage",
                             style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                            color = Color.White,
+                            color = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.padding(start = 8.dp).weight(1f)
                         )
                         IconButton(
@@ -272,7 +272,7 @@ fun CollageScreen(
                                 }
                             }
                         ) {
-                            Icon(Icons.Outlined.Check, contentDescription = "Save", tint = Color.White)
+                            Icon(Icons.Rounded.Check, contentDescription = "Save", tint = Color.White)
                         }
                     }
                 }
@@ -292,7 +292,10 @@ fun CollageScreen(
                     contentAlignment = Alignment.TopCenter
                 ) {
                     if (isSaving) {
-                        com.inferno.gallery.ui.components.WavyProgressIndicator(modifier = Modifier.size(64.dp))
+                        com.inferno.gallery.ui.components.ShapeMorphLoadingIndicator(
+                            modifier = Modifier.size(64.dp),
+                            contained = true
+                        )
                     } else {
                         BoxWithConstraints(
                             modifier = Modifier.fillMaxSize(),
@@ -407,7 +410,7 @@ fun CollageScreen(
                                         updated[selectedSlotIndex] = curr.copy(rotation = (curr.rotation + 90) % 360)
                                         slotStates = updated
                                     }) {
-                                        Icon(Icons.Outlined.RotateRight, contentDescription = "Rotate")
+                                        Icon(Icons.Rounded.RotateRight, contentDescription = "Rotate")
                                     }
                                     IconButton(onClick = {
                                         val updated = slotStates.toMutableList()
@@ -416,7 +419,7 @@ fun CollageScreen(
                                         slotStates = updated
                                     }) {
                                         Icon(
-                                            Icons.Outlined.Flip,
+                                            Icons.Rounded.Flip,
                                             contentDescription = "Flip Vertical",
                                             modifier = Modifier.graphicsLayer { rotationZ = 90f }
                                         )
@@ -427,7 +430,7 @@ fun CollageScreen(
                                         updated[selectedSlotIndex] = curr.copy(flipHorizontal = !curr.flipHorizontal)
                                         slotStates = updated
                                     }) {
-                                        Icon(Icons.Outlined.Flip, contentDescription = "Flip Horizontal")
+                                        Icon(Icons.Rounded.Flip, contentDescription = "Flip Horizontal")
                                     }
                                     IconButton(onClick = {
                                         val updated = slotStates.toMutableList()
@@ -435,13 +438,13 @@ fun CollageScreen(
                                         updated[selectedSlotIndex] = curr.copy(scale = 1f, offsetX = 0f, offsetY = 0f)
                                         slotStates = updated
                                     }) {
-                                        Icon(Icons.Outlined.Refresh, contentDescription = "Reset Zoom/Pan")
+                                        Icon(Icons.Rounded.Refresh, contentDescription = "Reset Zoom/Pan")
                                     }
                                     IconButton(onClick = { showGalleryChooser = true }) {
-                                        Icon(Icons.Outlined.Cached, contentDescription = "Replace")
+                                        Icon(Icons.Rounded.Cached, contentDescription = "Replace")
                                     }
                                     IconButton(onClick = { selectedSlotIndex = -1 }) {
-                                        Icon(Icons.Outlined.Close, contentDescription = "Close")
+                                        Icon(Icons.Rounded.Close, contentDescription = "Close")
                                     }
                                 }
                             }
@@ -701,7 +704,7 @@ fun LocalGalleryChooser(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = onDismiss) {
                         Icon(
-                            imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
+                            imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
                             contentDescription = "Back",
                             tint = Color.White
                         )

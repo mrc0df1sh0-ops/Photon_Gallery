@@ -68,18 +68,18 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.outlined.CheckCircle
-import androidx.compose.material.icons.outlined.CloudDone
-import androidx.compose.material.icons.outlined.CloudDownload
-import androidx.compose.material.icons.outlined.CloudUpload
-import androidx.compose.material.icons.outlined.CloudOff
-import androidx.compose.material.icons.outlined.Sync
-import androidx.compose.material.icons.outlined.Warning
-import androidx.compose.material.icons.outlined.KeyboardArrowUp
-import androidx.compose.material.icons.outlined.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.CloudDone
+import androidx.compose.material.icons.rounded.CloudDownload
+import androidx.compose.material.icons.rounded.CloudUpload
+import androidx.compose.material.icons.rounded.CloudOff
+import androidx.compose.material.icons.rounded.Sync
+import androidx.compose.material.icons.rounded.Warning
+import androidx.compose.material.icons.rounded.KeyboardArrowUp
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.rounded.Image
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -88,7 +88,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import coil3.gif.repeatCount
 import coil3.video.videoFrameMillis
-import com.inferno.gallery.ui.components.WavyProgressIndicator
+import com.inferno.gallery.ui.components.ShapeMorphLoadingIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
@@ -345,10 +345,41 @@ fun GalleryScreen(
         }
     }
 
-        // ── Empty state ────────────────────────────────────────────────────
+        // ── Initial sync loading ────────────────────────────────────────────
+        val isSyncRunning by viewModel.isInitialSyncRunning.collectAsState()
         val isNotLoading = pagedMedia.loadState.refresh is androidx.paging.LoadState.NotLoading
         AnimatedVisibility(
-            visible = totalItems == 0 && isNotLoading,
+            visible = totalItems == 0 && isSyncRunning,
+            enter = fadeIn(spring(stiffness = Spring.StiffnessHigh)),
+            exit  = fadeOut(spring(stiffness = Spring.StiffnessHigh)),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(contentPadding)
+        ) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    ShapeMorphLoadingIndicator(
+                        modifier = Modifier.size(56.dp),
+                        contained = true
+                    )
+                    Text(
+                        text = "Scanning media…",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+
+        // ── Empty state ────────────────────────────────────────────────────
+        AnimatedVisibility(
+            visible = totalItems == 0 && isNotLoading && !isSyncRunning,
             enter = fadeIn(spring(stiffness = Spring.StiffnessHigh)) +
                     scaleIn(spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessHigh), initialScale = 0.7f),
             exit  = fadeOut(spring(stiffness = Spring.StiffnessHigh)),
@@ -381,9 +412,9 @@ fun GalleryScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         val emptyIcon = when (bucketName) {
-                            "Trash" -> Icons.Outlined.CloudOff
-                            "Favorites" -> androidx.compose.material.icons.Icons.Outlined.CheckCircle
-                            else -> Icons.Outlined.Image
+                            "Trash" -> Icons.Rounded.CloudOff
+                            "Favorites" -> androidx.compose.material.icons.Icons.Rounded.CheckCircle
+                            else -> Icons.Rounded.Image
                         }
                         Icon(
                             imageVector = emptyIcon,
@@ -548,7 +579,7 @@ fun GalleryGridItem(
                     interactionSource = interactionSource,
                     indication = null,
                     onClick = {
-                        haptic.tick()
+                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
                         onClick(item)
                     },
                     onLongClick = {
@@ -635,7 +666,7 @@ fun GalleryGridItem(
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.PlayArrow,
+                        imageVector = Icons.Rounded.PlayArrow,
                         contentDescription = "Video",
                         tint = Color.White,
                         modifier = Modifier.size(iconSize)
@@ -672,7 +703,7 @@ fun GalleryGridItem(
                     contentColor = MaterialTheme.colorScheme.primary
                 ) {
                     Icon(
-                        imageVector = Icons.Outlined.CheckCircle,
+                        imageVector = Icons.Rounded.CheckCircle,
                         contentDescription = "Selected",
                         modifier = Modifier.padding(4.dp).size(20.dp)
                     )
@@ -687,7 +718,7 @@ fun GalleryGridItem(
         if (!isSelected) {
             if (isFailed) {
                 Icon(
-                    imageVector = Icons.Outlined.Warning,
+                    imageVector = Icons.Rounded.Warning,
                     contentDescription = "Backup failed",
                     tint = com.inferno.gallery.ui.theme.LocalHarmonizedColors.current.error,
                     modifier = Modifier
@@ -714,7 +745,7 @@ fun GalleryGridItem(
                 }
 
                 Icon(
-                    imageVector = Icons.Outlined.Sync,
+                    imageVector = Icons.Rounded.Sync,
                     contentDescription = "Backup in progress",
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier
@@ -725,7 +756,7 @@ fun GalleryGridItem(
                 )
             } else if (isBackedUp) {
                 val isCloudOnly = !localExists
-                val icon = if (isCloudOnly) Icons.Outlined.CloudDownload else Icons.Outlined.CloudDone
+                val icon = if (isCloudOnly) Icons.Rounded.CloudDownload else Icons.Rounded.CloudDone
                 val tint = if (isCloudOnly) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary
                 val contentDesc = if (isCloudOnly) "Cloud only" else "Backed up"
                 
@@ -1029,13 +1060,13 @@ fun FastScroller(
                     val arrowColor = if (isDragging) MaterialTheme.colorScheme.onPrimary
                                      else MaterialTheme.colorScheme.surface
                     Icon(
-                        imageVector = Icons.Outlined.KeyboardArrowUp,
+                        imageVector = Icons.Rounded.KeyboardArrowUp,
                         contentDescription = null,
                         tint = arrowColor,
                         modifier = Modifier.size(20.dp)
                     )
                     Icon(
-                        imageVector = Icons.Outlined.KeyboardArrowDown,
+                        imageVector = Icons.Rounded.KeyboardArrowDown,
                         contentDescription = null,
                         tint = arrowColor,
                         modifier = Modifier.size(20.dp)

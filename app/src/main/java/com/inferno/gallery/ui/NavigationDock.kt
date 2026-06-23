@@ -25,9 +25,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.Sort
-import androidx.compose.material.icons.outlined.CameraAlt
-import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.automirrored.rounded.Sort
+import androidx.compose.material.icons.rounded.CameraAlt
+import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -70,7 +70,7 @@ fun QuickFilterRow(
             item {
                 CustomFilterChip(
                     text = "All",
-                    icon = Icons.Outlined.Image,
+                    icon = Icons.Rounded.Image,
                     selected = selectedFilter == 0,
                     onClick = { onFilterSelected(0) }
                 )
@@ -78,7 +78,7 @@ fun QuickFilterRow(
             item {
                 CustomFilterChip(
                     text = "Camera",
-                    icon = Icons.Outlined.CameraAlt,
+                    icon = Icons.Rounded.CameraAlt,
                     selected = selectedFilter == 1,
                     onClick = { onFilterSelected(1) }
                 )
@@ -95,6 +95,7 @@ fun CustomFilterChip(
     selected: Boolean,
     onClick: () -> Unit
 ) {
+    val haptic = LocalHapticFeedback.current
     val containerColor = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerHighest
     val contentColor = if (selected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
 
@@ -105,7 +106,12 @@ fun CustomFilterChip(
         modifier = Modifier
             .height(24.dp)
             .clip(CircleShape)
-            .expressiveClick(onClick)
+            .expressiveClick(
+                onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onClick()
+                }
+            )
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,

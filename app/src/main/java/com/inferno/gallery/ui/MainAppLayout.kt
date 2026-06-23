@@ -32,31 +32,31 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Pause
-import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.rounded.Pause
+import androidx.compose.material.icons.rounded.PlayArrow
 
-import androidx.compose.material.icons.outlined.CameraAlt
-import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.Check
-import androidx.compose.material.icons.outlined.Folder
-import androidx.compose.material.icons.outlined.CreateNewFolder
+import androidx.compose.material.icons.rounded.CameraAlt
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Folder
+import androidx.compose.material.icons.rounded.CreateNewFolder
 
-import androidx.compose.material.icons.outlined.MoreVert
-import androidx.compose.material.icons.outlined.PhotoAlbum
-import androidx.compose.material.icons.outlined.Image
-import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.automirrored.outlined.Sort
-import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material.icons.outlined.VisibilityOff
-import androidx.compose.material.icons.outlined.Shield
-import androidx.compose.material.icons.outlined.Cloud
-import androidx.compose.material.icons.outlined.Share
-import androidx.compose.material.icons.outlined.ArrowDropDown
-import androidx.compose.material.icons.automirrored.outlined.DriveFileMove
-import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material.icons.outlined.LibraryAddCheck
-import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.PhotoAlbum
+import androidx.compose.material.icons.rounded.Image
+import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.Sort
+import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.VisibilityOff
+import androidx.compose.material.icons.rounded.Security
+import androidx.compose.material.icons.rounded.Cloud
+import androidx.compose.material.icons.rounded.Share
+import androidx.compose.material.icons.rounded.ArrowDropDown
+import androidx.compose.material.icons.automirrored.rounded.DriveFileMove
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.LibraryAddCheck
+import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
@@ -66,11 +66,11 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.shrinkHorizontally
-import androidx.compose.material.icons.outlined.DateRange
-import androidx.compose.material.icons.outlined.GridView
-import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.SwapVert
-import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.rounded.DateRange
+import androidx.compose.material.icons.rounded.GridView
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.SwapVert
+import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -163,6 +163,7 @@ fun MainAppLayout(
     onCreateCollage: (List<String>) -> Unit = {},
     onCreateStitch: (List<String>) -> Unit = {},
     onNavigateToVault: () -> Unit = {},
+    onNavigateToUserbotSetup: () -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: GalleryViewModel = viewModel()
 ) {
@@ -192,6 +193,7 @@ fun MainAppLayout(
     val coroutineScope = rememberCoroutineScope()
 
     val context = LocalContext.current
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
 
     // Collect toast events from ViewModel
     LaunchedEffect(Unit) {
@@ -390,7 +392,7 @@ fun MainAppLayout(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 IconButton(onClick = { viewModel.clearSelection() }) {
-                                    Icon(Icons.Outlined.Close, contentDescription = "Clear selection")
+                                    Icon(Icons.Rounded.Close, contentDescription = "Clear selection")
                                 }
                                 AnimatedContent(
                                     targetState = selectedUris.size,
@@ -413,7 +415,7 @@ fun MainAppLayout(
                                 }
                                 IconButton(onClick = { viewModel.toggleSelectAll() }) {
                                     Icon(
-                                        imageVector = Icons.Outlined.LibraryAddCheck,
+                                        imageVector = Icons.Rounded.LibraryAddCheck,
                                         contentDescription = "Select or Deselect All"
                                     )
                                 }
@@ -426,7 +428,7 @@ fun MainAppLayout(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 IconButton(onClick = { nestedNavController.popBackStack() }) {
-                                    Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
+                                    Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
                                 }
                                 val friendlyTitle = when (albumNameArg) {
                                     "search_text" -> "Text Matches"
@@ -435,7 +437,7 @@ fun MainAppLayout(
                                 }
                                 Text(
                                     friendlyTitle,
-                                    style = MaterialTheme.typography.titleLarge,
+                                    style = MaterialTheme.typography.displayMedium,
                                     modifier = Modifier.padding(start = 16.dp).weight(1f)
                                 )
                             }
@@ -453,11 +455,11 @@ fun MainAppLayout(
                                         nestedNavController.popBackStack()
                                     }
                                 }) {
-                                    Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
+                                    Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
                                 }
                                 Text(
                                     settingsActiveSection ?: "Settings",
-                                    style = MaterialTheme.typography.titleLarge,
+                                    style = MaterialTheme.typography.displayMedium,
                                     modifier = Modifier.padding(start = 16.dp).weight(1f)
                                 )
                             }
@@ -468,7 +470,7 @@ fun MainAppLayout(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(72.dp)
-                                    .padding(horizontal = 16.dp),
+                                    .padding(horizontal = 8.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
@@ -487,9 +489,12 @@ fun MainAppLayout(
                                     if (currentRoute == "photos") {
                                         var showPhotoSortMenu by remember { mutableStateOf(false) }
                                         Box {
-                                            IconButton(onClick = { showPhotoSortMenu = true }) {
+                                            IconButton(onClick = { 
+                                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                                                showPhotoSortMenu = true 
+                                            }) {
                                                 Icon(
-                                                    imageVector = Icons.AutoMirrored.Outlined.Sort,
+                                                    imageVector = Icons.AutoMirrored.Rounded.Sort,
                                                     contentDescription = "Sort",
                                                     tint = MaterialTheme.colorScheme.onSurface
                                                 )
@@ -556,7 +561,7 @@ fun MainAppLayout(
                                     if (currentRoute == "albums") {
                                         IconButton(onClick = { showCreateAlbumDialog = true }) {
                                             Icon(
-                                                imageVector = Icons.Outlined.CreateNewFolder,
+                                                imageVector = Icons.Rounded.CreateNewFolder,
                                                 contentDescription = "Create Album",
                                                 tint = MaterialTheme.colorScheme.onSurface
                                             )
@@ -564,7 +569,7 @@ fun MainAppLayout(
                                     }
                                     Box {
                                         IconButton(onClick = { showMenu = true }) {
-                                            Icon(Icons.Outlined.MoreVert, contentDescription = "Menu")
+                                            Icon(Icons.Rounded.MoreVert, contentDescription = "Menu")
                                         }
                                         DropdownMenu(
                                             expanded = showMenu,
@@ -604,7 +609,7 @@ fun MainAppLayout(
                                                 text = { Text("Settings") },
                                                 leadingIcon = {
                                                     Icon(
-                                                        imageVector = Icons.Outlined.Settings,
+                                                        imageVector = Icons.Rounded.Settings,
                                                         contentDescription = "Settings"
                                                     )
                                                 },
@@ -658,7 +663,7 @@ fun MainAppLayout(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 DockItem(
-                                    icon = { Icon(Icons.Outlined.Image, contentDescription = "Photos", modifier = Modifier.size(20.dp)) },
+                                    icon = { Icon(Icons.Rounded.Image, contentDescription = "Photos", modifier = Modifier.size(20.dp)) },
                                     label = "Photos",
                                     isSelected = currentRoute == "photos",
                                     onClick = { nestedNavController.navigate("photos") {
@@ -668,7 +673,7 @@ fun MainAppLayout(
                                     } }
                                 )
                                 DockItem(
-                                    icon = { Icon(Icons.Outlined.PhotoAlbum, contentDescription = "Albums", modifier = Modifier.size(20.dp)) },
+                                    icon = { Icon(Icons.Rounded.PhotoAlbum, contentDescription = "Albums", modifier = Modifier.size(20.dp)) },
                                     label = "Albums",
                                     isSelected = currentRoute?.startsWith("album") == true,
                                     onClick = { nestedNavController.navigate("albums") {
@@ -678,7 +683,7 @@ fun MainAppLayout(
                                     } }
                                 )
                                 DockItem(
-                                    icon = { Icon(Icons.Outlined.Cloud, contentDescription = "Cloud", modifier = Modifier.size(20.dp)) },
+                                    icon = { Icon(Icons.Rounded.Cloud, contentDescription = "Cloud", modifier = Modifier.size(20.dp)) },
                                     label = "Cloud",
                                     isSelected = currentRoute == "cloud",
                                     onClick = { nestedNavController.navigate("cloud") {
@@ -717,7 +722,7 @@ fun MainAppLayout(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             DockItem(
-                                icon = { Icon(Icons.Outlined.Image, contentDescription = "Photos", modifier = Modifier.size(20.dp)) },
+                                icon = { Icon(Icons.Rounded.Image, contentDescription = "Photos", modifier = Modifier.size(20.dp)) },
                                 label = "Photos",
                                 isSelected = currentRoute == "photos",
                                 onClick = { nestedNavController.navigate("photos") {
@@ -727,7 +732,7 @@ fun MainAppLayout(
                                 } }
                             )
                             DockItem(
-                                icon = { Icon(Icons.Outlined.PhotoAlbum, contentDescription = "Albums", modifier = Modifier.size(20.dp)) },
+                                icon = { Icon(Icons.Rounded.PhotoAlbum, contentDescription = "Albums", modifier = Modifier.size(20.dp)) },
                                 label = "Albums",
                                 isSelected = currentRoute?.startsWith("album") == true,
                                 onClick = { nestedNavController.navigate("albums") {
@@ -737,7 +742,7 @@ fun MainAppLayout(
                                 } }
                             )
                             DockItem(
-                                icon = { Icon(Icons.Outlined.Cloud, contentDescription = "Cloud", modifier = Modifier.size(20.dp)) },
+                                icon = { Icon(Icons.Rounded.Cloud, contentDescription = "Cloud", modifier = Modifier.size(20.dp)) },
                                 label = "Cloud",
                                 isSelected = currentRoute == "cloud",
                                 onClick = { nestedNavController.navigate("cloud") {
@@ -830,7 +835,8 @@ fun MainAppLayout(
                         nestedNavController.navigate("album/$bucketName")
                     },
                     onNavigateToVault = onNavigateToVault,
-                    onNavigateToDuplicateCleaner = { nestedNavController.navigate("duplicate_cleaner") }
+                    onNavigateToDuplicateCleaner = { nestedNavController.navigate("duplicate_cleaner") },
+                    onNavigateToPhotoMap = { nestedNavController.navigate("photo_map") }
                 )
             }
             composable(
@@ -904,6 +910,7 @@ fun MainAppLayout(
                     galleryViewModel = viewModel,
                     onBackClick = { nestedNavController.popBackStack() },
                     onNavigateToVault = onNavigateToVault,
+                    onNavigateToUserbotSetup = onNavigateToUserbotSetup,
                     activeSection = settingsActiveSection,
                     onActiveSectionChange = { settingsActiveSection = it }
                 )
@@ -915,11 +922,20 @@ fun MainAppLayout(
                     onPhotoClick = onPhotoClick,
                     viewModel = viewModel,
                     contentPadding = innerPadding,
-                    onNavigateToSettings = { nestedNavController.navigate("settings") }
+                    onNavigateToSettings = {
+                        settingsActiveSection = "Cloud Backup"
+                        nestedNavController.navigate("settings")
+                    }
                 )
             }
             composable("duplicate_cleaner") {
                 DuplicateCleanerScreen(
+                    galleryViewModel = viewModel,
+                    onBackClick = { nestedNavController.popBackStack() }
+                )
+            }
+            composable("photo_map") {
+                PhotoMapScreen(
                     galleryViewModel = viewModel,
                     onBackClick = { nestedNavController.popBackStack() }
                 )
@@ -1022,7 +1038,7 @@ fun MainAppLayout(
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Icon(
-                                            Icons.Outlined.Shield,
+                                            Icons.Rounded.Security,
                                             contentDescription = null,
                                             tint = MaterialTheme.colorScheme.onTertiaryContainer,
                                             modifier = Modifier.size(20.dp)
@@ -1040,7 +1056,7 @@ fun MainAppLayout(
                                         )
                                     }
                                     Icon(
-                                        Icons.Outlined.VisibilityOff,
+                                        Icons.Rounded.VisibilityOff,
                                         contentDescription = null,
                                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                         modifier = Modifier.size(18.dp)
@@ -1073,7 +1089,7 @@ fun MainAppLayout(
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Icon(
-                                            Icons.Outlined.Folder,
+                                            Icons.Rounded.Folder,
                                             contentDescription = null,
                                             tint = MaterialTheme.colorScheme.onPrimaryContainer,
                                             modifier = Modifier.size(20.dp)
@@ -1152,7 +1168,7 @@ fun MainAppLayout(
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Icon(
-                                            Icons.Outlined.Folder,
+                                            Icons.Rounded.Folder,
                                             contentDescription = null,
                                             tint = MaterialTheme.colorScheme.onPrimaryContainer,
                                             modifier = Modifier.size(20.dp)
@@ -1368,7 +1384,7 @@ fun MainAppLayout(
                         modifier = Modifier.height(48.dp)
                     ) {
                         Icon(
-                            imageVector = Icons.Outlined.Refresh,
+                            imageVector = Icons.Rounded.Refresh,
                             contentDescription = "Restore",
                             modifier = Modifier.size(18.dp)
                         )
@@ -1403,7 +1419,7 @@ fun MainAppLayout(
                         modifier = Modifier.height(48.dp)
                     ) {
                         Icon(
-                            imageVector = Icons.Outlined.Delete,
+                            imageVector = Icons.Rounded.Delete,
                             contentDescription = "Delete Permanently",
                             modifier = Modifier.size(18.dp)
                         )
@@ -1413,7 +1429,7 @@ fun MainAppLayout(
                 }
             } else {
                 val isCreateEnabled = selectedUris.size in 1..8
-                val isStitchEnabled = selectedUris.size >= 2
+                val isStitchEnabled = selectedUris.size in 2..10
                 var createMenuExpanded by remember { mutableStateOf(false) }
                 var moreMenuExpanded by remember { mutableStateOf(false) }
 
@@ -1432,23 +1448,23 @@ fun MainAppLayout(
                         IconButton(onClick = {
                             if (selectedUris.isNotEmpty()) showShareSheet = true
                         }) {
-                            Icon(Icons.Outlined.Share, contentDescription = "Share", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
+                            Icon(Icons.Rounded.Share, contentDescription = "Share", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
                         }
 
                         // Copy
                         IconButton(onClick = { showCopySheet = true }) {
-                            Icon(Icons.Outlined.ContentCopy, contentDescription = "Copy", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
+                            Icon(Icons.Rounded.ContentCopy, contentDescription = "Copy", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
                         }
 
                         // Move
                         IconButton(onClick = { showMoveSheet = true }) {
-                            Icon(Icons.AutoMirrored.Outlined.DriveFileMove, contentDescription = "Move", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
+                            Icon(Icons.AutoMirrored.Rounded.DriveFileMove, contentDescription = "Move", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
                         }
 
                         // Create (Collage/Stitch)
                         Box {
                             IconButton(onClick = { createMenuExpanded = true }) {
-                                Icon(Icons.Outlined.Add, contentDescription = "Create", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
+                                Icon(Icons.Rounded.Add, contentDescription = "Create", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
                             }
                             DropdownMenu(
                                 expanded = createMenuExpanded,
@@ -1456,7 +1472,7 @@ fun MainAppLayout(
                             ) {
                                 DropdownMenuItem(
                                     text = { Text("Collage") },
-                                    leadingIcon = { Icon(Icons.Outlined.GridView, contentDescription = null) },
+                                    leadingIcon = { Icon(Icons.Rounded.GridView, contentDescription = null) },
                                     onClick = {
                                         createMenuExpanded = false
                                         if (isCreateEnabled) {
@@ -1468,13 +1484,13 @@ fun MainAppLayout(
                                 )
                                 DropdownMenuItem(
                                     text = { Text("Stitch") },
-                                    leadingIcon = { Icon(Icons.Outlined.SwapVert, contentDescription = null) },
+                                    leadingIcon = { Icon(Icons.Rounded.SwapVert, contentDescription = null) },
                                     onClick = {
                                         createMenuExpanded = false
                                         if (isStitchEnabled) {
                                             onCreateStitch(selectedUris.toList())
                                         } else {
-                                            android.widget.Toast.makeText(context, "Select at least 2 images to stitch", android.widget.Toast.LENGTH_SHORT).show()
+                                            android.widget.Toast.makeText(context, "Select between 2 and 10 images to stitch", android.widget.Toast.LENGTH_SHORT).show()
                                         }
                                     }
                                 )
@@ -1500,13 +1516,13 @@ fun MainAppLayout(
                                 }
                             }
                         }) {
-                            Icon(Icons.Outlined.Delete, contentDescription = "Delete", tint = com.inferno.gallery.ui.theme.LocalHarmonizedColors.current.error, modifier = Modifier.size(22.dp))
+                            Icon(Icons.Rounded.Delete, contentDescription = "Delete", tint = com.inferno.gallery.ui.theme.LocalHarmonizedColors.current.error, modifier = Modifier.size(22.dp))
                         }
 
                         // More (hide + cloud actions)
                         Box {
                             IconButton(onClick = { moreMenuExpanded = true }) {
-                                Icon(Icons.Outlined.MoreVert, contentDescription = "More", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(22.dp))
+                                Icon(Icons.Rounded.MoreVert, contentDescription = "More", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(22.dp))
                             }
                             DropdownMenu(
                                 expanded = moreMenuExpanded,
@@ -1515,7 +1531,7 @@ fun MainAppLayout(
                                 // Hide (Private Space)
                                 DropdownMenuItem(
                                     text = { Text("Hide") },
-                                    leadingIcon = { Icon(Icons.Outlined.VisibilityOff, contentDescription = null) },
+                                    leadingIcon = { Icon(Icons.Rounded.VisibilityOff, contentDescription = null) },
                                     onClick = {
                                         moreMenuExpanded = false
                                         val activity = context as? androidx.fragment.app.FragmentActivity
@@ -1535,14 +1551,14 @@ fun MainAppLayout(
                                 if (hasUnbackedUp) {
                                     DropdownMenuItem(
                                         text = { Text("Backup to Cloud") },
-                                        leadingIcon = { Icon(Icons.Outlined.Cloud, contentDescription = null) },
+                                        leadingIcon = { Icon(Icons.Rounded.Cloud, contentDescription = null) },
                                         onClick = { moreMenuExpanded = false; viewModel.backupSelectedMedia() }
                                     )
                                 }
                                 if (hasBackedUp) {
                                     DropdownMenuItem(
                                         text = { Text("Delete from Cloud") },
-                                        leadingIcon = { Icon(Icons.Outlined.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+                                        leadingIcon = { Icon(Icons.Rounded.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
                                         onClick = { moreMenuExpanded = false; showCloudDeleteDialog = true }
                                     )
                                 }

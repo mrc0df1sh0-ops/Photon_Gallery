@@ -55,21 +55,21 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.filled.Wallpaper
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Wallpaper
 
-import androidx.compose.material.icons.outlined.Edit
-import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material.icons.outlined.MoreVert
-import androidx.compose.material.icons.outlined.Share
-import androidx.compose.material.icons.outlined.FavoriteBorder
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.outlined.Cloud
-import androidx.compose.material.icons.outlined.Refresh
-import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material.icons.outlined.Shield
-import androidx.compose.material.icons.outlined.VisibilityOff
-import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.Share
+import androidx.compose.material.icons.rounded.FavoriteBorder
+import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.Cloud
+import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Security
+import androidx.compose.material.icons.rounded.VisibilityOff
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
@@ -106,8 +106,8 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Share
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
@@ -1062,7 +1062,7 @@ fun DetailScreen(
                     )
                 ) {
                     Icon(
-                        imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
+                        imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
                         contentDescription = "Go back"
                     )
                 }
@@ -1074,7 +1074,7 @@ fun DetailScreen(
                     )
                 ) {
                     Icon(
-                        imageVector = Icons.Outlined.Info,
+                        imageVector = Icons.Rounded.Info,
                         contentDescription = "Info"
                     )
                 }
@@ -1140,7 +1140,7 @@ fun DetailScreen(
                                     }
                                 }
                             ) { 
-                                Icon(Icons.Outlined.Refresh, contentDescription = "Restore") 
+                                Icon(Icons.Rounded.Refresh, contentDescription = "Restore") 
                             }
                             IconButton(
                                 onClick = {
@@ -1155,12 +1155,12 @@ fun DetailScreen(
                                     }
                                 }
                             ) { 
-                                Icon(Icons.Outlined.Delete, contentDescription = "Permanently Delete", tint = MaterialTheme.colorScheme.error) 
+                                Icon(Icons.Rounded.Delete, contentDescription = "Permanently Delete", tint = MaterialTheme.colorScheme.error) 
                             }
 
                         } else {
                             IconButton(onClick = { showShareSheet = true }) { 
-                                Icon(Icons.Outlined.Share, contentDescription = "Share") 
+                                Icon(Icons.Rounded.Share, contentDescription = "Share") 
                             }
                             val isFavorite = currentItem?.id?.let { favoriteIds.contains(it) } ?: false
                             // Heart pop: triggers a scale bounce when toggling to favorite
@@ -1185,7 +1185,7 @@ fun DetailScreen(
                                 }
                             ) {
                                 Icon(
-                                    imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                                    imageVector = if (isFavorite) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
                                     contentDescription = "Favorite",
                                     tint = if (isFavorite) com.inferno.gallery.ui.theme.LocalHarmonizedColors.current.error else MaterialTheme.colorScheme.onSurface,
                                     modifier = Modifier.graphicsLayer {
@@ -1209,7 +1209,7 @@ fun DetailScreen(
                                     }
                                 }
                             ) { 
-                                Icon(Icons.Outlined.Edit, contentDescription = "Edit") 
+                                Icon(Icons.Rounded.Edit, contentDescription = "Edit") 
                             }
                             IconButton(
                                 onClick = {
@@ -1248,11 +1248,11 @@ fun DetailScreen(
                                     }
                                 }
                             ) { 
-                                Icon(Icons.Outlined.Delete, contentDescription = "Delete") 
+                                Icon(Icons.Rounded.Delete, contentDescription = "Delete") 
                             }
                             Box {
                                 IconButton(onClick = { showMoreMenu = true }) {
-                                    Icon(Icons.Outlined.MoreVert, contentDescription = "More")
+                                    Icon(Icons.Rounded.MoreVert, contentDescription = "More")
                                 }
                                 androidx.compose.material3.DropdownMenu(
                                     expanded = showMoreMenu,
@@ -1263,7 +1263,7 @@ fun DetailScreen(
                                     if (currentItem != null) {
                                         androidx.compose.material3.DropdownMenuItem(
                                             text = { Text("Rename") },
-                                            leadingIcon = { Icon(Icons.Outlined.Edit, contentDescription = null) },
+                                            leadingIcon = { Icon(Icons.Rounded.Edit, contentDescription = null) },
                                             onClick = {
                                                 showMoreMenu = false
                                                 showRenameDialog = true
@@ -1273,7 +1273,7 @@ fun DetailScreen(
                                         if (isLocalFileMissing && currentItem.telegramFileId != null) {
                                             androidx.compose.material3.DropdownMenuItem(
                                                 text = { Text("Download to Device") },
-                                                leadingIcon = { Icon(Icons.Outlined.Cloud, contentDescription = null) },
+                                                leadingIcon = { Icon(Icons.Rounded.Cloud, contentDescription = null) },
                                                 onClick = {
                                                     showMoreMenu = false
                                                     android.widget.Toast.makeText(context, "Downloading...", android.widget.Toast.LENGTH_SHORT).show()
@@ -1285,7 +1285,7 @@ fun DetailScreen(
                                     if (currentItem != null && !currentItem.isVideo) {
                                         androidx.compose.material3.DropdownMenuItem(
                                             text = { Text("Set as Wallpaper") },
-                                            leadingIcon = { Icon(Icons.Filled.Wallpaper, contentDescription = null) },
+                                            leadingIcon = { Icon(Icons.Rounded.Wallpaper, contentDescription = null) },
                                             onClick = {
                                                 showMoreMenu = false
                                                 val intent = Intent(Intent.ACTION_ATTACH_DATA).apply {
@@ -1301,7 +1301,7 @@ fun DetailScreen(
                                     if (currentItem != null) {
                                         androidx.compose.material3.DropdownMenuItem(
                                             text = { Text("Hide") },
-                                            leadingIcon = { Icon(Icons.Outlined.VisibilityOff, contentDescription = null) },
+                                            leadingIcon = { Icon(Icons.Rounded.VisibilityOff, contentDescription = null) },
                                             onClick = {
                                                 showMoreMenu = false
                                                 val activity = context as? androidx.fragment.app.FragmentActivity
@@ -1451,7 +1451,7 @@ private fun CustomShareSheetContent(
                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             Icon(
-                                Icons.Outlined.Shield,
+                                Icons.Rounded.Security,
                                 contentDescription = null,
                                 modifier = Modifier.size(14.dp),
                                 tint = MaterialTheme.colorScheme.onTertiaryContainer
@@ -1510,7 +1510,7 @@ private fun CustomShareSheetContent(
                                     color = MaterialTheme.colorScheme.primary
                                 ) {
                                     Icon(
-                                        Icons.Filled.Check,
+                                        Icons.Rounded.Check,
                                         contentDescription = null,
                                         modifier = Modifier
                                             .padding(3.dp)
