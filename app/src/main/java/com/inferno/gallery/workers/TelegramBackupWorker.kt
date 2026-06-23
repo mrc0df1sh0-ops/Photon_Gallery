@@ -95,7 +95,23 @@ class TelegramBackupWorker(
         val botTokens = settings.telegramBotTokensFlow.first()
         val chatId = settings.telegramChatIdFlow.first()
         val stripLocation = settings.telegramStripLocationFlow.first()
+        val backupMode = settings.telegramBackupModeFlow.first()
 
+        // ── Userbot Mode ──
+        if (backupMode == "userbot") {
+            val userbotProvider = com.inferno.gallery.data.network.UserbotProvider.getInstance(applicationContext)
+            if (!userbotProvider.isAuthenticated()) {
+                Log.d(TAG, "Userbot not authenticated. Skipping backup.")
+                return@withContext Result.success()
+            }
+            val userbotChatId = settings.telegramUserbotChatIdFlow.first()
+            if (userbotChatId != 0L) {
+                userbotProvider.setTargetChatId(userbotChatId)
+            }
+            return@withContext doUserbotBackup(database, settings, userbotProvider, stripLocation)
+        }
+
+        // ── Bot API Mode ──
         if (botTokens.isEmpty() || chatId.isBlank()) {
             Log.d(TAG, "Telegram credentials missing.")
             return@withContext Result.success()
@@ -127,7 +143,7 @@ class TelegramBackupWorker(
         // Show foreground notification with progress
         val totalPending = pendingBackups.size
         val completedCount = java.util.concurrent.atomic.AtomicInteger(0)
-        setForeground(createForegroundInfo("Backing up 0/$totalPending photos…"))
+        setForeground(createForegroundInfo("Backing up 0/$totalPending media…"))
 
         // Thread-safe channel to distribute pending media tasks
         val channel = Channel<TelegramBackupEntity>(pendingBackups.size)
@@ -164,7 +180,7 @@ class TelegramBackupWorker(
                         continue
                     }
                     if (mediaEntity.isVideo) {
-                        Log.w(TAG, "Video backup not supported: ${mediaEntity.name}. Removing from queue.")
+                        Log.w(TAG, "Video backup requires Userbot mode: ${mediaEntity.name}. Removing from queue.")
                         backupDao.deleteBackup(backup.mediaId)
                         continue
                     }
@@ -241,7 +257,7 @@ class TelegramBackupWorker(
                         )
                         val done = completedCount.incrementAndGet()
                         Log.d(TAG, "Upload success for ${mediaEntity.name}. file_id: ${uploadResult.fileId} ($done/$totalPending)")
-                        setForeground(createForegroundInfo("Backing up $done/$totalPending photos…"))
+                        setForeground(createForegroundInfo("Backing up $done/$totalPending media…"))
 
                         // Periodic manifest sync every 10 uploads for crash protection
                         if (done % 10 == 0) {
@@ -374,5 +390,161 @@ class TelegramBackupWorker(
         }
 
         return@withContext Result.success()
+    }
+
+    /**
+     * Userbot backup path — uses TDLib MTProto, supports up to 2 GB per file.
+     * No rate limiting like Bot API, so we can upload faster without jitter delays.
+     */
+    private suspend fun doUserbotBackup(
+        database: com.inferno.gallery.data.db.GalleryDatabase,
+        settings: SettingsRepository,
+        provider: com.inferno.gallery.data.network.UserbotProvider,
+        stripLocation: Boolean
+    ): Result {
+        val backupDao = database.telegramBackupDao()
+        val mediaDao = database.mediaDao()
+
+        // Retry failed backups
+        val failedBackups = backupDao.getFailedBackups()
+        if (failedBackups.isNotEmpty()) {
+            Log.d(TAG, "Retrying ${failedBackups.size} previously failed backups.")
+            for (failed in failedBackups) {
+                backupDao.insertOrUpdate(failed.copy(backupStatus = "PENDING"))
+            }
+        }
+
+        val pendingBackups = backupDao.getPendingBackups()
+        if (pendingBackups.isEmpty()) {
+            Log.d(TAG, "No pending backups found.")
+            return Result.success()
+        }
+
+        val allMediaMap = mediaDao.getAllMedia().associateBy { it.id }
+        val totalPending = pendingBackups.size
+        var completedCount = 0
+        setForeground(createForegroundInfo("Backing up 0/$totalPending media…"))
+
+        for (backup in pendingBackups) {
+            if (isStopped) {
+                Log.d(TAG, "Worker stopped by OS.")
+                break
+            }
+
+            val currentBackup = backupDao.getBackupForMedia(backup.mediaId)
+            if (currentBackup == null || currentBackup.backupStatus != "PENDING") continue
+
+            val mediaEntity = allMediaMap[backup.mediaId]
+            if (mediaEntity == null) {
+                backupDao.deleteBackup(backup.mediaId)
+                continue
+            }
+
+            // Userbot supports up to 2 GB — mark files over the limit as TOO_LARGE
+            if (mediaEntity.size > provider.maxFileSizeBytes) {
+                Log.w(TAG, "Media item ${mediaEntity.name} exceeds 2 GB limit (${mediaEntity.size / (1024*1024)} MB). Marking as TOO_LARGE.")
+                backupDao.insertOrUpdate(
+                    TelegramBackupEntity(
+                        mediaId = mediaEntity.id,
+                        telegramFileId = null,
+                        telegramThumbFileId = null,
+                        backupStatus = "TOO_LARGE",
+                        backupTimestamp = System.currentTimeMillis()
+                    )
+                )
+                continue
+            }
+
+            val uri = android.net.Uri.parse(mediaEntity.uriString)
+            var tempFile: File? = null
+
+            try {
+                tempFile = File(applicationContext.cacheDir, "backup_${mediaEntity.id}_${mediaEntity.name}")
+
+                applicationContext.contentResolver.openInputStream(uri)?.use { inputStream ->
+                    tempFile.outputStream().use { outputStream ->
+                        inputStream.copyTo(outputStream)
+                    }
+                } ?: throw java.io.FileNotFoundException("Could not open input stream")
+
+                // Strip GPS if enabled
+                if (stripLocation && !mediaEntity.isVideo) {
+                    try {
+                        val exifInterface = androidx.exifinterface.media.ExifInterface(tempFile.absolutePath)
+                        val gpsAttributes = listOf(
+                            androidx.exifinterface.media.ExifInterface.TAG_GPS_LATITUDE,
+                            androidx.exifinterface.media.ExifInterface.TAG_GPS_LATITUDE_REF,
+                            androidx.exifinterface.media.ExifInterface.TAG_GPS_LONGITUDE,
+                            androidx.exifinterface.media.ExifInterface.TAG_GPS_LONGITUDE_REF,
+                            androidx.exifinterface.media.ExifInterface.TAG_GPS_ALTITUDE,
+                            androidx.exifinterface.media.ExifInterface.TAG_GPS_ALTITUDE_REF,
+                            androidx.exifinterface.media.ExifInterface.TAG_GPS_TIMESTAMP,
+                            androidx.exifinterface.media.ExifInterface.TAG_GPS_DATESTAMP,
+                            androidx.exifinterface.media.ExifInterface.TAG_GPS_PROCESSING_METHOD
+                        )
+                        for (attr in gpsAttributes) {
+                            exifInterface.setAttribute(attr, null)
+                        }
+                        exifInterface.saveAttributes()
+                    } catch (ex: Exception) {
+                        Log.e(TAG, "GPS stripping failed: ${ex.message}")
+                    }
+                }
+
+                // Upload via TDLib
+                val mimeType = mediaEntity.mimeType ?: if (mediaEntity.isVideo) "video/mp4" else "image/jpeg"
+                Log.d(TAG, "Uploading ${mediaEntity.name} via Userbot (${tempFile.length()} bytes)")
+
+                val uploadResult = provider.uploadFile(tempFile, mimeType)
+
+                backupDao.insertOrUpdate(
+                    TelegramBackupEntity(
+                        mediaId = mediaEntity.id,
+                        telegramFileId = uploadResult.fileId,
+                        telegramThumbFileId = uploadResult.thumbFileId,
+                        telegramMessageId = uploadResult.messageId,
+                        backupStatus = "SUCCESS",
+                        backupTimestamp = System.currentTimeMillis()
+                    )
+                )
+                completedCount++
+                Log.d(TAG, "Userbot upload success: ${mediaEntity.name} ($completedCount/$totalPending)")
+                setForeground(createForegroundInfo("Backing up $completedCount/$totalPending media…"))
+
+                // Small delay to avoid flooding, but MTProto doesn't have strict rate limits like Bot API
+                delay(1000L)
+
+            } catch (e: Exception) {
+                Log.e(TAG, "Userbot backup failed for ${mediaEntity.name}: ${e.message}", e)
+                backupDao.insertOrUpdate(
+                    TelegramBackupEntity(
+                        mediaId = mediaEntity.id,
+                        telegramFileId = null,
+                        telegramThumbFileId = null,
+                        backupStatus = "FAILED",
+                        backupTimestamp = System.currentTimeMillis()
+                    )
+                )
+            } finally {
+                tempFile?.let { if (it.exists()) it.delete() }
+            }
+        }
+
+        // Sync manifest after userbot backup completes
+        try {
+            val botTokens = settings.telegramBotTokensFlow.first()
+            if (botTokens.isNotEmpty()) {
+                val chatId = settings.telegramChatIdFlow.first()
+                if (chatId.isNotBlank()) {
+                    com.inferno.gallery.data.SyncManifestManager.updateManifest(
+                        applicationContext, botTokens.first(), chatId
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Post-userbot manifest sync failed (non-fatal): ${e.message}")
+        }
+
+        return Result.success()
     }
 }

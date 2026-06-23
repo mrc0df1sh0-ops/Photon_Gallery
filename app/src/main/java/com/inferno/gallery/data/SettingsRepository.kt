@@ -45,6 +45,8 @@ class SettingsRepository private constructor(private val context: Context) {
         val TELEGRAM_AUTO_BACKUP_FOLDERS = stringPreferencesKey("telegram_auto_backup_folders")
         val TELEGRAM_AUTO_BACKUP_WIFI_ONLY = booleanPreferencesKey("telegram_auto_backup_wifi_only")
         val TELEGRAM_AUTO_BACKUP_BATTERY_LOW_PAUSE = booleanPreferencesKey("telegram_auto_backup_battery_low_pause")
+        val TELEGRAM_BACKUP_MODE = stringPreferencesKey("telegram_backup_mode") // "bot" or "userbot"
+        val TELEGRAM_USERBOT_CHAT_ID = stringPreferencesKey("telegram_userbot_chat_id")
         val ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
         val STRIP_METADATA_ON_SHARE = booleanPreferencesKey("strip_metadata_on_share")
         val SMART_SEARCH_AUTO_INDEX = booleanPreferencesKey("smart_search_auto_index")
@@ -338,6 +340,30 @@ class SettingsRepository private constructor(private val context: Context) {
     suspend fun updateTelegramAutoBackupBatteryLowPause(pause: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[TELEGRAM_AUTO_BACKUP_BATTERY_LOW_PAUSE] = pause
+        }
+    }
+
+    // ── Backup Mode (bot / userbot) ──
+
+    val telegramBackupModeFlow: Flow<String> = context.dataStore.data
+        .map { preferences ->
+            preferences[TELEGRAM_BACKUP_MODE] ?: "bot"
+        }
+
+    suspend fun updateTelegramBackupMode(mode: String) {
+        context.dataStore.edit { preferences ->
+            preferences[TELEGRAM_BACKUP_MODE] = mode
+        }
+    }
+
+    val telegramUserbotChatIdFlow: Flow<Long> = context.dataStore.data
+        .map { preferences ->
+            preferences[TELEGRAM_USERBOT_CHAT_ID]?.toLongOrNull() ?: 0L
+        }
+
+    suspend fun updateTelegramUserbotChatId(chatId: Long) {
+        context.dataStore.edit { preferences ->
+            preferences[TELEGRAM_USERBOT_CHAT_ID] = chatId.toString()
         }
     }
 

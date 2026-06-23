@@ -10,12 +10,16 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+
 object SyncManifestManager {
     private const val TAG = "SyncManifestManager"
-    private const val MANIFEST_FILE_NAME = "sync_manifest.json"
+    private val manifestMutex = Mutex()
 
     suspend fun updateManifest(context: Context, botToken: String, chatId: String) {
-        val tempFile = File(context.cacheDir, MANIFEST_FILE_NAME)
+        manifestMutex.withLock {
+            val tempFile = java.io.File.createTempFile("sync_manifest_", ".json", context.cacheDir)
         try {
             val db = DatabaseProvider.getDatabase(context)
             val successfulBackups = db.telegramBackupDao().observeAllBackups().first()
@@ -34,6 +38,7 @@ object SyncManifestManager {
                     put("size", mediaItem?.size ?: 0L)
                     put("name", mediaItem?.name ?: "")
                     put("filePath", mediaItem?.filePath ?: "")
+                    put("isVideo", mediaItem?.isVideo ?: false)
                 }
                 jsonArray.put(obj)
             }
@@ -86,8 +91,28 @@ object SyncManifestManager {
         } finally {
             if (tempFile.exists()) tempFile.delete()
         }
+        }
     }
 
+    /**
+     * List of known video file extensions for reliable detection during restore.
+     */
+    private val VIDEO_EXTENSIONS = setOf(
+        ".mp4", ".webm", ".mkv", ".3gp", ".mov", ".avi", ".ts", ".flv", ".m4v"
+    )
+
+    private fun isVideoFile(name: String): Boolean {
+        val lower = name.lowercase()
+        return VIDEO_EXTENSIONS.any { lower.endsWith(it) }
+    }
+
+    /**
+     * Restore backup records from the pinned sync manifest in the Telegram chat.
+     * 
+     * IMPORTANT: This clears ALL existing backup records before restoring to prevent
+     * conflicts when the user switches bots, changes chat IDs, or re-syncs.
+     * The manifest is the single source of truth for what's backed up.
+     */
     suspend fun restoreFromManifest(context: Context, botToken: String, chatId: String): Boolean {
         try {
             val client = TelegramClient(botToken, chatId)
@@ -99,8 +124,15 @@ object SyncManifestManager {
             val jsonArray = JSONArray(manifestText)
             val db = DatabaseProvider.getDatabase(context)
             val localMedia = db.mediaDao().getAllMedia()
+            val backupDao = db.telegramBackupDao()
+
+            // Clear all existing backup records to prevent conflicts from
+            // previous bot/chat configurations. The manifest is the source of truth.
+            backupDao.clearAllBackups()
+            Log.d(TAG, "Cleared existing backup records before manifest restore.")
             
             var restoreCount = 0
+            var cloudOnlyCount = 0
             for (i in 0 until jsonArray.length()) {
                 val obj = jsonArray.getJSONObject(i)
                 val fileIdVal = obj.getString("fileId")
@@ -110,6 +142,8 @@ object SyncManifestManager {
                 val sizeVal = obj.optLong("size", 0L)
                 val nameVal = obj.optString("name", "")
                 val filePathVal = obj.optString("filePath", "")
+                // Use isVideo from manifest if present, otherwise detect from file extension
+                val isVideoVal = if (obj.has("isVideo")) obj.getBoolean("isVideo") else isVideoFile(nameVal)
                 
                 // Match priority:
                 // 1. Same filePath
@@ -118,7 +152,15 @@ object SyncManifestManager {
                     ?: localMedia.firstOrNull { it.name == nameVal && it.size == sizeVal }
                 
                 if (matchedMedia == null) {
-                        val newMedia = com.inferno.gallery.data.db.CoreMediaEntity(
+                    // Cloud-only item — create a placeholder in core_media
+                    val mimeType = when {
+                        isVideoVal -> "video/mp4"
+                        nameVal.endsWith(".png", true) -> "image/png"
+                        nameVal.endsWith(".gif", true) -> "image/gif"
+                        nameVal.endsWith(".webp", true) -> "image/webp"
+                        else -> "image/jpeg"
+                    }
+                    val newMedia = com.inferno.gallery.data.db.CoreMediaEntity(
                         id = -(timestampVal + i), // Negative ID avoids collision with real MediaStore IDs
                         uriString = "telegram://$fileIdVal",
                         filePath = filePathVal,
@@ -127,16 +169,17 @@ object SyncManifestManager {
                         dateModified = timestampVal / 1000,
                         size = sizeVal,
                         name = nameVal,
-                        isVideo = nameVal.endsWith(".mp4", true) || nameVal.endsWith(".webm", true),
+                        isVideo = isVideoVal,
                         durationMs = null,
-                        mimeType = if (nameVal.endsWith(".mp4", true) || nameVal.endsWith(".webm", true)) "video/mp4" else "image/jpeg"
+                        mimeType = mimeType
                     )
                     db.mediaDao().insertAll(listOf(newMedia))
                     matchedMedia = newMedia
+                    cloudOnlyCount++
                 }
 
                 if (matchedMedia != null) {
-                    db.telegramBackupDao().insertOrUpdate(
+                    backupDao.insertOrUpdate(
                         TelegramBackupEntity(
                             mediaId = matchedMedia.id,
                             telegramFileId = fileIdVal,
@@ -149,7 +192,7 @@ object SyncManifestManager {
                     restoreCount++
                 }
             }
-            Log.i(TAG, "Restored $restoreCount backup records from Telegram sync manifest.")
+            Log.i(TAG, "Restored $restoreCount backup records ($cloudOnlyCount cloud-only) from Telegram sync manifest.")
             return restoreCount > 0
         } catch (e: Exception) {
             Log.e(TAG, "Error restoring from sync manifest: ${e.message}", e)

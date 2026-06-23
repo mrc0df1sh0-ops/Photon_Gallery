@@ -37,54 +37,19 @@ class MediaSyncWorker(
                 val dbItem = dbMap[media.id]
                 val needsUpdate = dbItem == null || 
                                   dbItem.bucketName != media.bucketName || 
-                                  dbItem.dateModified != media.dateModified ||
-                                  (!media.isVideo && dbItem.pHash == null) ||
-                                  dbItem.fileHash == null
+                                  dbItem.dateModified != media.dateModified
 
                 if (needsUpdate) {
-                    var pHash = dbItem?.pHash
-                    var lat = dbItem?.latitude
-                    var lon = dbItem?.longitude
-                    var fileHash = dbItem?.fileHash
-
-                    val file = if (media.path.isNotEmpty()) java.io.File(media.path) else null
-
-                    // Compute fileHash (MD5) for all files if missing
-                    if (fileHash == null && file != null && file.exists()) {
-                        try {
-                            fileHash = com.inferno.gallery.utils.HashUtils.computeFileHash(file)
-                        } catch (e: Exception) {
-                            Log.e("MediaSyncWorker", "Error computing fileHash for ${media.id}: ${e.message}")
-                        }
-                    }
-
-                    // Compute pHash (dHash) and GPS for images if missing
-                    if (!media.isVideo && pHash == null) {
-                        try {
-                            if (file != null && file.exists()) {
-                                val exif = androidx.exifinterface.media.ExifInterface(media.path)
-                                val latLong = exif.latLong
-                                if (latLong != null) {
-                                    lat = latLong[0]
-                                    lon = latLong[1]
-                                }
-                            }
-                            val thumbnail = applicationContext.contentResolver.loadThumbnail(
-                                media.uri, android.util.Size(128, 128), null
-                            )
-                            pHash = com.inferno.gallery.utils.HashUtils.generatePerceptualHash(thumbnail)
-                        } catch (e: Exception) {
-                            Log.e("MediaSyncWorker", "Error extracting metadata for ${media.id}: ${e.message}")
-                        }
-                    }
-
                     toInsert.add(
                         CoreMediaEntity(
                             id = media.id,
                             uriString = media.uri.toString(),
                             filePath = media.path,
                             bucketName = media.bucketName,
-                            dateAdded = media.dateAdded,
+                            // Preserve the original dateAdded from Room if it exists
+                            // (e.g., vault unhide pre-inserts with the original date,
+                            // but MediaStore gives a new DATE_ADDED = today)
+                            dateAdded = dbItem?.dateAdded ?: media.dateAdded,
                             dateModified = media.dateModified,
                             size = media.size,
                             name = media.name,
@@ -92,10 +57,11 @@ class MediaSyncWorker(
                             isVideo = media.isVideo,
                             durationMs = media.durationMs,
                             isIndexedOcr = dbItem?.isIndexedOcr ?: false,
-                            pHash = pHash,
-                            latitude = lat,
-                            longitude = lon,
-                            fileHash = fileHash
+                            // Preserve existing hashes/GPS if present (don't overwrite)
+                            pHash = dbItem?.pHash,
+                            latitude = dbItem?.latitude,
+                            longitude = dbItem?.longitude,
+                            fileHash = dbItem?.fileHash
                         )
                     )
                 }
@@ -117,42 +83,53 @@ class MediaSyncWorker(
                 val autoBackupEnabled = settingsRepo.telegramBackupEnabledFlow.first()
                 if (autoBackupEnabled) {
                     val autoBackupFolders = settingsRepo.telegramAutoBackupFoldersFlow.first()
-                    val toBackup = toInsert.filter { autoBackupFolders.contains(it.bucketName) && !it.isVideo }
-                    if (toBackup.isNotEmpty()) {
-                        Log.d("MediaSyncWorker", "Auto-queueing ${toBackup.size} items for backup...")
+                    val backupMode = settingsRepo.telegramBackupModeFlow.first()
+                        // Userbot mode supports video upload (up to 2 GB); Bot API mode is photos only
+                        val toBackup = toInsert.filter { item ->
+                            autoBackupFolders.contains(item.bucketName) &&
+                                    (backupMode == "userbot" || !item.isVideo)
+                        }
+                        
                         val backupDao = database.telegramBackupDao()
-                        for (item in toBackup) {
-                            backupDao.insertOrUpdate(
-                                com.inferno.gallery.data.db.TelegramBackupEntity(
-                                    mediaId = item.id,
-                                    telegramFileId = null,
-                                    telegramThumbFileId = null,
-                                    telegramMessageId = null,
-                                    backupStatus = "PENDING",
-                                    backupTimestamp = System.currentTimeMillis()
+                        if (toBackup.isNotEmpty()) {
+                            Log.d("MediaSyncWorker", "Auto-queueing ${toBackup.size} items for backup...")
+                            for (item in toBackup) {
+                                backupDao.insertOrUpdate(
+                                    com.inferno.gallery.data.db.TelegramBackupEntity(
+                                        mediaId = item.id,
+                                        telegramFileId = null,
+                                        telegramThumbFileId = null,
+                                        telegramMessageId = null,
+                                        backupStatus = "PENDING",
+                                        backupTimestamp = System.currentTimeMillis()
+                                    )
                                 )
-                            )
+                            }
                         }
 
-                        val wifiOnly = settingsRepo.telegramAutoBackupWifiOnlyFlow.first()
-                        val constraints = androidx.work.Constraints.Builder().apply {
-                            if (wifiOnly) {
-                                setRequiredNetworkType(androidx.work.NetworkType.UNMETERED)
-                            } else {
-                                setRequiredNetworkType(androidx.work.NetworkType.CONNECTED)
-                            }
-                        }.build()
+                        // Always check if there are ANY pending backups to resume
+                        val pendingCount = backupDao.getPendingBackups().size
+                        if (pendingCount > 0) {
+                            Log.d("MediaSyncWorker", "Resuming backup for $pendingCount pending items.")
+                            val wifiOnly = settingsRepo.telegramAutoBackupWifiOnlyFlow.first()
+                            val constraints = androidx.work.Constraints.Builder().apply {
+                                if (wifiOnly) {
+                                    setRequiredNetworkType(androidx.work.NetworkType.UNMETERED)
+                                } else {
+                                    setRequiredNetworkType(androidx.work.NetworkType.CONNECTED)
+                                }
+                            }.build()
 
-                        val backupRequest = androidx.work.OneTimeWorkRequestBuilder<TelegramBackupWorker>()
-                            .setConstraints(constraints)
-                            .build()
+                            val backupRequest = androidx.work.OneTimeWorkRequestBuilder<TelegramBackupWorker>()
+                                .setConstraints(constraints)
+                                .build()
 
-                        androidx.work.WorkManager.getInstance(applicationContext).enqueueUniqueWork(
-                            "TelegramBackupWorker",
-                            androidx.work.ExistingWorkPolicy.KEEP,
-                            backupRequest
-                        )
-                    }
+                            androidx.work.WorkManager.getInstance(applicationContext).enqueueUniqueWork(
+                                "TelegramBackupWorker",
+                                androidx.work.ExistingWorkPolicy.KEEP,
+                                backupRequest
+                            )
+                        }
                 }
 
                 // Trigger Smart Search auto-indexing if enabled and model is downloaded

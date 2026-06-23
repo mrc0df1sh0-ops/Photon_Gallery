@@ -23,6 +23,9 @@ interface TelegramBackupDao {
     @Query("DELETE FROM telegram_backups WHERE mediaId = :mediaId")
     suspend fun deleteBackup(mediaId: Long)
 
+    @Query("UPDATE telegram_backups SET backupStatus = 'EXCLUDED' WHERE mediaId = :mediaId")
+    suspend fun markBackupExcluded(mediaId: Long)
+
     @Query("SELECT mediaId FROM telegram_backups WHERE backupStatus = 'SUCCESS'")
     suspend fun getSuccessfulBackupIds(): List<Long>
 
@@ -55,6 +58,9 @@ interface TelegramBackupDao {
 
     @Query("UPDATE telegram_backups SET backupStatus = 'PENDING' WHERE backupStatus = 'FAILED'")
     suspend fun retryAllFailedBackups()
+
+    @Query("DELETE FROM telegram_backups")
+    suspend fun clearAllBackups()
 }
 
 data class CloudMediaItem(

@@ -1,15 +1,16 @@
 package com.inferno.gallery.ui
 
-import androidx.compose.material.icons.outlined.Cloud
-import androidx.compose.material.icons.outlined.Shield
-import androidx.compose.material.icons.outlined.FolderOff
-import androidx.compose.material.icons.outlined.VisibilityOff
-import androidx.compose.material.icons.outlined.Visibility
-import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.material.icons.rounded.Cloud
+import androidx.compose.material.icons.rounded.Security
+import androidx.compose.material.icons.rounded.FolderOff
+import androidx.compose.material.icons.rounded.VisibilityOff
+import androidx.compose.material.icons.rounded.Visibility
+import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.ui.draw.alpha
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.launch
-import androidx.compose.material.icons.outlined.HelpOutline
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.material.icons.rounded.HelpOutline
 import com.inferno.gallery.ui.ConnectionTestResult
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,23 +22,29 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.heightIn
 
-import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material.icons.outlined.BrightnessAuto
-import androidx.compose.material.icons.outlined.LightMode
-import androidx.compose.material.icons.outlined.DarkMode
-import androidx.compose.material.icons.outlined.Palette
-import androidx.compose.material.icons.outlined.Contrast
-import androidx.compose.material.icons.outlined.Fullscreen
-import androidx.compose.material.icons.outlined.PlayCircleOutline
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.outlined.Menu
-import androidx.compose.material.icons.outlined.SmartToy
-import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material.icons.outlined.Face
-import androidx.compose.material.icons.outlined.Image
-import androidx.compose.material.icons.outlined.Check
-import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.BrightnessAuto
+import androidx.compose.material.icons.rounded.LightMode
+import androidx.compose.material.icons.rounded.DarkMode
+import androidx.compose.material.icons.rounded.Palette
+import androidx.compose.material.icons.rounded.Contrast
+import androidx.compose.material.icons.rounded.Fullscreen
+import androidx.compose.material.icons.rounded.PlayCircleOutline
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Menu
+import androidx.compose.material.icons.rounded.SmartToy
+import androidx.compose.material.icons.rounded.AccountCircle
+import androidx.compose.material.icons.rounded.SwapHoriz
+import androidx.compose.material.icons.rounded.Warning
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Face
+import androidx.compose.material.icons.rounded.Image
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
@@ -81,15 +88,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.material.icons.outlined.PrivacyTip
-import androidx.compose.material.icons.outlined.AutoAwesome
-import androidx.compose.material.icons.outlined.Link
-import androidx.compose.material.icons.outlined.BrightnessHigh
+import androidx.compose.material.icons.rounded.PrivacyTip
+import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.Link
+import androidx.compose.material.icons.rounded.BrightnessHigh
 import androidx.compose.material3.Slider
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
-import androidx.compose.material.icons.automirrored.outlined.ArrowForward
+import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import com.inferno.gallery.ui.DetectedChatsResult
 import androidx.compose.material3.TextButton
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -106,23 +113,23 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.inferno.gallery.ui.ThemeMode
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material.icons.automirrored.outlined.Send
-import androidx.compose.material.icons.outlined.Lock
-import androidx.compose.material.icons.outlined.Folder
-import androidx.compose.material.icons.outlined.Wifi
-import androidx.compose.material.icons.outlined.BatteryChargingFull
-import androidx.compose.material.icons.outlined.ExpandLess
-import androidx.compose.material.icons.outlined.ExpandMore
-import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material.icons.outlined.Shield
-import androidx.compose.material.icons.outlined.Update
-import androidx.compose.material.icons.outlined.Description
-import androidx.compose.material.icons.outlined.Tune
-import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material.icons.automirrored.outlined.VolumeUp
-import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.rounded.Visibility
+import androidx.compose.material.icons.rounded.VisibilityOff
+import androidx.compose.material.icons.automirrored.rounded.Send
+import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.Folder
+import androidx.compose.material.icons.rounded.Wifi
+import androidx.compose.material.icons.rounded.BatteryChargingFull
+import androidx.compose.material.icons.rounded.ExpandLess
+import androidx.compose.material.icons.rounded.ExpandMore
+import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.Security
+import androidx.compose.material.icons.rounded.Update
+import androidx.compose.material.icons.rounded.Description
+import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.automirrored.rounded.VolumeUp
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.animation.core.animateFloatAsState
@@ -142,6 +149,7 @@ fun SettingsScreen(
     galleryViewModel: GalleryViewModel = viewModel(),
     onBackClick: () -> Unit = {},
     onNavigateToVault: () -> Unit = {},
+    onNavigateToUserbotSetup: () -> Unit = {},
     activeSection: String? = null,
     onActiveSectionChange: (String?) -> Unit = {}
 ) {
@@ -164,6 +172,7 @@ fun SettingsScreen(
     val cacheThumbnailsEnabled by viewModel.cacheThumbnailsEnabled.collectAsState()
     val maxBrightnessEnabled by viewModel.maxBrightnessEnabled.collectAsState()
     val context = androidx.compose.ui.platform.LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     
     val savedTokens by viewModel.telegramBotTokens.collectAsState()
     val savedChatId by viewModel.telegramChatId.collectAsState()
@@ -191,6 +200,17 @@ fun SettingsScreen(
     var showClearIndexConfirm by remember { mutableStateOf(false) }
     var showDeleteModelConfirm by remember { mutableStateOf(false) }
     var showLicensesDialog by remember { mutableStateOf(false) }
+    var showResetBackupDialog by remember { mutableStateOf(false) }
+
+    // Backup mode state (hoisted for dialog access)
+    val settingsRepo = remember { com.inferno.gallery.data.SettingsRepository.getInstance(context) }
+    var backupMode by remember { mutableStateOf("bot") }
+    LaunchedEffect(Unit) {
+        settingsRepo.telegramBackupModeFlow.collect { mode ->
+            backupMode = mode
+        }
+    }
+    val userbotProvider = remember { com.inferno.gallery.data.network.UserbotProvider.getInstance(context) }
 
     val isCurrentlyDark = when (themeMode) {
         ThemeMode.SYSTEM -> isSystemDark
@@ -281,6 +301,53 @@ fun SettingsScreen(
         )
     }
 
+    // Reset backup method dialog
+    if (showResetBackupDialog) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showResetBackupDialog = false },
+            title = { Text("Reset Backup Method?", fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    "This will:\n\n" +
+                    "\u2022 Clear all backup records from the database\n" +
+                    "\u2022 Files already uploaded to Telegram will remain there\n" +
+                    "\u2022 You'll need to set up the new method from scratch\n\n" +
+                    "This cannot be undone."
+                )
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(
+                    onClick = {
+                        showResetBackupDialog = false
+                        coroutineScope.launch {
+                            val db = com.inferno.gallery.data.db.DatabaseProvider.getDatabase(context)
+                            db.telegramBackupDao().clearAllBackups()
+                            val newMode = if (backupMode == "bot") "userbot" else "bot"
+                            settingsRepo.updateTelegramBackupMode(newMode)
+                            if (backupMode == "bot") {
+                                settingsRepo.updateTelegramBotToken("")
+                                settingsRepo.updateTelegramBotTokens(emptyList())
+                                settingsRepo.updateTelegramChatId("")
+                                settingsRepo.updateTelegramBackupEnabled(false)
+                            }
+                            if (backupMode == "userbot") {
+                                userbotProvider.logout()
+                                settingsRepo.updateTelegramUserbotChatId(0L)
+                            }
+                        }
+                    }
+                ) {
+                    Text("Reset & Switch", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { showResetBackupDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
     androidx.activity.compose.BackHandler(enabled = activeSection != null) {
         onActiveSectionChange(null)
     }
@@ -320,43 +387,43 @@ fun SettingsScreen(
                         CategoryCard(
                             title = "Look \u0026 Feel",
                             subtitle = "Theme, colors, and display preferences",
-                            icon = Icons.Outlined.Palette,
+                            icon = Icons.Rounded.Palette,
                             onClick = { onActiveSectionChange("Look \u0026 Feel") }
                         )
                         CategoryCard(
                             title = "Layout \u0026 Navigation",
                             subtitle = "Grid size, dock style, and shapes",
-                            icon = Icons.Outlined.Tune,
+                            icon = Icons.Rounded.Tune,
                             onClick = { onActiveSectionChange("Layout \u0026 Navigation") }
                         )
                         CategoryCard(
                             title = "General",
                             subtitle = "Full screen, brightness, and performance",
-                            icon = Icons.Outlined.Settings,
+                            icon = Icons.Rounded.Settings,
                             onClick = { onActiveSectionChange("General") }
                         )
                         CategoryCard(
                             title = "Smart Search \u0026 OCR",
                             subtitle = "AI-powered search and text recognition",
-                            icon = Icons.Outlined.AutoAwesome,
+                            icon = Icons.Rounded.AutoAwesome,
                             onClick = { onActiveSectionChange("Smart Search \u0026 OCR") }
                         )
                         CategoryCard(
                             title = "Cloud Backup",
                             subtitle = "Telegram cloud and backup options",
-                            icon = Icons.Outlined.Cloud,
+                            icon = Icons.Rounded.Cloud,
                             onClick = { onActiveSectionChange("Cloud Backup") }
                         )
                         CategoryCard(
                             title = "Privacy \u0026 Security",
                             subtitle = "Metadata stripping, deletion, and data control",
-                            icon = Icons.Outlined.Shield,
+                            icon = Icons.Rounded.Security,
                             onClick = { onActiveSectionChange("Privacy \u0026 Security") }
                         )
                         CategoryCard(
                             title = "Private Space",
                             subtitle = "Hidden photos protected with biometric lock",
-                            icon = Icons.Outlined.Lock,
+                            icon = Icons.Rounded.Lock,
                             onClick = {
                                 val activity = context as? androidx.fragment.app.FragmentActivity
                                 if (activity != null) {
@@ -371,13 +438,13 @@ fun SettingsScreen(
                         CategoryCard(
                             title = "Excluded Folders",
                             subtitle = "Hide folders from the main gallery",
-                            icon = Icons.Outlined.FolderOff,
+                            icon = Icons.Rounded.FolderOff,
                             onClick = { onActiveSectionChange("Excluded Folders") }
                         )
                         CategoryCard(
                             title = "About",
                             subtitle = "App information, updates, and licenses",
-                            icon = Icons.Outlined.Info,
+                            icon = Icons.Rounded.Info,
                             onClick = { onActiveSectionChange("About") }
                         )
                     }
@@ -393,7 +460,7 @@ fun SettingsScreen(
                             "General" -> {
                                 SettingsGroup(title = "Display Preferences") {
                                     ListItem(
-                                        leadingContent = { Icon(Icons.Outlined.Fullscreen, contentDescription = null) },
+                                        leadingContent = { Icon(Icons.Rounded.Fullscreen, contentDescription = null) },
                                         headlineContent = { Text("Full Screen Mode") },
                                         supportingContent = { Text("Hide status bar and navigation bar to maximize content area") },
                                         trailingContent = {
@@ -402,7 +469,7 @@ fun SettingsScreen(
                                                 onCheckedChange = { viewModel.setUseFullScreen(it) },
                                                 thumbContent = {
                                                     Icon(
-                                                        imageVector = if (useFullScreen) Icons.Outlined.Check else Icons.Outlined.Close,
+                                                        imageVector = if (useFullScreen) Icons.Rounded.Check else Icons.Rounded.Close,
                                                         contentDescription = null,
                                                         modifier = Modifier.size(SwitchDefaults.IconSize)
                                                     )
@@ -415,7 +482,7 @@ fun SettingsScreen(
                                     HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
 
                                     ListItem(
-                                        leadingContent = { Icon(Icons.Outlined.BrightnessHigh, contentDescription = null) },
+                                        leadingContent = { Icon(Icons.Rounded.BrightnessHigh, contentDescription = null) },
                                         headlineContent = { Text("Maximize Fullscreen Brightness") },
                                         supportingContent = { Text("Temporarily maximize screen brightness when viewing media in full screen") },
                                         trailingContent = {
@@ -424,7 +491,7 @@ fun SettingsScreen(
                                                 onCheckedChange = { viewModel.setMaxBrightnessEnabled(it) },
                                                 thumbContent = {
                                                     Icon(
-                                                        imageVector = if (maxBrightnessEnabled) Icons.Outlined.Check else Icons.Outlined.Close,
+                                                        imageVector = if (maxBrightnessEnabled) Icons.Rounded.Check else Icons.Rounded.Close,
                                                         contentDescription = null,
                                                         modifier = Modifier.size(SwitchDefaults.IconSize)
                                                     )
@@ -438,7 +505,7 @@ fun SettingsScreen(
                                 SettingsGroup(title = "Recycle Bin & Deletion") {
                                     val confirmDelete by viewModel.confirmDeleteEnabled.collectAsState()
                                     ListItem(
-                                        leadingContent = { Icon(Icons.Outlined.Delete, contentDescription = null) },
+                                        leadingContent = { Icon(Icons.Rounded.Delete, contentDescription = null) },
                                         headlineContent = { Text("Confirm Deletion") },
                                         supportingContent = { Text("Show confirmation dialog when moving media to recycle bin") },
                                         trailingContent = {
@@ -447,7 +514,7 @@ fun SettingsScreen(
                                                 onCheckedChange = { viewModel.setConfirmDeleteEnabled(it) },
                                                 thumbContent = {
                                                     Icon(
-                                                        imageVector = if (confirmDelete) Icons.Outlined.Check else Icons.Outlined.Close,
+                                                        imageVector = if (confirmDelete) Icons.Rounded.Check else Icons.Rounded.Close,
                                                         contentDescription = null,
                                                         modifier = Modifier.size(SwitchDefaults.IconSize)
                                                     )
@@ -461,7 +528,7 @@ fun SettingsScreen(
 
                                     val autoCleanTrash by viewModel.autoCleanTrashEnabled.collectAsState()
                                     ListItem(
-                                        leadingContent = { Icon(Icons.Outlined.Delete, contentDescription = null) },
+                                        leadingContent = { Icon(Icons.Rounded.Delete, contentDescription = null) },
                                         headlineContent = { Text("Auto-clean Recycle Bin") },
                                         supportingContent = { Text("Automatically delete old items in the recycle bin") },
                                         trailingContent = {
@@ -470,7 +537,7 @@ fun SettingsScreen(
                                                 onCheckedChange = { viewModel.setAutoCleanTrashEnabled(it) },
                                                 thumbContent = {
                                                     Icon(
-                                                        imageVector = if (autoCleanTrash) Icons.Outlined.Check else Icons.Outlined.Close,
+                                                        imageVector = if (autoCleanTrash) Icons.Rounded.Check else Icons.Rounded.Close,
                                                         contentDescription = null,
                                                         modifier = Modifier.size(SwitchDefaults.IconSize)
                                                     )
@@ -514,7 +581,7 @@ fun SettingsScreen(
 
                                 SettingsGroup(title = "Performance") {
                                     ListItem(
-                                        leadingContent = { Icon(Icons.Outlined.Tune, contentDescription = null) },
+                                        leadingContent = { Icon(Icons.Rounded.Tune, contentDescription = null) },
                                         headlineContent = { Text("Cache Grid Thumbnails") },
                                         supportingContent = { Text("Pre-cache grid thumbnails for instant, super-smooth scrolling (uses device storage)") },
                                         trailingContent = {
@@ -523,7 +590,7 @@ fun SettingsScreen(
                                                 onCheckedChange = { viewModel.setCacheThumbnailsEnabled(it) },
                                                 thumbContent = {
                                                     Icon(
-                                                        imageVector = if (cacheThumbnailsEnabled) Icons.Outlined.Check else Icons.Outlined.Close,
+                                                        imageVector = if (cacheThumbnailsEnabled) Icons.Rounded.Check else Icons.Rounded.Close,
                                                         contentDescription = null,
                                                         modifier = Modifier.size(SwitchDefaults.IconSize)
                                                     )
@@ -537,7 +604,7 @@ fun SettingsScreen(
                             "Privacy & Security" -> {
                                 SettingsGroup(title = "Metadata Privacy") {
                                     ListItem(
-                                        leadingContent = { Icon(Icons.Outlined.PrivacyTip, contentDescription = null) },
+                                        leadingContent = { Icon(Icons.Rounded.PrivacyTip, contentDescription = null) },
                                         headlineContent = { Text("Strip Metadata Before Sharing") },
                                         supportingContent = { Text("Remove GPS, camera specifications, timestamps, timezone offsets, and author/attribution details when sharing") },
                                         trailingContent = {
@@ -546,7 +613,7 @@ fun SettingsScreen(
                                                 onCheckedChange = { viewModel.setStripMetadataOnShare(it) },
                                                 thumbContent = {
                                                     Icon(
-                                                        imageVector = if (stripMetadataOnShare) Icons.Outlined.Check else Icons.Outlined.Close,
+                                                        imageVector = if (stripMetadataOnShare) Icons.Rounded.Check else Icons.Rounded.Close,
                                                         contentDescription = null,
                                                         modifier = Modifier.size(SwitchDefaults.IconSize)
                                                     )
@@ -559,7 +626,7 @@ fun SettingsScreen(
                                     HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
 
                                     ListItem(
-                                        leadingContent = { Icon(Icons.Outlined.Lock, contentDescription = null) },
+                                        leadingContent = { Icon(Icons.Rounded.Lock, contentDescription = null) },
                                         headlineContent = { Text("Strip Location on Backup") },
                                         supportingContent = { Text("Remove GPS coordinates from images before uploading to Telegram Cloud") },
                                         trailingContent = {
@@ -568,7 +635,7 @@ fun SettingsScreen(
                                                 onCheckedChange = { viewModel.setTelegramStripLocation(it) },
                                                 thumbContent = {
                                                     Icon(
-                                                        imageVector = if (stripLocation) Icons.Outlined.Check else Icons.Outlined.Close,
+                                                        imageVector = if (stripLocation) Icons.Rounded.Check else Icons.Rounded.Close,
                                                         contentDescription = null,
                                                         modifier = Modifier.size(SwitchDefaults.IconSize)
                                                     )
@@ -582,7 +649,7 @@ fun SettingsScreen(
                                 SettingsGroup(title = "Recycle Bin & Deletion") {
                                     val confirmDelete by viewModel.confirmDeleteEnabled.collectAsState()
                                     ListItem(
-                                        leadingContent = { Icon(Icons.Outlined.Delete, contentDescription = null) },
+                                        leadingContent = { Icon(Icons.Rounded.Delete, contentDescription = null) },
                                         headlineContent = { Text("Confirm Deletion") },
                                         supportingContent = { Text("Show confirmation dialog when moving media to recycle bin") },
                                         trailingContent = {
@@ -591,7 +658,7 @@ fun SettingsScreen(
                                                 onCheckedChange = { viewModel.setConfirmDeleteEnabled(it) },
                                                 thumbContent = {
                                                     Icon(
-                                                        imageVector = if (confirmDelete) Icons.Outlined.Check else Icons.Outlined.Close,
+                                                        imageVector = if (confirmDelete) Icons.Rounded.Check else Icons.Rounded.Close,
                                                         contentDescription = null,
                                                         modifier = Modifier.size(SwitchDefaults.IconSize)
                                                     )
@@ -605,7 +672,7 @@ fun SettingsScreen(
 
                                     val autoCleanTrash by viewModel.autoCleanTrashEnabled.collectAsState()
                                     ListItem(
-                                        leadingContent = { Icon(Icons.Outlined.Delete, contentDescription = null) },
+                                        leadingContent = { Icon(Icons.Rounded.Delete, contentDescription = null) },
                                         headlineContent = { Text("Auto-clean Recycle Bin") },
                                         supportingContent = { Text("Automatically delete old items in the recycle bin") },
                                         trailingContent = {
@@ -614,7 +681,7 @@ fun SettingsScreen(
                                                 onCheckedChange = { viewModel.setAutoCleanTrashEnabled(it) },
                                                 thumbContent = {
                                                     Icon(
-                                                        imageVector = if (autoCleanTrash) Icons.Outlined.Check else Icons.Outlined.Close,
+                                                        imageVector = if (autoCleanTrash) Icons.Rounded.Check else Icons.Rounded.Close,
                                                         contentDescription = null,
                                                         modifier = Modifier.size(SwitchDefaults.IconSize)
                                                     )
@@ -666,21 +733,21 @@ fun SettingsScreen(
                                                 shape = SegmentedButtonDefaults.itemShape(index = 0, count = 3),
                                                 onClick = { viewModel.setThemeMode(ThemeMode.SYSTEM) },
                                                 selected = themeMode == ThemeMode.SYSTEM,
-                                                icon = { Icon(Icons.Outlined.BrightnessAuto, contentDescription = null) },
+                                                icon = { Icon(Icons.Rounded.BrightnessAuto, contentDescription = null) },
                                                 label = { Text("System", style = MaterialTheme.typography.labelMedium) }
                                             )
                                             SegmentedButton(
                                                 shape = SegmentedButtonDefaults.itemShape(index = 1, count = 3),
                                                 onClick = { viewModel.setThemeMode(ThemeMode.LIGHT) },
                                                 selected = themeMode == ThemeMode.LIGHT,
-                                                icon = { Icon(Icons.Outlined.LightMode, contentDescription = null) },
+                                                icon = { Icon(Icons.Rounded.LightMode, contentDescription = null) },
                                                 label = { Text("Light", style = MaterialTheme.typography.labelMedium) }
                                             )
                                             SegmentedButton(
                                                 shape = SegmentedButtonDefaults.itemShape(index = 2, count = 3),
                                                 onClick = { viewModel.setThemeMode(ThemeMode.DARK) },
                                                 selected = themeMode == ThemeMode.DARK,
-                                                icon = { Icon(Icons.Outlined.DarkMode, contentDescription = null) },
+                                                icon = { Icon(Icons.Rounded.DarkMode, contentDescription = null) },
                                                 label = { Text("Dark", style = MaterialTheme.typography.labelMedium) }
                                             )
                                         }
@@ -689,7 +756,7 @@ fun SettingsScreen(
                                     HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
 
                                     ListItem(
-                                        leadingContent = { Icon(Icons.Outlined.Palette, contentDescription = null) },
+                                        leadingContent = { Icon(Icons.Rounded.Palette, contentDescription = null) },
                                         headlineContent = { Text("Material You") },
                                         supportingContent = { Text("Use dynamic system colors") },
                                         trailingContent = {
@@ -698,7 +765,7 @@ fun SettingsScreen(
                                                 onCheckedChange = { viewModel.setUseMaterialYou(it) },
                                                 thumbContent = {
                                                     Icon(
-                                                        imageVector = if (useMaterialYou) Icons.Outlined.Check else Icons.Outlined.Close,
+                                                        imageVector = if (useMaterialYou) Icons.Rounded.Check else Icons.Rounded.Close,
                                                         contentDescription = null,
                                                         modifier = Modifier.size(SwitchDefaults.IconSize)
                                                     )
@@ -711,7 +778,7 @@ fun SettingsScreen(
                                     HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
 
                                     ListItem(
-                                        leadingContent = { Icon(Icons.Outlined.Contrast, contentDescription = null) },
+                                        leadingContent = { Icon(Icons.Rounded.Contrast, contentDescription = null) },
                                         headlineContent = { Text("AMOLED Black") },
                                         supportingContent = { Text("Use pitch black background in dark mode") },
                                         trailingContent = {
@@ -721,7 +788,7 @@ fun SettingsScreen(
                                                 enabled = isCurrentlyDark,
                                                 thumbContent = {
                                                     Icon(
-                                                        imageVector = if (useAmoledBlack) Icons.Outlined.Check else Icons.Outlined.Close,
+                                                        imageVector = if (useAmoledBlack) Icons.Rounded.Check else Icons.Rounded.Close,
                                                         contentDescription = null,
                                                         modifier = Modifier.size(SwitchDefaults.IconSize)
                                                     )
@@ -734,7 +801,7 @@ fun SettingsScreen(
 
                                 SettingsGroup(title = "Media Playback") {
                                     ListItem(
-                                        leadingContent = { Icon(Icons.Outlined.PlayCircleOutline, contentDescription = null) },
+                                        leadingContent = { Icon(Icons.Rounded.PlayCircleOutline, contentDescription = null) },
                                         headlineContent = { Text("Auto-Play Media") },
                                         supportingContent = { Text("Play GIFs and videos in grid") },
                                         trailingContent = {
@@ -743,7 +810,7 @@ fun SettingsScreen(
                                                 onCheckedChange = { galleryViewModel.toggleGridAutoPlay() },
                                                 thumbContent = {
                                                     Icon(
-                                                        imageVector = if (gridAutoPlay) Icons.Outlined.Check else Icons.Outlined.Close,
+                                                        imageVector = if (gridAutoPlay) Icons.Rounded.Check else Icons.Rounded.Close,
                                                         contentDescription = null,
                                                         modifier = Modifier.size(SwitchDefaults.IconSize)
                                                     )
@@ -757,7 +824,7 @@ fun SettingsScreen(
 
                                     val autoplayWithSound by viewModel.autoplayWithSoundEnabled.collectAsState()
                                     ListItem(
-                                        leadingContent = { Icon(Icons.AutoMirrored.Outlined.VolumeUp, contentDescription = null) },
+                                        leadingContent = { Icon(Icons.AutoMirrored.Rounded.VolumeUp, contentDescription = null) },
                                         headlineContent = { Text("Autoplay Video with Sound") },
                                         supportingContent = { Text("Play videos with sound automatically in full screen (muted by default)") },
                                         trailingContent = {
@@ -766,7 +833,7 @@ fun SettingsScreen(
                                                 onCheckedChange = { viewModel.setAutoplayWithSoundEnabled(it) },
                                                 thumbContent = {
                                                     Icon(
-                                                        imageVector = if (autoplayWithSound) Icons.Outlined.Check else Icons.Outlined.Close,
+                                                        imageVector = if (autoplayWithSound) Icons.Rounded.Check else Icons.Rounded.Close,
                                                         contentDescription = null,
                                                         modifier = Modifier.size(SwitchDefaults.IconSize)
                                                     )
@@ -780,7 +847,7 @@ fun SettingsScreen(
                             "Layout & Navigation" -> {
                                 SettingsGroup(title = "Layout & Navigation") {
                                     ListItem(
-                                        leadingContent = { Icon(Icons.Outlined.Menu, contentDescription = null) },
+                                        leadingContent = { Icon(Icons.Rounded.Menu, contentDescription = null) },
                                         headlineContent = { Text("Full-Width Dock") },
                                         supportingContent = { Text("Use standard edge-to-edge dock instead of floating pill") },
                                         trailingContent = {
@@ -792,7 +859,7 @@ fun SettingsScreen(
                                                 },
                                                 thumbContent = {
                                                     Icon(
-                                                        imageVector = if (isDockFullWidth) Icons.Outlined.Check else Icons.Outlined.Close,
+                                                        imageVector = if (isDockFullWidth) Icons.Rounded.Check else Icons.Rounded.Close,
                                                         contentDescription = null,
                                                         modifier = Modifier.size(SwitchDefaults.IconSize)
                                                     )
@@ -805,7 +872,7 @@ fun SettingsScreen(
                                     HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
 
                                     ListItem(
-                                        leadingContent = { Icon(Icons.Outlined.Visibility, contentDescription = null) },
+                                        leadingContent = { Icon(Icons.Rounded.Visibility, contentDescription = null) },
                                         headlineContent = { Text("Show Hidden Albums") },
                                         supportingContent = { Text("Show albums that start with a dot (e.g., .nomedia folders)") },
                                         trailingContent = {
@@ -816,7 +883,7 @@ fun SettingsScreen(
                                                 },
                                                 thumbContent = {
                                                     Icon(
-                                                        imageVector = if (showHiddenAlbums) Icons.Outlined.Check else Icons.Outlined.Close,
+                                                        imageVector = if (showHiddenAlbums) Icons.Rounded.Check else Icons.Rounded.Close,
                                                         contentDescription = null,
                                                         modifier = Modifier.size(SwitchDefaults.IconSize)
                                                     )
@@ -898,7 +965,7 @@ fun SettingsScreen(
                                                         onCheckedChange = { galleryViewModel.toggleExcludedFolder(folderName) },
                                                         thumbContent = {
                                                             Icon(
-                                                                imageVector = if (isExcluded) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+                                                                imageVector = if (isExcluded) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
                                                                 contentDescription = null,
                                                                 modifier = Modifier.size(16.dp)
                                                             )
@@ -907,7 +974,7 @@ fun SettingsScreen(
                                                 },
                                                 leadingContent = {
                                                     Icon(
-                                                        imageVector = Icons.Outlined.Folder,
+                                                        imageVector = Icons.Rounded.Folder,
                                                         contentDescription = null,
                                                         tint = if (isExcluded) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                                                                else MaterialTheme.colorScheme.onSurfaceVariant
@@ -926,6 +993,169 @@ fun SettingsScreen(
                                     val testResult by viewModel.connectionTestState.collectAsState()
                                     val detectedChatsResult by viewModel.detectedChatsState.collectAsState()
 
+                                    // ── Method Chooser (Lock Mode) ──
+                                    // Determine if current mode is "locked" (configured)
+                                    val isBotConfigured = savedTokens.isNotEmpty() && savedTokens.first().isNotBlank() && savedChatId.isNotBlank()
+                                    val userbotAuthState by userbotProvider.authState.collectAsState()
+                                    val isUserbotConfigured = userbotAuthState is com.inferno.gallery.data.network.UserbotProvider.AuthState.Ready
+                                    val isLocked = (backupMode == "bot" && isBotConfigured) || (backupMode == "userbot" && isUserbotConfigured)
+
+                                    Text(
+                                        "Backup Method",
+                                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                                        modifier = Modifier.padding(bottom = 4.dp)
+                                    )
+
+                                    if (isLocked) {
+                                        Text(
+                                            if (backupMode == "bot") "🔒 Locked to Bot API" else "🔒 Locked to Userbot",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.padding(bottom = 8.dp)
+                                        )
+                                    }
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        // Bot API card
+                                        val canSelectBot = !isLocked || backupMode == "bot"
+                                        Surface(
+                                            onClick = {
+                                                if (canSelectBot && !isLocked) {
+                                                    backupMode = "bot"
+                                                    coroutineScope.launch { settingsRepo.updateTelegramBackupMode("bot") }
+                                                }
+                                            },
+                                            shape = RoundedCornerShape(14.dp),
+                                            color = if (backupMode == "bot")
+                                                MaterialTheme.colorScheme.primaryContainer
+                                            else MaterialTheme.colorScheme.surfaceContainerHigh,
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .alpha(if (canSelectBot) 1f else 0.45f)
+                                                .then(
+                                                    if (backupMode == "bot") Modifier.border(
+                                                        2.dp,
+                                                        MaterialTheme.colorScheme.primary,
+                                                        RoundedCornerShape(14.dp)
+                                                    ) else Modifier
+                                                )
+                                        ) {
+                                            Column(modifier = Modifier.padding(12.dp)) {
+                                                Icon(
+                                                    Icons.Rounded.SmartToy,
+                                                    contentDescription = null,
+                                                    tint = if (backupMode == "bot") MaterialTheme.colorScheme.primary
+                                                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    modifier = Modifier.size(24.dp)
+                                                )
+                                                Spacer(Modifier.height(6.dp))
+                                                Text(
+                                                    "Bot API",
+                                                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                                                    color = if (backupMode == "bot") MaterialTheme.colorScheme.onPrimaryContainer
+                                                    else MaterialTheme.colorScheme.onSurface
+                                                )
+                                                Text(
+                                                    "50 MB limit\nPaste bot token",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = if (backupMode == "bot") MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                                                    else MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                        }
+
+                                        // Userbot card
+                                        val canSelectUserbot = !isLocked || backupMode == "userbot"
+                                        Surface(
+                                            onClick = {
+                                                if (canSelectUserbot && !isLocked) {
+                                                    backupMode = "userbot"
+                                                    coroutineScope.launch { settingsRepo.updateTelegramBackupMode("userbot") }
+                                                }
+                                            },
+                                            shape = RoundedCornerShape(14.dp),
+                                            color = if (backupMode == "userbot")
+                                                MaterialTheme.colorScheme.primaryContainer
+                                            else MaterialTheme.colorScheme.surfaceContainerHigh,
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .alpha(if (canSelectUserbot) 1f else 0.45f)
+                                                .then(
+                                                    if (backupMode == "userbot") Modifier.border(
+                                                        2.dp,
+                                                        MaterialTheme.colorScheme.primary,
+                                                        RoundedCornerShape(14.dp)
+                                                    ) else Modifier
+                                                )
+                                        ) {
+                                            Column(modifier = Modifier.padding(12.dp)) {
+                                                Icon(
+                                                    Icons.Rounded.AccountCircle,
+                                                    contentDescription = null,
+                                                    tint = if (backupMode == "userbot") MaterialTheme.colorScheme.primary
+                                                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    modifier = Modifier.size(24.dp)
+                                                )
+                                                Spacer(Modifier.height(6.dp))
+                                                Text(
+                                                    "Userbot",
+                                                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                                                    color = if (backupMode == "userbot") MaterialTheme.colorScheme.onPrimaryContainer
+                                                    else MaterialTheme.colorScheme.onSurface
+                                                )
+                                                Text(
+                                                    "2 GB limit\nYour own account",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = if (backupMode == "userbot") MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                                                    else MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    // Reset & Switch button (only when locked)
+                                    if (isLocked) {
+                                        Spacer(Modifier.height(8.dp))
+                                        OutlinedButton(
+                                            onClick = { showResetBackupDialog = true },
+                                            shape = RoundedCornerShape(14.dp),
+                                            colors = ButtonDefaults.outlinedButtonColors(
+                                                contentColor = MaterialTheme.colorScheme.error
+                                            ),
+                                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f)),
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Icon(Icons.Rounded.SwapHoriz, contentDescription = null, modifier = Modifier.size(18.dp))
+                                            Spacer(Modifier.width(8.dp))
+                                            Text("Reset & Switch Method", fontWeight = FontWeight.SemiBold)
+                                        }
+                                    }
+
+                                    // Userbot setup button (when userbot selected but not yet configured)
+                                    if (backupMode == "userbot" && !isUserbotConfigured) {
+                                        Spacer(Modifier.height(12.dp))
+                                        Button(
+                                            onClick = { onNavigateToUserbotSetup() },
+                                            shape = RoundedCornerShape(14.dp),
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Icon(Icons.Rounded.AccountCircle, contentDescription = null, modifier = Modifier.size(18.dp))
+                                            Spacer(Modifier.width(8.dp))
+                                            Text("Setup Userbot Login")
+                                        }
+                                    }
+
+
+                                    HorizontalDivider(
+                                        modifier = Modifier.padding(vertical = 12.dp),
+                                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                                    )
+
+                                    // ── Bot API Configuration (only shown when Bot mode selected) ──
+                                    if (backupMode == "bot") {
                                     LaunchedEffect(testResult) {
                                         val result = testResult
                                         if (result is ConnectionTestResult.Migrated) {
@@ -965,7 +1195,7 @@ fun SettingsScreen(
                                                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                                                     ) {
                                                         Icon(
-                                                            Icons.Outlined.Check,
+                                                            Icons.Rounded.Check,
                                                             contentDescription = null,
                                                             tint = MaterialTheme.colorScheme.primary,
                                                             modifier = Modifier
@@ -1046,7 +1276,7 @@ fun SettingsScreen(
                                                         ) {
                                                             Box(contentAlignment = Alignment.Center) {
                                                                 if (isCompleted) {
-                                                                    Icon(Icons.Outlined.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp))
+                                                                    Icon(Icons.Rounded.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp))
                                                                 } else {
                                                                     Text("${i + 1}", style = MaterialTheme.typography.labelSmall, color = if (isActive) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant)
                                                                 }
@@ -1086,19 +1316,19 @@ fun SettingsScreen(
                                                             label = { Text("Primary Bot Token") },
                                                             placeholder = { Text("123456789:AABb...xyz") },
                                                             singleLine = true,
-                                                            leadingIcon = { Icon(Icons.Outlined.Lock, contentDescription = null, modifier = Modifier.size(20.dp)) },
+                                                            leadingIcon = { Icon(Icons.Rounded.Lock, contentDescription = null, modifier = Modifier.size(20.dp)) },
                                                             trailingIcon = {
                                                                 Row {
                                                                     if (primaryTokenInput.isNotBlank()) {
                                                                         Icon(
-                                                                            if (isTokenValid) Icons.Outlined.Check else Icons.Outlined.Close,
+                                                                            if (isTokenValid) Icons.Rounded.Check else Icons.Rounded.Close,
                                                                             contentDescription = null,
                                                                             tint = if (isTokenValid) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
                                                                             modifier = Modifier.size(18.dp)
                                                                         )
                                                                         Spacer(Modifier.width(4.dp))
                                                                     }
-                                                                    val image = if (passwordVisiblePrimary) Icons.Filled.Visibility else Icons.Filled.VisibilityOff
+                                                                    val image = if (passwordVisiblePrimary) Icons.Rounded.Visibility else Icons.Rounded.VisibilityOff
                                                                     IconButton(onClick = { passwordVisiblePrimary = !passwordVisiblePrimary }) {
                                                                         Icon(imageVector = image, contentDescription = null)
                                                                     }
@@ -1122,7 +1352,7 @@ fun SettingsScreen(
                                                                 verticalAlignment = Alignment.CenterVertically
                                                             ) {
                                                                 Icon(
-                                                                    if (showSecondaryToken) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                                                                    if (showSecondaryToken) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
                                                                     contentDescription = null,
                                                                     modifier = Modifier.size(20.dp),
                                                                     tint = MaterialTheme.colorScheme.onSurfaceVariant
@@ -1145,9 +1375,9 @@ fun SettingsScreen(
                                                                     label = { Text("Secondary Bot Token") },
                                                                     placeholder = { Text("654321:XYZ-UVW...") },
                                                                     singleLine = true,
-                                                                    leadingIcon = { Icon(Icons.Outlined.Lock, contentDescription = null, modifier = Modifier.size(20.dp)) },
+                                                                    leadingIcon = { Icon(Icons.Rounded.Lock, contentDescription = null, modifier = Modifier.size(20.dp)) },
                                                                     trailingIcon = {
-                                                                        val image = if (passwordVisibleSecondary) Icons.Filled.Visibility else Icons.Filled.VisibilityOff
+                                                                        val image = if (passwordVisibleSecondary) Icons.Rounded.Visibility else Icons.Rounded.VisibilityOff
                                                                         IconButton(onClick = { passwordVisibleSecondary = !passwordVisibleSecondary }) {
                                                                             Icon(imageVector = image, contentDescription = null)
                                                                         }
@@ -1174,7 +1404,7 @@ fun SettingsScreen(
                                                             ) {
                                                                 Text("Next")
                                                                 Spacer(Modifier.width(4.dp))
-                                                                Icon(Icons.AutoMirrored.Outlined.ArrowForward, contentDescription = null, modifier = Modifier.size(16.dp))
+                                                                Icon(Icons.AutoMirrored.Rounded.ArrowForward, contentDescription = null, modifier = Modifier.size(16.dp))
                                                             }
                                                         }
                                                     }
@@ -1200,7 +1430,7 @@ fun SettingsScreen(
                                                             modifier = Modifier.fillMaxWidth(),
                                                             enabled = detectedChatsResult !is DetectedChatsResult.Loading
                                                         ) {
-                                                            Icon(Icons.Outlined.Search, contentDescription = null, modifier = Modifier.size(18.dp))
+                                                            Icon(Icons.Rounded.Search, contentDescription = null, modifier = Modifier.size(18.dp))
                                                             Spacer(Modifier.width(8.dp))
                                                             Text("Auto-detect Chat ID")
                                                         }
@@ -1317,11 +1547,11 @@ fun SettingsScreen(
                                                             label = { Text("Channel / Chat ID") },
                                                             placeholder = { Text("-1001234567890") },
                                                             singleLine = true,
-                                                            leadingIcon = { Icon(Icons.AutoMirrored.Outlined.Send, contentDescription = null, modifier = Modifier.size(20.dp)) },
+                                                            leadingIcon = { Icon(Icons.AutoMirrored.Rounded.Send, contentDescription = null, modifier = Modifier.size(20.dp)) },
                                                             trailingIcon = {
                                                                 if (localChatId.isNotBlank()) {
                                                                     Icon(
-                                                                        if (isChatIdValid) Icons.Outlined.Check else Icons.Outlined.Close,
+                                                                        if (isChatIdValid) Icons.Rounded.Check else Icons.Rounded.Close,
                                                                         contentDescription = null,
                                                                         tint = if (isChatIdValid) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
                                                                         modifier = Modifier.size(18.dp)
@@ -1341,7 +1571,7 @@ fun SettingsScreen(
                                                             horizontalArrangement = Arrangement.SpaceBetween
                                                         ) {
                                                             TextButton(onClick = { wizardStep = 0 }) {
-                                                                Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = null, modifier = Modifier.size(16.dp))
+                                                                Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = null, modifier = Modifier.size(16.dp))
                                                                 Spacer(Modifier.width(4.dp))
                                                                 Text("Back")
                                                             }
@@ -1351,7 +1581,7 @@ fun SettingsScreen(
                                                             ) {
                                                                 Text("Next")
                                                                 Spacer(Modifier.width(4.dp))
-                                                                Icon(Icons.AutoMirrored.Outlined.ArrowForward, contentDescription = null, modifier = Modifier.size(16.dp))
+                                                                Icon(Icons.AutoMirrored.Rounded.ArrowForward, contentDescription = null, modifier = Modifier.size(16.dp))
                                                             }
                                                         }
                                                     }
@@ -1396,7 +1626,7 @@ fun SettingsScreen(
                                                             enabled = testResult != ConnectionTestResult.Testing,
                                                             modifier = Modifier.fillMaxWidth()
                                                         ) {
-                                                            Icon(Icons.Outlined.Cloud, contentDescription = null, modifier = Modifier.size(18.dp))
+                                                            Icon(Icons.Rounded.Cloud, contentDescription = null, modifier = Modifier.size(18.dp))
                                                             Spacer(Modifier.width(8.dp))
                                                             Text("Test Connection")
                                                         }
@@ -1415,7 +1645,7 @@ fun SettingsScreen(
                                                                 }
                                                                 ConnectionTestResult.Success, is ConnectionTestResult.AutoCorrected, is ConnectionTestResult.Migrated -> {
                                                                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                                                        Icon(Icons.Outlined.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                                                                        Icon(Icons.Rounded.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
                                                                         Column {
                                                                             Text("Connected!", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                                                                             if (res is ConnectionTestResult.AutoCorrected) {
@@ -1429,7 +1659,7 @@ fun SettingsScreen(
                                                                 is ConnectionTestResult.Error -> {
                                                                     Column {
                                                                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                                                            Icon(Icons.Outlined.Close, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp))
+                                                                            Icon(Icons.Rounded.Close, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp))
                                                                             Text("Failed: ${res.message}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
                                                                         }
                                                                         val hint = when {
@@ -1461,7 +1691,7 @@ fun SettingsScreen(
                                                             horizontalArrangement = Arrangement.SpaceBetween
                                                         ) {
                                                             TextButton(onClick = { wizardStep = 1 }) {
-                                                                Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = null, modifier = Modifier.size(16.dp))
+                                                                Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = null, modifier = Modifier.size(16.dp))
                                                                 Spacer(Modifier.width(4.dp))
                                                                 Text("Back")
                                                             }
@@ -1481,7 +1711,7 @@ fun SettingsScreen(
                                                                 },
                                                                 enabled = isTokenValid && isChatIdValid
                                                             ) {
-                                                                Icon(Icons.Outlined.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                                                                Icon(Icons.Rounded.Check, contentDescription = null, modifier = Modifier.size(16.dp))
                                                                 Spacer(Modifier.width(4.dp))
                                                                 Text("Save")
                                                             }
@@ -1496,7 +1726,7 @@ fun SettingsScreen(
 
                                     val localContext = androidx.compose.ui.platform.LocalContext.current
                                     ListItem(
-                                        leadingContent = { Icon(Icons.Outlined.Cloud, contentDescription = null) },
+                                        leadingContent = { Icon(Icons.Rounded.Cloud, contentDescription = null) },
                                         headlineContent = { Text("Restore from Cloud") },
                                         supportingContent = { Text("Fetch sync manifest and restore database entries") },
                                         modifier = Modifier
@@ -1510,7 +1740,7 @@ fun SettingsScreen(
                                     HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
 
                                     ListItem(
-                                        leadingContent = { Icon(Icons.Outlined.Cloud, contentDescription = null) },
+                                        leadingContent = { Icon(Icons.Rounded.Cloud, contentDescription = null) },
                                         headlineContent = { Text("Automated Background Backup") },
                                         supportingContent = { Text("Backup new media in background based on criteria") },
                                         trailingContent = {
@@ -1519,7 +1749,7 @@ fun SettingsScreen(
                                                 onCheckedChange = { viewModel.setTelegramBackupEnabled(it) },
                                                 thumbContent = {
                                                     Icon(
-                                                        imageVector = if (backupEnabled) Icons.Outlined.Check else Icons.Outlined.Close,
+                                                        imageVector = if (backupEnabled) Icons.Rounded.Check else Icons.Rounded.Close,
                                                         contentDescription = null,
                                                         modifier = Modifier.size(SwitchDefaults.IconSize)
                                                     )
@@ -1535,7 +1765,7 @@ fun SettingsScreen(
                                     val batteryPause by viewModel.telegramAutoBackupBatteryLowPause.collectAsState()
 
                                     ListItem(
-                                        leadingContent = { Icon(Icons.Outlined.Folder, contentDescription = null) },
+                                        leadingContent = { Icon(Icons.Rounded.Folder, contentDescription = null) },
                                         headlineContent = { Text("Choose Backup Folders") },
                                         supportingContent = {
                                             Text(
@@ -1552,7 +1782,7 @@ fun SettingsScreen(
                                     HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
 
                                     ListItem(
-                                        leadingContent = { Icon(Icons.Outlined.Wifi, contentDescription = null) },
+                                        leadingContent = { Icon(Icons.Rounded.Wifi, contentDescription = null) },
                                         headlineContent = { Text("Wi-Fi Only") },
                                         supportingContent = { Text("Backup only when connected to an unmetered Wi-Fi network") },
                                         trailingContent = {
@@ -1561,7 +1791,7 @@ fun SettingsScreen(
                                                 onCheckedChange = { viewModel.setTelegramAutoBackupWifiOnly(it) },
                                                 thumbContent = {
                                                     Icon(
-                                                        imageVector = if (wifiOnly) Icons.Outlined.Check else Icons.Outlined.Close,
+                                                        imageVector = if (wifiOnly) Icons.Rounded.Check else Icons.Rounded.Close,
                                                         contentDescription = null,
                                                         modifier = Modifier.size(SwitchDefaults.IconSize)
                                                     )
@@ -1574,7 +1804,7 @@ fun SettingsScreen(
                                     HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
 
                                     ListItem(
-                                        leadingContent = { Icon(Icons.Outlined.BatteryChargingFull, contentDescription = null) },
+                                        leadingContent = { Icon(Icons.Rounded.BatteryChargingFull, contentDescription = null) },
                                         headlineContent = { Text("Battery Saver Pause") },
                                         supportingContent = { Text("Pause backup if battery is less than 35% (unless charging)") },
                                         trailingContent = {
@@ -1583,7 +1813,7 @@ fun SettingsScreen(
                                                 onCheckedChange = { viewModel.setTelegramAutoBackupBatteryLowPause(it) },
                                                 thumbContent = {
                                                     Icon(
-                                                        imageVector = if (batteryPause) Icons.Outlined.Check else Icons.Outlined.Close,
+                                                        imageVector = if (batteryPause) Icons.Rounded.Check else Icons.Rounded.Close,
                                                         contentDescription = null,
                                                         modifier = Modifier.size(SwitchDefaults.IconSize)
                                                     )
@@ -1592,6 +1822,7 @@ fun SettingsScreen(
                                         },
                                         colors = ListItemDefaults.colors(containerColor = Color.Transparent)
                                     )
+                                    } // end if (backupMode == "bot")
                                 }
                             }
                             "Smart Search & OCR" -> {
@@ -1612,7 +1843,7 @@ fun SettingsScreen(
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
                                             Icon(
-                                                imageVector = Icons.Outlined.Search,
+                                                imageVector = Icons.Rounded.Search,
                                                 contentDescription = null,
                                                 tint = MaterialTheme.colorScheme.primary,
                                                 modifier = Modifier.size(24.dp)
@@ -1770,7 +2001,7 @@ fun SettingsScreen(
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
                                             Icon(
-                                                imageVector = Icons.Outlined.AutoAwesome,
+                                                imageVector = Icons.Rounded.AutoAwesome,
                                                 contentDescription = null,
                                                 tint = MaterialTheme.colorScheme.primary,
                                                 modifier = Modifier.size(24.dp)
@@ -1886,7 +2117,7 @@ fun SettingsScreen(
                                             }
                                         } else {
                                             ListItem(
-                                                leadingContent = { Icon(Icons.Outlined.Cloud, contentDescription = null) },
+                                                leadingContent = { Icon(Icons.Rounded.Cloud, contentDescription = null) },
                                                 headlineContent = { Text("Auto Index New Images") },
                                                 supportingContent = { Text("Automatically generate embeddings for new photos added to gallery") },
                                                 trailingContent = {
@@ -1895,7 +2126,7 @@ fun SettingsScreen(
                                                         onCheckedChange = { viewModel.setSmartSearchAutoIndex(it) },
                                                         thumbContent = {
                                                             Icon(
-                                                                imageVector = if (smartSearchAutoIndex) Icons.Outlined.Check else Icons.Outlined.Close,
+                                                                imageVector = if (smartSearchAutoIndex) Icons.Rounded.Check else Icons.Rounded.Close,
                                                                 contentDescription = null,
                                                                 modifier = Modifier.size(SwitchDefaults.IconSize)
                                                             )
@@ -2124,7 +2355,7 @@ fun SettingsScreen(
                                             contentAlignment = Alignment.Center
                                         ) {
                                             Icon(
-                                                imageVector = Icons.Outlined.Image,
+                                                imageVector = Icons.Rounded.Image,
                                                 contentDescription = null,
                                                 modifier = Modifier.size(56.dp)
                                             )
@@ -2190,7 +2421,7 @@ fun SettingsScreen(
                                     SettingsGroup(title = "App Details") {
                                         // Check for updates
                                         ListItem(
-                                            leadingContent = { Icon(Icons.Outlined.Update, contentDescription = null) },
+                                            leadingContent = { Icon(Icons.Rounded.Update, contentDescription = null) },
                                             headlineContent = { Text("Check for updates") },
                                             supportingContent = { Text("Verify if you are running the latest release") },
                                             modifier = Modifier.clickable {
@@ -2206,7 +2437,7 @@ fun SettingsScreen(
                                         
                                         // Version number
                                         ListItem(
-                                            leadingContent = { Icon(Icons.Outlined.Info, contentDescription = null) },
+                                            leadingContent = { Icon(Icons.Rounded.Info, contentDescription = null) },
                                             headlineContent = { Text("Version") },
                                             supportingContent = { Text("v2.0.0 (Material 3 Expressive)") },
                                             colors = ListItemDefaults.colors(containerColor = Color.Transparent)
@@ -2219,7 +2450,7 @@ fun SettingsScreen(
                                         
                                         // Licenses
                                         ListItem(
-                                            leadingContent = { Icon(Icons.Outlined.Description, contentDescription = null) },
+                                            leadingContent = { Icon(Icons.Rounded.Description, contentDescription = null) },
                                             headlineContent = { Text("Licenses") },
                                             supportingContent = { Text("Open source libraries and licenses") },
                                             modifier = Modifier.clickable {
@@ -2232,6 +2463,57 @@ fun SettingsScreen(
                             }
                         }
                         Spacer(modifier = Modifier.height(32.dp))
+                        if (showFolderDialog.value) {
+                            var tempSelected by remember { mutableStateOf(selectedFolders) }
+                            androidx.compose.material3.AlertDialog(
+                                onDismissRequest = { showFolderDialog.value = false },
+                                title = { Text("Select Backup Folders") },
+                                text = {
+                                    androidx.compose.foundation.lazy.LazyColumn(
+                                        modifier = Modifier.fillMaxWidth().heightIn(max = 400.dp)
+                                    ) {
+                                        items(allFolders, key = { it }) { folder ->
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clickable {
+                                                        val current = tempSelected.toMutableSet()
+                                                        if (current.contains(folder)) current.remove(folder)
+                                                        else current.add(folder)
+                                                        tempSelected = current
+                                                    }
+                                                    .padding(vertical = 8.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                androidx.compose.material3.Checkbox(
+                                                    checked = tempSelected.contains(folder),
+                                                    onCheckedChange = { checked ->
+                                                        val current = tempSelected.toMutableSet()
+                                                        if (checked) current.add(folder) else current.remove(folder)
+                                                        tempSelected = current
+                                                    }
+                                                )
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Text(folder)
+                                            }
+                                        }
+                                    }
+                                },
+                                confirmButton = {
+                                    androidx.compose.material3.TextButton(
+                                        onClick = {
+                                            viewModel.setTelegramAutoBackupFolders(tempSelected)
+                                            showFolderDialog.value = false
+                                        }
+                                    ) { Text("Save") }
+                                },
+                                dismissButton = {
+                                    androidx.compose.material3.TextButton(
+                                        onClick = { showFolderDialog.value = false }
+                                    ) { Text("Cancel") }
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -2358,7 +2640,7 @@ fun CategoryCard(
             }
             
             Icon(
-                imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+                imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(24.dp)

@@ -143,6 +143,88 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
         _toastEvent.trySend(message)
     }
 
+    /** True while the initial fast sync is running — used to show loading UI on first launch. */
+    private val _isInitialSyncRunning = MutableStateFlow(false)
+    val isInitialSyncRunning: StateFlow<Boolean> = _isInitialSyncRunning.asStateFlow()
+
+    private var mediaStoreObserverJob: kotlinx.coroutines.Job? = null
+
+    private val mediaStoreObserver = object : android.database.ContentObserver(android.os.Handler(android.os.Looper.getMainLooper())) {
+        override fun onChange(selfChange: Boolean) {
+            mediaStoreObserverJob?.cancel()
+            mediaStoreObserverJob = viewModelScope.launch {
+                kotlinx.coroutines.delay(1000) // Debounce rapid MediaStore changes
+                Log.d("GalleryViewModel", "MediaStore change detected, enqueueing MediaSyncWorker...")
+                val syncRequest = OneTimeWorkRequestBuilder<com.inferno.gallery.workers.MediaSyncWorker>().build()
+                WorkManager.getInstance(getApplication()).enqueueUniqueWork(
+                    "MediaSyncWorker_Foreground", // Use a different name from the background auto-backup one to allow both or just replace
+                    ExistingWorkPolicy.REPLACE, 
+                    syncRequest
+                )
+            }
+        }
+    }
+
+    init {
+        // Fast initial sync: if Room is empty, bulk-insert MediaStore metadata
+        // directly on IO. This populates the grid in ~1s instead of waiting
+        // ~10s for WorkManager to schedule and execute MediaSyncWorker.
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val count = database.mediaDao().getAllMedia().size
+                if (count == 0) {
+                    _isInitialSyncRunning.value = true
+                    Log.d("GalleryViewModel", "Room empty — running fast initial sync")
+                    val mediaList = repository.getImagesListForSync()
+                    if (mediaList.isNotEmpty()) {
+                        val entities = mediaList.map { media ->
+                            com.inferno.gallery.data.db.CoreMediaEntity(
+                                id = media.id,
+                                uriString = media.uri.toString(),
+                                filePath = media.path,
+                                bucketName = media.bucketName,
+                                dateAdded = media.dateAdded,
+                                dateModified = media.dateModified,
+                                size = media.size,
+                                name = media.name,
+                                mimeType = null,
+                                isVideo = media.isVideo,
+                                durationMs = media.durationMs,
+                                isIndexedOcr = false,
+                                pHash = null,
+                                latitude = null,
+                                longitude = null,
+                                fileHash = null
+                            )
+                        }
+                        database.mediaDao().insertAll(entities)
+                        Log.d("GalleryViewModel", "Fast sync complete: ${entities.size} items inserted")
+                    }
+                    _isInitialSyncRunning.value = false
+                }
+            } catch (e: Exception) {
+                Log.e("GalleryViewModel", "Fast sync failed: ${e.message}")
+                _isInitialSyncRunning.value = false
+            }
+        }
+
+        getApplication<Application>().contentResolver.registerContentObserver(
+            android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+            true,
+            mediaStoreObserver
+        )
+        getApplication<Application>().contentResolver.registerContentObserver(
+            android.provider.MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+            true,
+            mediaStoreObserver
+        )
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        getApplication<Application>().contentResolver.unregisterContentObserver(mediaStoreObserver)
+    }
+
     /**
      * Resolves localExists and resolvedUri for a GalleryItem.
      * Skips File.exists() entirely for local-only items (no Telegram backup)
@@ -764,9 +846,13 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    val pagedMedia: Flow<PagingData<GalleryListItem>> = viewMode.flatMapLatest { mode ->
+    val pagedMedia: Flow<PagingData<GalleryListItem>> = combine(viewMode, sortOrder) { mode, order ->
+        Pair(mode, order)
+    }.flatMapLatest { (mode, order) ->
+        val isDateSort = order == SortOrder.NewToOld || order == SortOrder.OldToNew
         pagedMediaRaw.map { pagingData ->
-            if (mode == ViewMode.Immersive) {
+            if (mode == ViewMode.Immersive || !isDateSort) {
+                // No date headers in Immersive mode or non-date sorts
                 pagingData.map { GalleryListItem.Item(it) as GalleryListItem }
             } else {
                 pagingData.insertSeparators { before: GalleryItem?, after: GalleryItem? ->
@@ -1068,6 +1154,93 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
             } catch (e: Exception) {
                 e.printStackTrace()
                 _duplicateScanState.value = DuplicateScanState.Done
+            }
+        }
+    }
+
+    // ── GPS Scan State ──
+    sealed class GpsScanState {
+        data object Idle : GpsScanState()
+        data class Scanning(val processed: Int, val total: Int) : GpsScanState()
+        data object Done : GpsScanState()
+    }
+
+    private val _gpsScanState = MutableStateFlow<GpsScanState>(GpsScanState.Idle)
+    val gpsScanState: StateFlow<GpsScanState> = _gpsScanState.asStateFlow()
+
+    private val _geotaggedMedia = MutableStateFlow<List<GalleryItem>>(emptyList())
+    val geotaggedMedia: StateFlow<List<GalleryItem>> = _geotaggedMedia.asStateFlow()
+
+    fun scanGpsMetadata() {
+        if (_gpsScanState.value is GpsScanState.Scanning) return
+        viewModelScope.launch(Dispatchers.IO) {
+            _gpsScanState.value = GpsScanState.Scanning(0, 0)
+            try {
+                val needsGps = database.mediaDao().getMediaNeedingGps()
+                val total = needsGps.size
+
+                if (total > 0) {
+                    val batchSize = 100
+                    var processed = 0
+
+                    for (batch in needsGps.chunked(batchSize)) {
+                        val updates = batch.mapNotNull { entity ->
+                            try {
+                                val file = if (entity.filePath.isNotEmpty()) java.io.File(entity.filePath) else null
+                                if (file != null && file.exists()) {
+                                    val exif = androidx.exifinterface.media.ExifInterface(entity.filePath)
+                                    val latLong = exif.latLong
+                                    if (latLong != null) {
+                                        entity.copy(latitude = latLong[0], longitude = latLong[1])
+                                    } else null
+                                } else null
+                            } catch (_: Exception) { null }
+                        }
+
+                        if (updates.isNotEmpty()) {
+                            database.mediaDao().insertAll(updates)
+                        }
+
+                        processed += batch.size
+                        _gpsScanState.value = GpsScanState.Scanning(processed, total)
+                    }
+                }
+
+                // Load geotagged results
+                loadGeotaggedMedia()
+                _gpsScanState.value = GpsScanState.Done
+            } catch (e: Exception) {
+                e.printStackTrace()
+                _gpsScanState.value = GpsScanState.Done
+            }
+        }
+    }
+
+    fun loadGeotaggedMedia() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val entities = database.mediaDao().getGeotaggedMedia()
+                _geotaggedMedia.value = entities.map { entity ->
+                    val uri = Uri.parse(entity.uriString)
+                    GalleryItem(
+                        id = entity.id.toString(),
+                        uri = uri,
+                        bucketName = entity.bucketName,
+                        dateAdded = entity.dateAdded,
+                        size = entity.size,
+                        name = entity.name,
+                        dateModified = entity.dateModified,
+                        path = entity.filePath,
+                        isVideo = entity.isVideo,
+                        durationMs = entity.durationMs,
+                        localExists = true,
+                        resolvedUri = uri,
+                        latitude = entity.latitude,
+                        longitude = entity.longitude
+                    )
+                }
+            } catch (e: Exception) {
+                Log.e("GalleryViewModel", "Failed to load geotagged media: ${e.message}")
             }
         }
     }
@@ -1735,8 +1908,8 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
                             }
                         }
                         
-                        // 2. Delete local database association
-                        backupDao.deleteBackup(mediaId)
+                        // 2. Mark local database association as excluded so it doesn't auto-backup again
+                        backupDao.markBackupExcluded(mediaId)
                         
                         // 3. Update pinned manifest
                         com.inferno.gallery.data.SyncManifestManager.updateManifest(
@@ -1904,9 +2077,14 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
 
     val telegramConfigured: StateFlow<Boolean> = combine(
         settingsRepository.telegramBotTokensFlow,
-        settingsRepository.telegramChatIdFlow
-    ) { tokens, chatId ->
-        tokens.isNotEmpty() && chatId.isNotBlank()
+        settingsRepository.telegramChatIdFlow,
+        settingsRepository.telegramBackupModeFlow,
+        settingsRepository.telegramUserbotChatIdFlow
+    ) { tokens, chatId, mode, userbotChatId ->
+        when (mode) {
+            "userbot" -> userbotChatId != 0L
+            else -> tokens.isNotEmpty() && chatId.isNotBlank()
+        }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
     private fun isBatteryTooLow(context: android.content.Context): Boolean {
