@@ -35,7 +35,49 @@ class MediaSyncWorker(
             // Find items in MediaStore not in DB or changed (e.g. trashed/restored)
             for (media in mediaStoreList) {
                 val dbItem = dbMap[media.id]
-                if (dbItem == null || dbItem.bucketName != media.bucketName || dbItem.dateModified != media.dateModified) {
+                val needsUpdate = dbItem == null || 
+                                  dbItem.bucketName != media.bucketName || 
+                                  dbItem.dateModified != media.dateModified ||
+                                  (!media.isVideo && dbItem.pHash == null) ||
+                                  dbItem.fileHash == null
+
+                if (needsUpdate) {
+                    var pHash = dbItem?.pHash
+                    var lat = dbItem?.latitude
+                    var lon = dbItem?.longitude
+                    var fileHash = dbItem?.fileHash
+
+                    val file = if (media.path.isNotEmpty()) java.io.File(media.path) else null
+
+                    // Compute fileHash (MD5) for all files if missing
+                    if (fileHash == null && file != null && file.exists()) {
+                        try {
+                            fileHash = com.inferno.gallery.utils.HashUtils.computeFileHash(file)
+                        } catch (e: Exception) {
+                            Log.e("MediaSyncWorker", "Error computing fileHash for ${media.id}: ${e.message}")
+                        }
+                    }
+
+                    // Compute pHash (dHash) and GPS for images if missing
+                    if (!media.isVideo && pHash == null) {
+                        try {
+                            if (file != null && file.exists()) {
+                                val exif = androidx.exifinterface.media.ExifInterface(media.path)
+                                val latLong = exif.latLong
+                                if (latLong != null) {
+                                    lat = latLong[0]
+                                    lon = latLong[1]
+                                }
+                            }
+                            val thumbnail = applicationContext.contentResolver.loadThumbnail(
+                                media.uri, android.util.Size(128, 128), null
+                            )
+                            pHash = com.inferno.gallery.utils.HashUtils.generatePerceptualHash(thumbnail)
+                        } catch (e: Exception) {
+                            Log.e("MediaSyncWorker", "Error extracting metadata for ${media.id}: ${e.message}")
+                        }
+                    }
+
                     toInsert.add(
                         CoreMediaEntity(
                             id = media.id,
@@ -49,7 +91,11 @@ class MediaSyncWorker(
                             mimeType = dbItem?.mimeType, 
                             isVideo = media.isVideo,
                             durationMs = media.durationMs,
-                            isIndexedOcr = dbItem?.isIndexedOcr ?: false
+                            isIndexedOcr = dbItem?.isIndexedOcr ?: false,
+                            pHash = pHash,
+                            latitude = lat,
+                            longitude = lon,
+                            fileHash = fileHash
                         )
                     )
                 }
