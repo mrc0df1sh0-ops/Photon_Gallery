@@ -4,4 +4,6 @@
     <cache-path name="shared_images" path="." />
     <!-- Private Space vault files -->
     <files-path name="vault_files" path="vault/" />
+    <!-- Crash log files for sharing -->
+    <files-path name="crash_logs" path="crash_logs/" />
 </paths>

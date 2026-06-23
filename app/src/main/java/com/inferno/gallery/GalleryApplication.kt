@@ -25,6 +25,8 @@ import okio.Path.Companion.toPath
 class GalleryApplication : Application(), SingletonImageLoader.Factory {
     override fun onCreate() {
         super.onCreate()
+        // Install global crash handler — must be first to catch startup crashes
+        com.inferno.gallery.crash.CrashHandler.install(this)
         // Chain: MediaStore sync → OCR indexing (OCR must wait for sync to populate the DB)
         val syncWorkRequest = OneTimeWorkRequestBuilder<MediaSyncWorker>()
             .setBackoffCriteria(

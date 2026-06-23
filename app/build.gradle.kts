@@ -130,4 +130,10 @@ dependencies {
 
     // ── Biometric (Private Space auth) ──
     implementation(libs.androidx.biometric)
+
+    // ── osmdroid (OpenStreetMap — Photo Map) ──
+    implementation(libs.osmdroid)
+
+    // ── TDLib (Telegram Userbot — MTProto) ──
+    implementation(libs.tdlib)
 }

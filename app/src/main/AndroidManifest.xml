@@ -18,6 +18,10 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- Network: map tile downloads (osmdroid), Telegram backup -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
     <queries>
         <intent>
             <action android:name="android.intent.action.SEND" />
@@ -48,6 +52,16 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <activity
+            android:name=".crash.CrashActivity"
+            android:exported="false"
+            android:label="Crash Report"
+            android:theme="@style/Theme.PhotonGallery"
+            android:process=":crash"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:configChanges="uiMode|screenSize|orientation" />
 
         <service
             android:name="androidx.work.impl.foreground.SystemForegroundService"

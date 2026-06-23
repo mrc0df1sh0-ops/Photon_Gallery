@@ -105,6 +105,15 @@ interface MediaDao {
 
     @Query("SELECT * FROM core_media WHERE pHash IS NOT NULL AND isVideo = 0 AND bucketName != 'Trash' ORDER BY dateAdded DESC")
     fun observeAllHashedMedia(): Flow<List<CoreMediaEntity>>
+
+    @Query("SELECT * FROM core_media WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND bucketName != 'Trash' ORDER BY dateAdded DESC")
+    suspend fun getGeotaggedMedia(): List<CoreMediaEntity>
+
+    @Query("SELECT * FROM core_media WHERE latitude IS NULL AND isVideo = 0 AND bucketName != 'Trash'")
+    suspend fun getMediaNeedingGps(): List<CoreMediaEntity>
+
+    @Query("SELECT COUNT(*) FROM core_media WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND bucketName != 'Trash'")
+    suspend fun getGeotaggedCount(): Int
 }
 
 @Database(
