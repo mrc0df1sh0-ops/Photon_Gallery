@@ -31,7 +31,7 @@
 - **Rich Format Support**: Full support for GIFs, animated WebP, animated HEIF, and SVG files — all rendered natively via Coil 3 decoders.
 - **Auto-Hiding Pill Dock**: Navigation toolbar that collapses dynamically on down-scroll and re-appears on minor up-scroll to maximize screen space.
 
-### 🧠 On-Device AI
+### 🔍 Smart Search
 - **Smart On-Device Search**: Secure, offline search powered by on-device MobileCLIP semantic models for natural-language prompt-based search. All inference runs 100% on-device via ONNX Runtime — your photos never leave your phone.
 - **OCR Text Search**: Automatically indexes text found in photos using ML Kit OCR, so you can search for screenshots, documents, and signs by their content.
 
@@ -112,15 +112,6 @@ Contributions are welcome! Here's how to get started:
 3. **Commit your changes**: `git commit -m "Add my feature"`
 4. **Push to the branch**: `git push origin feature/my-feature`
 5. **Open a Pull Request**
-
-### Guidelines
-- The app is 100% Jetpack Compose — no XML layouts.
-- Follow the MVVM + Repository pattern: `UI (Composable) → ViewModel (StateFlow) → Repository → Room / ContentResolver / ML`
-- Use `Dispatchers.IO` for all file and database operations — never block the main thread.
-- All image loading must use Coil 3. No Glide, no Picasso.
-- Run `./gradlew assembleRelease` and verify the build succeeds before submitting.
-
-See [GEMINI.md](GEMINI.md) for detailed project rules and coding standards.
 
 ---
 
