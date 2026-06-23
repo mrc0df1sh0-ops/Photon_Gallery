@@ -15,12 +15,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import com.inferno.gallery.ui.theme.ShapeExtraSmall
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Shield
-import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material.icons.outlined.LockOpen
-import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.Security
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.LockOpen
+import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -100,7 +100,7 @@ fun PrivateSpaceScreen(
                         }
                     }) {
                         Icon(
-                            Icons.AutoMirrored.Outlined.ArrowBack,
+                            Icons.AutoMirrored.Rounded.ArrowBack,
                             contentDescription = "Back"
                         )
                     }
@@ -111,7 +111,7 @@ fun PrivateSpaceScreen(
                             viewModel.vaultAuthManager.lock()
                         }) {
                             Icon(
-                                Icons.Outlined.LockOpen,
+                                Icons.Rounded.LockOpen,
                                 contentDescription = "Lock",
                                 tint = MaterialTheme.colorScheme.primary
                             )
@@ -147,7 +147,7 @@ fun PrivateSpaceScreen(
                             selectedIds = emptySet()
                         }) {
                             Icon(
-                                Icons.Outlined.Visibility,
+                                Icons.Rounded.Visibility,
                                 contentDescription = "Unhide",
                                 tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(22.dp)
@@ -160,7 +160,7 @@ fun PrivateSpaceScreen(
                             selectedIds = emptySet()
                         }) {
                             Icon(
-                                Icons.Outlined.Delete,
+                                Icons.Rounded.Delete,
                                 contentDescription = "Delete permanently",
                                 tint = MaterialTheme.colorScheme.error,
                                 modifier = Modifier.size(22.dp)
@@ -219,7 +219,7 @@ fun PrivateSpaceScreen(
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(
-                                    Icons.Filled.Lock,
+                                    Icons.Rounded.Lock,
                                     contentDescription = "Locked",
                                     tint = MaterialTheme.colorScheme.onPrimaryContainer,
                                     modifier = Modifier.size(40.dp)
@@ -251,7 +251,7 @@ fun PrivateSpaceScreen(
                         verticalArrangement = Arrangement.Center
                     ) {
                         Icon(
-                            Icons.Filled.Shield,
+                            Icons.Rounded.Security,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.outlineVariant,
                             modifier = Modifier.size(72.dp)
@@ -354,7 +354,7 @@ fun PrivateSpaceScreen(
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Icon(
-                                            Icons.Filled.Shield,
+                                            Icons.Rounded.Security,
                                             contentDescription = null,
                                             tint = MaterialTheme.colorScheme.onPrimary,
                                             modifier = Modifier.size(14.dp)

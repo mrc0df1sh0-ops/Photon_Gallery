@@ -2,10 +2,13 @@ package com.inferno.gallery.data
 
 import android.content.ContentValues
 import android.content.Context
+import android.content.ContentUris
 import android.net.Uri
 import android.os.Environment
 import android.provider.MediaStore
 import androidx.core.content.FileProvider
+import com.inferno.gallery.data.db.DatabaseProvider
+import com.inferno.gallery.data.db.CoreMediaEntity
 import com.inferno.gallery.data.db.VaultDao
 import com.inferno.gallery.data.db.VaultMediaEntity
 import kotlinx.coroutines.Dispatchers
@@ -157,6 +160,13 @@ class VaultRepository(
                     put(MediaStore.MediaColumns.RELATIVE_PATH, restorePath)
                     put(MediaStore.MediaColumns.DATE_ADDED, item.dateAdded)
                     put(MediaStore.MediaColumns.DATE_MODIFIED, item.dateModified)
+                    // DATE_TAKEN is in milliseconds and is what galleries use for grouping
+                    // DATE_ADDED is often read-only on insert (Android overrides it with current time)
+                    if (item.isVideo) {
+                        put(MediaStore.Video.Media.DATE_TAKEN, item.dateAdded * 1000L)
+                    } else {
+                        put(MediaStore.Images.Media.DATE_TAKEN, item.dateAdded * 1000L)
+                    }
                     put(MediaStore.MediaColumns.IS_PENDING, 1)
                 }
 
@@ -170,12 +180,42 @@ class VaultRepository(
                     }
 
                     // Mark as complete, re-set dates (some MediaStore impls reset dates on write)
+                    // DATE_ADDED is read-only on API 29+, but DATE_MODIFIED can be updated
                     val finalValues = ContentValues().apply {
                         put(MediaStore.MediaColumns.IS_PENDING, 0)
-                        put(MediaStore.MediaColumns.DATE_ADDED, item.dateAdded)
                         put(MediaStore.MediaColumns.DATE_MODIFIED, item.dateModified)
+                        // Re-set DATE_TAKEN to ensure grouping stays correct
+                        if (item.isVideo) {
+                            put(MediaStore.Video.Media.DATE_TAKEN, item.dateAdded * 1000L)
+                        } else {
+                            put(MediaStore.Images.Media.DATE_TAKEN, item.dateAdded * 1000L)
+                        }
                     }
                     context.contentResolver.update(insertUri, finalValues, null, null)
+
+                    // Pre-insert a CoreMediaEntity with the ORIGINAL dateAdded into Room
+                    // so the gallery groups this item correctly (not under "Today")
+                    try {
+                        val newId = ContentUris.parseId(insertUri)
+                        val db = DatabaseProvider.getDatabase(context)
+                        db.mediaDao().insertAll(listOf(
+                            CoreMediaEntity(
+                                id = newId,
+                                uriString = insertUri.toString(),
+                                filePath = "", // Will be filled by next MediaSyncWorker run
+                                bucketName = item.originalBucket,
+                                dateAdded = item.dateAdded, // Original date!
+                                dateModified = item.dateModified,
+                                size = item.size,
+                                name = item.fileName,
+                                mimeType = item.mimeType,
+                                isVideo = item.isVideo,
+                                durationMs = item.durationMs
+                            )
+                        ))
+                    } catch (dbEx: Exception) {
+                        android.util.Log.w("VaultRepository", "Pre-insert Room record failed (sync will fix): ${dbEx.message}")
+                    }
 
                     // Delete vault file and record
                     vaultFile.delete()
