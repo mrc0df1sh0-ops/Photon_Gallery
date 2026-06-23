@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.border
 import androidx.compose.ui.draw.clip
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -85,18 +86,22 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import com.inferno.gallery.ui.utils.tick
+import com.inferno.gallery.ui.utils.thud
 @Composable
 fun AlbumsScreen(
     modifier: Modifier = Modifier,
     viewModel: GalleryViewModel = viewModel(),
     contentPadding: PaddingValues = PaddingValues(0.dp),
     onAlbumClick: (String) -> Unit = {},
-    onNavigateToVault: () -> Unit = {}
+    onNavigateToVault: () -> Unit = {},
+    onNavigateToDuplicateCleaner: () -> Unit = {}
 ) {
     val albums by viewModel.allAlbums.collectAsState()
     val pinnedAlbums by viewModel.pinnedAlbums.collectAsState()
@@ -220,6 +225,11 @@ fun AlbumsScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(bottom = 8.dp)
+                        .border(
+                            width = 0.5.dp,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.08f),
+                            shape = ShapeLarge as androidx.compose.foundation.shape.RoundedCornerShape
+                        )
                 ) {
                     Row(
                         modifier = Modifier
@@ -279,6 +289,11 @@ fun AlbumsScreen(
                     modifier = Modifier
                         .weight(1f)
                         .height(70.dp)
+                        .border(
+                            width = 0.5.dp,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.08f),
+                            shape = ShapeLarge as androidx.compose.foundation.shape.RoundedCornerShape
+                        )
                 ) {
                     Box(modifier = Modifier.fillMaxSize()) {
                         if (favoriteItems.isNotEmpty()) {
@@ -312,6 +327,28 @@ fun AlbumsScreen(
                                         )
                                     )
                             )
+                        } else {
+                            // Empty state: soft gradient with icon
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(
+                                        brush = androidx.compose.ui.graphics.Brush.linearGradient(
+                                            colors = listOf(
+                                                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f),
+                                                MaterialTheme.colorScheme.surfaceContainerHigh
+                                            )
+                                        )
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    Icons.Outlined.FavoriteBorder,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f),
+                                    modifier = Modifier.size(32.dp)
+                                )
+                            }
                         }
                         Row(
                             modifier = Modifier
@@ -348,8 +385,34 @@ fun AlbumsScreen(
                     modifier = Modifier
                         .weight(1f)
                         .height(70.dp)
+                        .border(
+                            width = 0.5.dp,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.08f),
+                            shape = ShapeLarge as androidx.compose.foundation.shape.RoundedCornerShape
+                        )
                 ) {
                     Box(modifier = Modifier.fillMaxSize()) {
+                        // Empty state: soft gradient with icon
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(
+                                    brush = androidx.compose.ui.graphics.Brush.linearGradient(
+                                        colors = listOf(
+                                            com.inferno.gallery.ui.theme.LocalHarmonizedColors.current.errorContainer.copy(alpha = 0.2f),
+                                            MaterialTheme.colorScheme.surfaceContainerHigh
+                                        )
+                                    )
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Outlined.Delete,
+                                contentDescription = null,
+                                tint = com.inferno.gallery.ui.theme.LocalHarmonizedColors.current.error.copy(alpha = 0.18f),
+                                modifier = Modifier.size(32.dp)
+                            )
+                        }
                         Row(
                             modifier = Modifier
                                 .align(Alignment.BottomStart)
@@ -363,7 +426,7 @@ fun AlbumsScreen(
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                "$trashCount items",
+                                if (trashCount > 0) "$trashCount items" else "Empty",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -611,6 +674,63 @@ fun AlbumsScreen(
         }
 
         item(span = { GridItemSpan(maxLineSpan) }) {
+            Spacer(modifier = Modifier.height(16.dp))
+            // Clean card (Duplicate Cleaner)
+            Surface(
+                onClick = onNavigateToDuplicateCleaner,
+                shape = ShapeLarge as androidx.compose.foundation.shape.RoundedCornerShape,
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(70.dp)
+            ) {
+                Box(modifier = Modifier.fillMaxSize()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                brush = androidx.compose.ui.graphics.Brush.linearGradient(
+                                    colors = listOf(
+                                        MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.25f),
+                                        MaterialTheme.colorScheme.surfaceContainerHigh
+                                    )
+                                )
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Outlined.AutoAwesome,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.2f),
+                            modifier = Modifier.size(32.dp)
+                        )
+                    }
+                    Row(
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.AutoAwesome,
+                            contentDescription = "Clean",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            "Clean",
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            "Duplicates & Similar",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
             Spacer(modifier = Modifier.height(24.dp))
         }
     }
@@ -619,11 +739,12 @@ fun AlbumsScreen(
 @Composable
 fun Modifier.expressiveClick(onClick: () -> Unit, onLongPress: (() -> Unit)? = null): Modifier {
     var isPressed by remember { mutableStateOf(false) }
+    val haptic = LocalHapticFeedback.current
     val scale by animateFloatAsState(
-        targetValue = if (isPressed) 0.97f else 1f,
+        targetValue = if (isPressed) 0.95f else 1f,
         animationSpec = spring(
-            dampingRatio = Spring.DampingRatioNoBouncy,
-            stiffness = 15000f
+            dampingRatio = if (isPressed) Spring.DampingRatioNoBouncy else 0.55f,
+            stiffness = if (isPressed) 12000f else Spring.StiffnessMedium
         ),
         label = "expressiveClickScale"
     )
@@ -636,8 +757,14 @@ fun Modifier.expressiveClick(onClick: () -> Unit, onLongPress: (() -> Unit)? = n
                     tryAwaitRelease()
                     isPressed = false
                 },
-                onTap = { onClick() },
-                onLongPress = if (onLongPress != null) {{ onLongPress() }} else null
+                onTap = {
+                    haptic.tick()
+                    onClick()
+                },
+                onLongPress = if (onLongPress != null) {{
+                    haptic.thud()
+                    onLongPress()
+                }} else null
             )
         }
 }
@@ -857,13 +984,13 @@ fun TrashCard(
                     .fillMaxWidth()
                     .aspectRatio(1f)
                     .clip(MaterialTheme.shapes.large)
-                    .background(MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.15f)),
+                    .background(com.inferno.gallery.ui.theme.LocalHarmonizedColors.current.errorContainer.copy(alpha = 0.15f)),
                 contentAlignment = Alignment.Center
             ) {
                 androidx.compose.material3.Icon(
                     imageVector = Icons.Outlined.Delete,
                     contentDescription = "Recycle Bin",
-                    tint = MaterialTheme.colorScheme.error,
+                    tint = com.inferno.gallery.ui.theme.LocalHarmonizedColors.current.error,
                     modifier = Modifier.size(48.dp)
                 )
             }

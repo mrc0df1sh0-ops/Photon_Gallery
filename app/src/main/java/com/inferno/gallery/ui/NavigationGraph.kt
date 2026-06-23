@@ -4,8 +4,11 @@ import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.Spring
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -20,6 +23,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.inferno.gallery.ui.theme.MotionTokens
 
 /**
  * Top-level navigation graph for Photon Gallery.
@@ -53,10 +57,52 @@ fun NavigationGraph(
         NavHost(
             navController = navController,
             startDestination = "gallery",
-            enterTransition = { fadeIn(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) },
-            exitTransition = { fadeOut(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) },
-            popEnterTransition = { fadeIn(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) },
-            popExitTransition = { fadeOut(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) }
+            // ── Forward navigation: slide in from right ──
+            enterTransition = {
+                slideInHorizontally(
+                    animationSpec = tween(400, easing = MotionTokens.EmphasizedEasing),
+                    initialOffsetX = { (it * 0.25f).toInt() }
+                ) + fadeIn(
+                    animationSpec = tween(220, 80, easing = MotionTokens.FadeEasing)
+                ) + scaleIn(
+                    animationSpec = tween(400, easing = MotionTokens.ScaleEasing),
+                    initialScale = 0.94f
+                )
+            },
+            exitTransition = {
+                slideOutHorizontally(
+                    animationSpec = tween(400, easing = MotionTokens.EmphasizedEasing),
+                    targetOffsetX = { -(it * 0.12f).toInt() }
+                ) + fadeOut(
+                    animationSpec = tween(200, easing = MotionTokens.FadeEasing)
+                ) + scaleOut(
+                    animationSpec = tween(400, easing = MotionTokens.ScaleEasing),
+                    targetScale = 0.94f
+                )
+            },
+            // ── Back navigation: slide in from left ──
+            popEnterTransition = {
+                slideInHorizontally(
+                    animationSpec = tween(400, easing = MotionTokens.EmphasizedEasing),
+                    initialOffsetX = { -(it * 0.12f).toInt() }
+                ) + fadeIn(
+                    animationSpec = tween(220, 80, easing = MotionTokens.FadeEasing)
+                ) + scaleIn(
+                    animationSpec = tween(400, easing = MotionTokens.ScaleEasing),
+                    initialScale = 0.94f
+                )
+            },
+            popExitTransition = {
+                slideOutHorizontally(
+                    animationSpec = tween(400, easing = MotionTokens.EmphasizedEasing),
+                    targetOffsetX = { (it * 0.25f).toInt() }
+                ) + fadeOut(
+                    animationSpec = tween(200, easing = MotionTokens.FadeEasing)
+                ) + scaleOut(
+                    animationSpec = tween(400, easing = MotionTokens.ScaleEasing),
+                    targetScale = 0.94f
+                )
+            }
         ) {
 
             composable("gallery") {

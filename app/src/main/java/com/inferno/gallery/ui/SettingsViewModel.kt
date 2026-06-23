@@ -93,6 +93,18 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    val showHiddenAlbums: StateFlow<Boolean> = repository.showHiddenAlbumsFlow.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = false
+    )
+
+    fun setShowHiddenAlbums(show: Boolean) {
+        viewModelScope.launch {
+            repository.updateShowHiddenAlbums(show)
+        }
+    }
+
     val dockStyle: StateFlow<DockStyle> = repository.dockStyleFlow.map { modeString ->
         try {
             DockStyle.valueOf(modeString)

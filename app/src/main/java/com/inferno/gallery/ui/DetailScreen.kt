@@ -1174,12 +1174,12 @@ fun DetailScreen(
                                 label = "heartScale",
                                 finishedListener = { if (heartBounce) heartBounce = false }
                             )
-                            val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
+                            val heartView = androidx.compose.ui.platform.LocalView.current
                             IconButton(
                                 onClick = {
                                     if (currentItem != null) {
                                         heartBounce = true
-                                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                                        heartView.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK)
                                         viewModel.toggleFavorite(currentItem.id)
                                     }
                                 }
@@ -1187,7 +1187,7 @@ fun DetailScreen(
                                 Icon(
                                     imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
                                     contentDescription = "Favorite",
-                                    tint = if (isFavorite) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                                    tint = if (isFavorite) com.inferno.gallery.ui.theme.LocalHarmonizedColors.current.error else MaterialTheme.colorScheme.onSurface,
                                     modifier = Modifier.graphicsLayer {
                                         scaleX = heartScale
                                         scaleY = heartScale

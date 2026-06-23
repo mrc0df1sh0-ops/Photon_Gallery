@@ -47,6 +47,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalView
+import com.inferno.gallery.ui.utils.tick
 import androidx.compose.ui.unit.dp
 
 @Composable
@@ -134,12 +136,12 @@ fun DockItem(
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
-    val haptic = LocalHapticFeedback.current
+    val view = LocalView.current
     val touchScale by animateFloatAsState(
-        targetValue = if (isPressed) 0.92f else 1f,
+        targetValue = if (isPressed) 0.90f else 1f,
         animationSpec = spring(
-            dampingRatio = Spring.DampingRatioNoBouncy,
-            stiffness = 12000f // Extra-fast snap
+            dampingRatio = if (isPressed) Spring.DampingRatioNoBouncy else 0.5f,
+            stiffness = if (isPressed) 12000f else Spring.StiffnessMedium
         ),
         label = "dockItemScale"
     )
@@ -176,7 +178,7 @@ fun DockItem(
                 interactionSource = interactionSource,
                 indication = null,
                 onClick = {
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    view.tick()
                     onClick()
                 }
             )

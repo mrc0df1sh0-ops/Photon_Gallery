@@ -96,6 +96,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import com.inferno.gallery.ui.theme.ShapeLarge
 import com.inferno.gallery.ui.theme.ShapeLargeIncreased3
 import com.inferno.gallery.ui.theme.ShapeExtraLarge
+import com.inferno.gallery.ui.theme.photonContainer
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.togetherWith
@@ -148,6 +149,7 @@ fun SettingsScreen(
     val useMaterialYou by viewModel.useMaterialYou.collectAsState()
     val useAmoledBlack by viewModel.useAmoledBlack.collectAsState()
     val useFullScreen by viewModel.useFullScreen.collectAsState()
+    val showHiddenAlbums by viewModel.showHiddenAlbums.collectAsState()
     val isSystemDark = androidx.compose.foundation.isSystemInDarkTheme()
     val dockStyle by viewModel.dockStyle.collectAsState()
     val gridCellsCount by galleryViewModel.gridCellsCount.collectAsState()
@@ -791,6 +793,30 @@ fun SettingsScreen(
                                                 thumbContent = {
                                                     Icon(
                                                         imageVector = if (isDockFullWidth) Icons.Outlined.Check else Icons.Outlined.Close,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(SwitchDefaults.IconSize)
+                                                    )
+                                                }
+                                            )
+                                        },
+                                        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                                    )
+
+                                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+
+                                    ListItem(
+                                        leadingContent = { Icon(Icons.Outlined.Visibility, contentDescription = null) },
+                                        headlineContent = { Text("Show Hidden Albums") },
+                                        supportingContent = { Text("Show albums that start with a dot (e.g., .nomedia folders)") },
+                                        trailingContent = {
+                                            Switch(
+                                                checked = showHiddenAlbums, 
+                                                onCheckedChange = { isChecked ->
+                                                    viewModel.setShowHiddenAlbums(isChecked)
+                                                },
+                                                thumbContent = {
+                                                    Icon(
+                                                        imageVector = if (showHiddenAlbums) Icons.Outlined.Check else Icons.Outlined.Close,
                                                         contentDescription = null,
                                                         modifier = Modifier.size(SwitchDefaults.IconSize)
                                                     )
@@ -2259,10 +2285,10 @@ fun CategoryCard(
     val isPressed by interactionSource.collectIsPressedAsState()
     
     val scale by animateFloatAsState(
-        targetValue = if (isPressed) 0.97f else 1f,
+        targetValue = if (isPressed) 0.96f else 1f,
         animationSpec = spring(
-            dampingRatio = Spring.DampingRatioNoBouncy,
-            stiffness = Spring.StiffnessHigh
+            dampingRatio = if (isPressed) Spring.DampingRatioNoBouncy else 0.55f,
+            stiffness = if (isPressed) 12000f else Spring.StiffnessMedium
         ),
         label = "CategoryCardScale"
     )
@@ -2272,9 +2298,10 @@ fun CategoryCard(
         interactionSource = interactionSource,
         shape = ShapeExtraLarge as RoundedCornerShape,
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface,
+            containerColor = Color.Transparent,
             contentColor = MaterialTheme.colorScheme.onSurface
         ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
@@ -2282,6 +2309,10 @@ fun CategoryCard(
                 scaleX = scale
                 scaleY = scale
             }
+            .photonContainer(
+                shape = ShapeExtraLarge as RoundedCornerShape,
+                backgroundColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            )
     ) {
         Row(
             modifier = Modifier

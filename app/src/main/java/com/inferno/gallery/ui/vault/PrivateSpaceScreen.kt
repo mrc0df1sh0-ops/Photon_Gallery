@@ -30,6 +30,8 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import com.inferno.gallery.ui.utils.tick
+import com.inferno.gallery.ui.utils.thud
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -298,6 +300,7 @@ fun PrivateSpaceScreen(
                                     .combinedClickable(
                                         onClick = {
                                             if (isSelectionMode) {
+                                                haptic.tick()
                                                 selectedIds = if (isSelected) {
                                                     selectedIds - item.id
                                                 } else {
@@ -306,7 +309,7 @@ fun PrivateSpaceScreen(
                                             }
                                         },
                                         onLongClick = {
-                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            haptic.thud()
                                             selectedIds = if (isSelected) {
                                                 selectedIds - item.id
                                             } else {

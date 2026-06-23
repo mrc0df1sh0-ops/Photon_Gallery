@@ -632,7 +632,7 @@ fun MainAppLayout(
             }
         },
         bottomBar = {
-            val isDockVisible = currentRoute != "settings" && !isSelectionMode && (dockStyle != DockStyle.PILL || isScrollDockVisible)
+            val isDockVisible = currentRoute != "settings" && currentRoute != "duplicate_cleaner" && !isSelectionMode && (dockStyle != DockStyle.PILL || isScrollDockVisible)
             AnimatedVisibility(
                 visible = isDockVisible,
                 enter = slideInVertically(initialOffsetY = { it }),
@@ -829,7 +829,8 @@ fun MainAppLayout(
                     onAlbumClick = { bucketName -> 
                         nestedNavController.navigate("album/$bucketName")
                     },
-                    onNavigateToVault = onNavigateToVault
+                    onNavigateToVault = onNavigateToVault,
+                    onNavigateToDuplicateCleaner = { nestedNavController.navigate("duplicate_cleaner") }
                 )
             }
             composable(
@@ -915,6 +916,12 @@ fun MainAppLayout(
                     viewModel = viewModel,
                     contentPadding = innerPadding,
                     onNavigateToSettings = { nestedNavController.navigate("settings") }
+                )
+            }
+            composable("duplicate_cleaner") {
+                DuplicateCleanerScreen(
+                    galleryViewModel = viewModel,
+                    onBackClick = { nestedNavController.popBackStack() }
                 )
             }
         }
@@ -1493,7 +1500,7 @@ fun MainAppLayout(
                                 }
                             }
                         }) {
-                            Icon(Icons.Outlined.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(22.dp))
+                            Icon(Icons.Outlined.Delete, contentDescription = "Delete", tint = com.inferno.gallery.ui.theme.LocalHarmonizedColors.current.error, modifier = Modifier.size(22.dp))
                         }
 
                         // More (hide + cloud actions)

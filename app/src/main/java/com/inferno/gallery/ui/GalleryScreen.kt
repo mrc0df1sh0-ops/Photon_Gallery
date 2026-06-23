@@ -1,6 +1,8 @@
 package com.inferno.gallery.ui
 
 import android.Manifest
+import com.inferno.gallery.ui.utils.verticalFadingEdge
+import com.inferno.gallery.ui.utils.ShimmerPlaceholder
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -137,6 +139,8 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import com.inferno.gallery.ui.utils.tick
+import com.inferno.gallery.ui.utils.thud
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.runtime.snapshotFlow
@@ -245,6 +249,11 @@ fun GalleryScreen(
         modifier = modifier
             .fillMaxSize()
             .padding(horizontal = 1.dp)
+            .verticalFadingEdge(
+                scrollState = lazyGridState,
+                fadeLength = 16.dp,
+                color = androidx.compose.material3.MaterialTheme.colorScheme.background,
+            )
             .gridZoomGestureModifier(gridCellsCount, viewModel::setGridCellsCount, isSelectionMode)
     ) {
         if (viewMode == ViewMode.Immersive) {
@@ -479,13 +488,16 @@ fun GalleryGridItem(
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
     val targetScale = when {
-        isSelected -> 0.90f
-        isPressed -> 0.97f
+        isSelected -> 0.88f
+        isPressed -> 0.95f
         else -> 1f
     }
     val scale by animateFloatAsState(
         targetValue = targetScale,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = 12000f),
+        animationSpec = spring(
+            dampingRatio = if (isPressed || isSelected) Spring.DampingRatioNoBouncy else 0.6f,
+            stiffness = if (isPressed) 12000f else Spring.StiffnessMedium
+        ),
         label = "scale"
     )
 
@@ -524,23 +536,23 @@ fun GalleryGridItem(
     }
 
     Box(modifier = modifier.scale(scale)) {
-        // For non-animated formats, we don't collect painterState, so always show skeleton briefly.
-        // The skeleton is just a background color that becomes transparent once the image loads.
-        val isSkeletonVisible = painterState != null && painterState !is AsyncImagePainter.State.Success
-        val skeletonColor = if (isSkeletonVisible || painterState == null) MaterialTheme.colorScheme.surfaceContainerHigh else Color.Transparent
+        // Shimmer placeholder — visible until the image loads and covers it
+        val showShimmer = painterState == null || painterState !is AsyncImagePainter.State.Success
 
         with(sharedTransitionScope) {
             val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
             val imageModifier = Modifier
                 .aspectRatio(1f)
                 .clip(androidx.compose.foundation.shape.RoundedCornerShape(thumbnailCornerRadius.dp))
-                .background(skeletonColor)
                 .combinedClickable(
                     interactionSource = interactionSource,
                     indication = null,
-                    onClick = { onClick(item) },
+                    onClick = {
+                        haptic.tick()
+                        onClick(item)
+                    },
                     onLongClick = {
-                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                        haptic.thud()
                         onLongClick(item)
                     }
                 )
@@ -559,12 +571,18 @@ fun GalleryGridItem(
                 }
             )
 
-            Image(
-                painter = painter,
-                contentDescription = null, 
-                contentScale = ContentScale.Crop,
-                modifier = finalModifier
-            )
+            Box(modifier = finalModifier) {
+                // Shimmer behind the image
+                if (showShimmer) {
+                    ShimmerPlaceholder()
+                }
+                Image(
+                    painter = painter,
+                    contentDescription = null, 
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
         }
 
         if (item.isVideo) {
@@ -671,7 +689,7 @@ fun GalleryGridItem(
                 Icon(
                     imageVector = Icons.Outlined.Warning,
                     contentDescription = "Backup failed",
-                    tint = MaterialTheme.colorScheme.error,
+                    tint = com.inferno.gallery.ui.theme.LocalHarmonizedColors.current.error,
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
                         .padding(8.dp)
@@ -830,7 +848,7 @@ private fun Modifier.gridZoomGestureModifier(
                                 
                                 if (roundedCount != currentGridCellsCount) {
                                     // Physical click for each column-count snap
-                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    haptic.tick()
                                     currentOnGridCountChange(roundedCount)
                                 }
                             }
