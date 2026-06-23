@@ -25,20 +25,29 @@
 
 ## Features
 
+### 🖼️ Core Experience
 - **Smooth Media Browsing**: Browse all your local photos and videos smoothly with highly responsive grids, fluid image loading, and fast interactions.
+- **Material 3 Expressive Design**: Modern layout utilizing shape-morphing animations, emphasized variable font weights, and physics-based spring motions.
+- **Rich Format Support**: Full support for GIFs, animated WebP, animated HEIF, and SVG files — all rendered natively via Coil 3 decoders.
+- **Auto-Hiding Pill Dock**: Navigation toolbar that collapses dynamically on down-scroll and re-appears on minor up-scroll to maximize screen space.
+
+### 🧠 On-Device AI
 - **Smart On-Device Search**: Secure, offline search powered by on-device MobileCLIP semantic models for natural-language prompt-based search. All inference runs 100% on-device via ONNX Runtime — your photos never leave your phone.
 - **OCR Text Search**: Automatically indexes text found in photos using ML Kit OCR, so you can search for screenshots, documents, and signs by their content.
-- **Material 3 Expressive Design**: Modern layout utilizing shape-morphing animations, emphasized variable font weights, and physics-based spring motions.
-- **Local Album Management**: Create folders directly in public device storage and manage a dedicated Recycle Bin next to standard folders.
-- **Auto-Hiding Pill Dock**: Navigation toolbar that collapses dynamically on down-scroll and re-appears on minor up-scroll to maximize screen space.
+
+### ☁️ Cloud & Backup
 - **Telegram Cloud Backup**: Synchronize selected media folders securely to your private Telegram chat using a personal Telegram userbot via TDLib (MTProto). Includes Wi-Fi only upload constraints, low-battery pausing, and location metadata stripping for enhanced privacy.
-- **Collage Builder**: Select multiple photos to instantly create custom photo collages.
-- **Pinned Albums**: Pin your most-used albums to the top for quick access. Long-press any album to pin or unpin it.
+
+### 🔒 Privacy & Security
 - **Private Space**: A biometric-protected vault (fingerprint / face unlock) to keep sensitive photos and videos hidden from the main gallery. Secured with AndroidX Biometric.
+
+### 🛠️ Organization & Tools
 - **Photo Map**: View your geotagged photos on an interactive OpenStreetMap, clustered by location. Tap a cluster to browse photos taken in that area.
 - **Duplicate Cleaner**: Finds duplicate photos using perceptual hashing and lets you review and remove them in bulk to reclaim storage.
+- **Collage Builder**: Select multiple photos to instantly create custom photo collages.
 - **Stitch Tool**: Combine multiple images into a single stitched panorama.
-- **Rich Format Support**: Full support for GIFs, animated WebP, animated HEIF, and SVG files — all rendered natively via Coil 3 decoders.
+- **Local Album Management**: Create folders directly in public device storage and manage a dedicated Recycle Bin next to standard folders.
+- **Pinned Albums**: Pin your most-used albums to the top for quick access. Long-press any album to pin or unpin it.
 - **Exclude Folders**: Hide unwanted folders from your main gallery view while keeping them accessible via search.
 
 ---
