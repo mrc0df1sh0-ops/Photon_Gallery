@@ -58,6 +58,7 @@ class SettingsRepository private constructor(private val context: Context) {
         val EXCLUDED_FOLDERS = stringPreferencesKey("excluded_folders")
         val HDR_DISPLAY_ENABLED = booleanPreferencesKey("hdr_display_enabled")
         val PINNED_FOLDERS = stringPreferencesKey("pinned_folders")
+        val SHOW_HIDDEN_ALBUMS = booleanPreferencesKey("show_hidden_albums")
     }
 
     val themeModeFlow: Flow<String> = context.dataStore.data
@@ -437,6 +438,17 @@ class SettingsRepository private constructor(private val context: Context) {
                 current.add(folder)
             }
             preferences[PINNED_FOLDERS] = current.joinToString(",")
+        }
+    }
+
+    val showHiddenAlbumsFlow: Flow<Boolean> = context.dataStore.data
+        .map { preferences ->
+            preferences[SHOW_HIDDEN_ALBUMS] ?: false
+        }
+
+    suspend fun updateShowHiddenAlbums(show: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[SHOW_HIDDEN_ALBUMS] = show
         }
     }
 }
