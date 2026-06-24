@@ -54,13 +54,13 @@
 
 ## Screenshots
 
-| Hero View | Main Gallery Grid | Smart Search |
-| :---: | :---: | :---: |
-| <img src="screenshots/01-hero.png" width="240" alt="Hero View" /> | <img src="screenshots/02-device-bottom.png" width="240" alt="Main Gallery Grid" /> | <img src="screenshots/03-device-top.png" width="240" alt="Smart Search" /> |
+| Gallery | Albums | Cloud Backup | Smart Search |
+| :---: | :---: | :---: | :---: |
+| <img src="screenshots/01-hero.png" width="200" alt="Gallery" /> | <img src="screenshots/02-device-top.png" width="200" alt="Albums" /> | <img src="screenshots/03-device-bottom.png" width="200" alt="Cloud Backup" /> | <img src="screenshots/04-device-bottom.png" width="200" alt="Smart Search" /> |
 
-| Cloud Sync | Advanced Settings |
-| :---: | :---: |
-| <img src="screenshots/04-two-devices.png" width="240" alt="Cloud Sync" /> | <img src="screenshots/05-no-device.png" width="240" alt="Advanced Settings" /> |
+| Image Viewer | Video Player | Collage Builder | Settings |
+| :---: | :---: | :---: | :---: |
+| <img src="screenshots/05-device-top.png" width="200" alt="Image Viewer" /> | <img src="screenshots/06-device-bottom.png" width="200" alt="Video Player" /> | <img src="screenshots/07-two-devices.png" width="200" alt="Collage Builder" /> | <img src="screenshots/08-no-device.png" width="200" alt="Settings" /> |
 
 ---
 
