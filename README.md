@@ -7,7 +7,7 @@
 <p align="center">
   <a href="https://github.com/Bn5prS/Photon_Gallery/stargazers"><img src="https://img.shields.io/github/stars/Bn5prS/Photon_Gallery?style=flat&logo=github&color=blue" alt="GitHub Stars" /></a>
   <a href="https://github.com/Bn5prS/Photon_Gallery/releases"><img src="https://img.shields.io/github/downloads/Bn5prS/Photon_Gallery/total?style=flat&logo=github&color=green" alt="Downloads" /></a>
-  <a href="https://github.com/Bn5prS/Photon_Gallery/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-GPLv3-blue.svg?style=flat" alt="License" /></a>
+  <a href="https://github.com/Bn5prS/Photon_Gallery/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-Proprietary-red.svg?style=flat" alt="License" /></a>
   <a href="https://github.com/Bn5prS/Photon_Gallery"><img src="https://komarev.com/ghpvc/?username=Bn5prS&repo=Photon_Gallery&label=Views&color=blue" alt="Views" /></a>
   <a href="https://github.com/Bn5prS/Photon_Gallery"><img src="https://img.shields.io/github/repo-size/Bn5prS/Photon_Gallery?style=flat&color=orange" alt="Repo Size" /></a>
 </p>
@@ -117,4 +117,4 @@ Contributions are welcome! Here's how to get started:
 
 ## License
 
-This project is licensed under the **GNU General Public License v3.0** — see the [LICENSE](LICENSE) file for details.
+This project is licensed under a **Proprietary Source-Available License** — you may view and study the code, but redistribution and commercial use are prohibited. See the [LICENSE](LICENSE) file for details.
