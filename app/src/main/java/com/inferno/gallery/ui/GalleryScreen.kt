@@ -54,6 +54,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -144,6 +145,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import com.inferno.gallery.ui.utils.tick
 import com.inferno.gallery.ui.utils.thud
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.flow.collectLatest
@@ -261,7 +263,8 @@ fun GalleryScreen(
                 lazyGridState = lazyGridState,
                 pagedMedia = pagedMedia,
                 viewModel = viewModel,
-                hapticFeedback = androidx.compose.ui.platform.LocalHapticFeedback.current
+                hapticFeedback = androidx.compose.ui.platform.LocalHapticFeedback.current,
+                contentPadding = contentPadding
             )
     ) {
         if (viewMode == ViewMode.Immersive) {
@@ -1121,15 +1124,20 @@ fun FastScroller(
     }
 }
 
-private fun androidx.compose.foundation.lazy.grid.LazyGridState.getItemIndexAtOffset(offset: Offset): Int? {
+private fun androidx.compose.foundation.lazy.grid.LazyGridState.getItemIndexAtOffset(
+    offset: Offset,
+    leftPaddingPx: Float,
+    topPaddingPx: Float
+): Int? {
+    val adjustedOffset = Offset(offset.x - leftPaddingPx, offset.y - topPaddingPx)
     val items = layoutInfo.visibleItemsInfo
     val matched = items.firstOrNull { item: androidx.compose.foundation.lazy.grid.LazyGridItemInfo ->
         val x = item.offset.x.toFloat()
         val y = item.offset.y.toFloat()
         val width = item.size.width.toFloat()
         val height = item.size.height.toFloat()
-        offset.x >= x && offset.x <= x + width &&
-                offset.y >= y && offset.y <= y + height
+        adjustedOffset.x >= x && adjustedOffset.x <= x + width &&
+                adjustedOffset.y >= y && adjustedOffset.y <= y + height
     }
     return matched?.index
 }
@@ -1138,8 +1146,14 @@ private fun Modifier.dragSelectGesture(
     lazyGridState: androidx.compose.foundation.lazy.grid.LazyGridState,
     pagedMedia: androidx.paging.compose.LazyPagingItems<GalleryListItem>,
     viewModel: GalleryViewModel,
-    hapticFeedback: androidx.compose.ui.hapticfeedback.HapticFeedback
+    hapticFeedback: androidx.compose.ui.hapticfeedback.HapticFeedback,
+    contentPadding: PaddingValues
 ): Modifier = composed {
+    val density = LocalDensity.current
+    val layoutDirection: LayoutDirection = androidx.compose.ui.platform.LocalLayoutDirection.current
+    val topPaddingPx = with(density) { contentPadding.calculateTopPadding().toPx() }
+    val leftPaddingPx = with(density) { contentPadding.calculateStartPadding(layoutDirection).toPx() }
+
     var autoScrollSpeed by remember { mutableStateOf(0f) }
     var lastPointerPosition by remember { mutableStateOf<Offset?>(null) }
     var initialIndex by remember { mutableStateOf<Int?>(null) }
@@ -1151,7 +1165,7 @@ private fun Modifier.dragSelectGesture(
                 val currentPos = lastPointerPosition
                 val startIndex = initialIndex
                 if (currentPos != null && startIndex != null) {
-                    val currentIndex = lazyGridState.getItemIndexAtOffset(currentPos)
+                    val currentIndex = lazyGridState.getItemIndexAtOffset(currentPos, leftPaddingPx, topPaddingPx)
                     if (currentIndex != null && currentIndex >= 0 && currentIndex < pagedMedia.itemCount) {
                         val minIndex = minOf(startIndex, currentIndex)
                         val maxIndex = maxOf(startIndex, currentIndex)
@@ -1174,7 +1188,7 @@ private fun Modifier.dragSelectGesture(
         Modifier.pointerInput(lazyGridState, pagedMedia) {
             detectDragGesturesAfterLongPress(
                 onDragStart = { startOffset ->
-                    val index = lazyGridState.getItemIndexAtOffset(startOffset)
+                    val index = lazyGridState.getItemIndexAtOffset(startOffset, leftPaddingPx, topPaddingPx)
                     if (index != null && index >= 0 && index < pagedMedia.itemCount) {
                         val listItem = pagedMedia.itemSnapshotList.getOrNull(index)
                         if (listItem is GalleryListItem.Item) {
@@ -1205,7 +1219,7 @@ private fun Modifier.dragSelectGesture(
                     val currentOffset = change.position
                     lastPointerPosition = currentOffset
 
-                    val currentIndex = lazyGridState.getItemIndexAtOffset(currentOffset)
+                    val currentIndex = lazyGridState.getItemIndexAtOffset(currentOffset, leftPaddingPx, topPaddingPx)
                     if (currentIndex != null && currentIndex >= 0 && currentIndex < pagedMedia.itemCount) {
                         val minIndex = minOf(startIndex, currentIndex)
                         val maxIndex = maxOf(startIndex, currentIndex)
