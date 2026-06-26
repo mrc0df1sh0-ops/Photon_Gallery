@@ -1853,6 +1853,64 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    fun copySelectedMediaToPath(targetDirectoryPath: String) {
+        val selected = _selectedUris.value.toList()
+        if (selected.isEmpty()) return
+
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val context = getApplication<android.app.Application>()
+                val targetDir = java.io.File(targetDirectoryPath)
+                if (!targetDir.exists()) {
+                    targetDir.mkdirs()
+                }
+
+                val allMedia = database.mediaDao().getAllMedia().associateBy { it.uriString }
+                val copiedPaths = mutableListOf<String>()
+
+                for (uriString in selected) {
+                    val entity = allMedia[uriString] ?: continue
+                    val srcFile = java.io.File(entity.filePath)
+                    if (srcFile.exists()) {
+                        val destFile = java.io.File(targetDir, srcFile.name)
+                        try {
+                            srcFile.copyTo(destFile, overwrite = true)
+                            copiedPaths.add(destFile.absolutePath)
+                        } catch (copyEx: Exception) {
+                            android.util.Log.e("GalleryViewModel", "Failed to copy physical file: ${copyEx.message}", copyEx)
+                        }
+                    }
+                }
+
+                if (copiedPaths.isNotEmpty()) {
+                    android.media.MediaScannerConnection.scanFile(
+                        context,
+                        copiedPaths.toTypedArray(),
+                        null,
+                        null
+                    )
+                    
+                    val syncWorkRequest = androidx.work.OneTimeWorkRequestBuilder<com.inferno.gallery.workers.MediaSyncWorker>().build()
+                    androidx.work.WorkManager.getInstance(context).enqueueUniqueWork(
+                        "MediaSyncWorker",
+                        androidx.work.ExistingWorkPolicy.REPLACE,
+                        syncWorkRequest
+                    )
+                }
+
+                withContext(Dispatchers.Main) {
+                    clearSelection()
+                    showToast("Copied to ${targetDir.name}")
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("GalleryViewModel", "Error copying media to path: ${e.message}", e)
+                withContext(Dispatchers.Main) {
+                    showToast("Error copying media: ${e.message}")
+                }
+            }
+        }
+    }
+
     fun deleteSelectedMediaFromDb(uris: List<String>) {
         viewModelScope.launch(Dispatchers.IO) {
             for (uriString in uris) {
