@@ -8,9 +8,10 @@ import android.graphics.Rect
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.net.Uri
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.*
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import kotlinx.coroutines.delay
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -203,7 +204,63 @@ fun PhotoMapScreen(
                 }
             }
 
-            // Scroll synchronization & Wavy Marker loading
+            val haptic = LocalHapticFeedback.current
+            var lastHapticId by remember { mutableStateOf<String?>(null) }
+
+            // Snappy Tactile feedback on scrolling
+            LaunchedEffect(firstVisibleImage) {
+                val item = firstVisibleImage
+                if (item != null && item.id != lastHapticId) {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    lastHapticId = item.id
+                }
+            }
+
+            // Liquid breathing wave phase animation
+            val infiniteTransition = rememberInfiniteTransition(label = "markerBreathe")
+            val breatheAnimation by infiniteTransition.animateFloat(
+                initialValue = 0f,
+                targetValue = (2 * Math.PI).toFloat(),
+                animationSpec = infiniteRepeatable(
+                    animation = tween(4000, easing = LinearEasing),
+                    repeatMode = RepeatMode.Restart
+                ),
+                label = "breathe"
+            )
+
+            var loadedBitmapState by remember { mutableStateOf<Bitmap?>(null) }
+
+            // 1. Asynchronously load the raw bitmap on change (prevents infinite reloading)
+            LaunchedEffect(firstVisibleImage) {
+                val item = firstVisibleImage
+                if (item != null) {
+                    val bitmap = withContext<Bitmap?>(Dispatchers.IO) {
+                        try {
+                            val loader = coil3.SingletonImageLoader.get(context)
+                            val request = ImageRequest.Builder(context)
+                                .data(item.resolvedUri)
+                                .size(160, 160)
+                                .precision(Precision.EXACT)
+                                .allowHardware(false)
+                                .build()
+                            val result = loader.execute(request)
+                            val image = (result as? coil3.request.SuccessResult)?.image
+                            when (image) {
+                                is BitmapImage -> image.bitmap
+                                is DrawableImage -> drawableToBitmap(image.drawable)
+                                else -> null
+                            }
+                        } catch (e: Exception) {
+                            null
+                        }
+                    }
+                    loadedBitmapState = bitmap
+                } else {
+                    loadedBitmapState = null
+                }
+            }
+
+            // 2. Debounced Glide Panning (80ms delay during rapid scroll to prevent jitter)
             LaunchedEffect(firstVisibleImage, mapView) {
                 val item = firstVisibleImage
                 val map = mapView
@@ -211,37 +268,28 @@ fun PhotoMapScreen(
                     val lat = item.latitude
                     val lon = item.longitude
                     if (lat != null && lon != null) {
+                        delay(80) // Debounce delay
                         val geoPoint = GeoPoint(lat, lon)
-                        
-                        // Centering the map rapidly
                         map.controller.animateTo(geoPoint)
+                    }
+                }
+            }
 
-                        // Load thumbnail asynchronously using Coil
-                        val loadedBitmap = withContext<Bitmap?>(Dispatchers.IO) {
-                            try {
-                                val loader = coil3.SingletonImageLoader.get(context)
-                                val request = ImageRequest.Builder(context)
-                                    .data(item.resolvedUri)
-                                    .size(160, 160)
-                                    .precision(Precision.EXACT)
-                                    .allowHardware(false)
-                                    .build()
-                                val result = loader.execute(request)
-                                val image = (result as? coil3.request.SuccessResult)?.image
-                                when (image) {
-                                    is BitmapImage -> image.bitmap
-                                    is DrawableImage -> drawableToBitmap(image.drawable)
-                                    else -> null
-                                }
-                            } catch (e: Exception) {
-                                null
-                            }
-                        }
-
-                        val wavyDrawable = if (loadedBitmap != null) {
-                            createWavyDrawable(context, loadedBitmap)
+            // 3. Dynamic Marker Render Updating
+            val animPhase = breatheAnimation
+            LaunchedEffect(loadedBitmapState, animPhase, firstVisibleImage, mapView) {
+                val item = firstVisibleImage
+                val map = mapView
+                if (item != null && map != null) {
+                    val lat = item.latitude
+                    val lon = item.longitude
+                    if (lat != null && lon != null) {
+                        val geoPoint = GeoPoint(lat, lon)
+                        val bitmap = loadedBitmapState
+                        val wavyDrawable = if (bitmap != null) {
+                            createWavyDrawable(context, bitmap, animPhase)
                         } else {
-                            createDefaultWavyDrawable(context)
+                            createDefaultWavyDrawable(context, animPhase)
                         }
 
                         var marker = focusedMarker
@@ -251,13 +299,14 @@ fun PhotoMapScreen(
                             }
                             focusedMarker = marker
                         }
-                        
+
                         marker.position = geoPoint
                         marker.icon = wavyDrawable
                         marker.title = item.name
 
-                        map.overlays.remove(marker)
-                        map.overlays.add(marker)
+                        if (!map.overlays.contains(marker)) {
+                            map.overlays.add(marker)
+                        }
                         map.invalidate()
                     }
                 } else {
@@ -557,25 +606,29 @@ fun PhotoMapScreen(
 
 private fun createWavyDrawable(
     context: android.content.Context,
-    bitmap: Bitmap
+    bitmap: Bitmap,
+    phase: Float
 ): Drawable {
-    val sizePx = 150
-    val output = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
+    val sizePx = 160
+    val scale = 1.0f + 0.04f * sin(phase)
+    val finalSize = (sizePx * scale).toInt()
+    val output = Bitmap.createBitmap(finalSize, finalSize, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(output)
 
     val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     val path = Path()
 
-    val centerX = sizePx / 2f
-    val centerY = sizePx / 2f
-    val r0 = sizePx / 2f - 10f
-    val amplitude = r0 * 0.08f
-    val waveCount = 10f
+    val centerX = finalSize / 2f
+    val centerY = finalSize / 2f
+    val r0 = (finalSize / 2f) - 12f
+    val amplitude = r0 * 0.07f
+    val waveCount = 8f
     val numPoints = 120
+    val wavePhase = phase * 2f
 
     for (i in 0 until numPoints) {
         val angle = i * (2 * Math.PI / numPoints)
-        val r = r0 + amplitude * sin(waveCount * angle)
+        val r = r0 + amplitude * sin(waveCount * angle + wavePhase)
         val x = (centerX + r * cos(angle)).toFloat()
         val y = (centerY + r * sin(angle)).toFloat()
         if (i == 0) {
@@ -588,7 +641,7 @@ private fun createWavyDrawable(
 
     // Shadow
     val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = 0x33000000
+        color = 0x2A000000
         style = Paint.Style.FILL
     }
     val shadowPath = Path(path).apply {
@@ -600,7 +653,7 @@ private fun createWavyDrawable(
     canvas.save()
     canvas.clipPath(path)
     val srcRect = Rect(0, 0, bitmap.width, bitmap.height)
-    val destRect = Rect(0, 0, sizePx, sizePx)
+    val destRect = Rect(0, 0, finalSize, finalSize)
     canvas.drawBitmap(bitmap, srcRect, destRect, paint)
     canvas.restore()
 
@@ -615,22 +668,28 @@ private fun createWavyDrawable(
     return BitmapDrawable(context.resources, output)
 }
 
-private fun createDefaultWavyDrawable(context: android.content.Context): Drawable {
+private fun createDefaultWavyDrawable(
+    context: android.content.Context,
+    phase: Float
+): Drawable {
     val sizePx = 120
-    val output = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
+    val scale = 1.0f + 0.04f * sin(phase)
+    val finalSize = (sizePx * scale).toInt()
+    val output = Bitmap.createBitmap(finalSize, finalSize, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(output)
 
     val path = Path()
-    val centerX = sizePx / 2f
-    val centerY = sizePx / 2f
-    val r0 = sizePx / 2f - 8f
+    val centerX = finalSize / 2f
+    val centerY = finalSize / 2f
+    val r0 = (finalSize / 2f) - 8f
     val amplitude = r0 * 0.08f
-    val waveCount = 10f
+    val waveCount = 8f
     val numPoints = 120
+    val wavePhase = phase * 2f
 
     for (i in 0 until numPoints) {
         val angle = i * (2 * Math.PI / numPoints)
-        val r = r0 + amplitude * sin(waveCount * angle)
+        val r = r0 + amplitude * sin(waveCount * angle + wavePhase)
         val x = (centerX + r * cos(angle)).toFloat()
         val y = (centerY + r * sin(angle)).toFloat()
         if (i == 0) {
