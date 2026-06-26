@@ -146,7 +146,11 @@ fun NavigationGraph(
                     navArgument("mediaId") { type = NavType.StringType },
                     navArgument("bucketName") { type = NavType.StringType; nullable = true; defaultValue = null },
                     navArgument("highlightText") { type = NavType.StringType; nullable = true; defaultValue = null }
-                )
+                ),
+                enterTransition = { fadeIn(tween(300)) },
+                exitTransition = { fadeOut(tween(300)) },
+                popEnterTransition = { fadeIn(tween(300)) },
+                popExitTransition = { fadeOut(tween(300)) }
             ) { backStackEntry ->
                 val mediaId = backStackEntry.arguments?.getString("mediaId") ?: return@composable
                 val bucketName = backStackEntry.arguments?.getString("bucketName")

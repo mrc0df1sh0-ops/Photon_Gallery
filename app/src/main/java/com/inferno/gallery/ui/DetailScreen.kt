@@ -201,7 +201,7 @@ fun DetailScreen(
 
     // Ensure we don't crash if items is empty
     if (galleryItems.isEmpty()) {
-        Box(modifier = Modifier.fillMaxSize().background(Color.Black))
+        Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background))
         return
     }
 
@@ -507,7 +507,7 @@ fun DetailScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = bgAlpha)),
+            .background(MaterialTheme.colorScheme.background.copy(alpha = bgAlpha)),
         contentAlignment = Alignment.Center
     ) {
         HorizontalPager(
