@@ -89,6 +89,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -990,135 +991,360 @@ fun MainAppLayout(
                     onDismissRequest = { showMoveSheet = false },
                     containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
                 ) {
+                    var isBrowsingStorage by remember { mutableStateOf(false) }
                     val albums by viewModel.allAlbums.collectAsState()
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 24.dp)
-                            .padding(bottom = 24.dp)
-                    ) {
-                        Text(
-                            "Move to Album",
-                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold),
-                            modifier = Modifier.padding(bottom = 4.dp)
-                        )
-                        Text(
-                            "${selectedUris.size} items · ${albums.size} albums",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(bottom = 16.dp)
-                        )
-                        androidx.compose.foundation.lazy.LazyColumn(
-                            modifier = Modifier.heightIn(max = 400.dp)
+
+                    if (!isBrowsingStorage) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 24.dp)
+                                .padding(bottom = 24.dp)
                         ) {
-                            // Private Space as first item
-                            item {
+                            Text(
+                                "Move to Album",
+                                style = MaterialTheme.typography.titleLarge.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold),
+                                modifier = Modifier.padding(bottom = 4.dp)
+                            )
+                            Text(
+                                "${selectedUris.size} items · ${albums.size} albums",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(bottom = 12.dp)
+                            )
+
+                            // Tonal button at the top to browse system storage tree
+                            androidx.compose.material3.Button(
+                                onClick = { isBrowsingStorage = true },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 16.dp),
+                                colors = androidx.compose.material3.ButtonDefaults.filledTonalButtonColors(
+                                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                                ),
+                                shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
+                            ) {
                                 Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable {
-                                            showMoveSheet = false
-                                            val activity = context as? androidx.fragment.app.FragmentActivity
-                                            if (activity != null) {
-                                                viewModel.vaultAuthManager.authenticate(
-                                                    activity = activity,
-                                                    onSuccess = {
-                                                        val uris = selectedUris.mapNotNull { android.net.Uri.parse(it) }
-                                                        viewModel.hideMedia(uris)
-                                                        viewModel.clearSelection()
-                                                    },
-                                                    onFailure = {}
-                                                )
-                                            }
-                                        }
-                                        .padding(vertical = 14.dp),
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(40.dp)
-                                            .background(
-                                                color = MaterialTheme.colorScheme.tertiaryContainer,
-                                                shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
-                                            ),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            Icons.Rounded.Security,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.onTertiaryContainer,
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                    }
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            "Private Space",
-                                            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
-                                        )
-                                        Text(
-                                            "Hidden \u00b7 Biometric protected",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
                                     Icon(
-                                        Icons.Rounded.VisibilityOff,
+                                        imageVector = Icons.Rounded.Folder,
                                         contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                         modifier = Modifier.size(18.dp)
                                     )
+                                    Text(
+                                        text = "Browse Other Folders",
+                                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                                    )
                                 }
-                                HorizontalDivider(
-                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                            }
+
+                            androidx.compose.foundation.lazy.LazyColumn(
+                                modifier = Modifier.heightIn(max = 400.dp)
+                            ) {
+                                // Private Space as first item
+                                item {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                showMoveSheet = false
+                                                val activity = context as? androidx.fragment.app.FragmentActivity
+                                                if (activity != null) {
+                                                    viewModel.vaultAuthManager.authenticate(
+                                                        activity = activity,
+                                                        onSuccess = {
+                                                            val uris = selectedUris.mapNotNull { android.net.Uri.parse(it) }
+                                                            viewModel.hideMedia(uris)
+                                                            viewModel.clearSelection()
+                                                        },
+                                                        onFailure = {}
+                                                    )
+                                                }
+                                            }
+                                            .padding(vertical = 14.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(40.dp)
+                                                .background(
+                                                    color = MaterialTheme.colorScheme.tertiaryContainer,
+                                                    shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
+                                                ),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                Icons.Rounded.Security,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                "Private Space",
+                                                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
+                                            )
+                                            Text(
+                                                "Hidden \u00b7 Biometric protected",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                        Icon(
+                                            Icons.Rounded.VisibilityOff,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                    HorizontalDivider(
+                                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                                    )
+                                }
+                                items(albums.size) { index ->
+                                    val album = albums[index]
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                showMoveSheet = false
+                                                viewModel.moveSelectedMedia(album.bucketName)
+                                            }
+                                            .padding(vertical = 14.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(40.dp)
+                                                .background(
+                                                    color = MaterialTheme.colorScheme.primaryContainer,
+                                                    shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
+                                                ),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                Icons.Rounded.Folder,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                album.bucketName,
+                                                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
+                                            )
+                                            Text(
+                                                "${album.itemCount} items",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                    if (index < albums.size - 1) {
+                                        HorizontalDivider(
+                                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
+                                            modifier = Modifier.padding(start = 56.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        // Directory Tree Selector UI
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 24.dp)
+                                .padding(bottom = 24.dp)
+                        ) {
+                            val storageRoot = remember { android.os.Environment.getExternalStorageDirectory() }
+                            var currentBrowsingDirectory by remember { mutableStateOf(storageRoot) }
+                            var subdirectories by remember { mutableStateOf<List<java.io.File>>(emptyList()) }
+                            var showCreateFolderDialog by remember { mutableStateOf(false) }
+                            var newFolderName by remember { mutableStateOf("") }
+                            var refreshTrigger by remember { mutableStateOf(0) }
+
+                            LaunchedEffect(currentBrowsingDirectory, refreshTrigger) {
+                                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                    subdirectories = currentBrowsingDirectory.listFiles()
+                                        ?.filter { it.isDirectory && !it.name.startsWith(".") }
+                                        ?.sortedBy { it.name.lowercase() }
+                                        ?: emptyList()
+                                }
+                            }
+
+                            if (showCreateFolderDialog) {
+                                androidx.compose.material3.AlertDialog(
+                                    onDismissRequest = { showCreateFolderDialog = false },
+                                    title = { Text("Create New Folder") },
+                                    text = {
+                                        androidx.compose.material3.OutlinedTextField(
+                                            value = newFolderName,
+                                            onValueChange = { newFolderName = it },
+                                            label = { Text("Folder Name") },
+                                            singleLine = true,
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                    },
+                                    confirmButton = {
+                                        androidx.compose.material3.TextButton(
+                                            onClick = {
+                                                if (newFolderName.isNotBlank()) {
+                                                    val newDir = java.io.File(currentBrowsingDirectory, newFolderName.trim())
+                                                    if (!newDir.exists()) {
+                                                        newDir.mkdirs()
+                                                        refreshTrigger++
+                                                    }
+                                                    showCreateFolderDialog = false
+                                                    newFolderName = ""
+                                                }
+                                            }
+                                        ) {
+                                            Text("Create")
+                                        }
+                                    },
+                                    dismissButton = {
+                                        androidx.compose.material3.TextButton(
+                                            onClick = {
+                                                showCreateFolderDialog = false
+                                                newFolderName = ""
+                                            }
+                                        ) {
+                                            Text("Cancel")
+                                        }
+                                    }
                                 )
                             }
-                            items(albums.size) { index ->
-                                val album = albums[index]
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable {
-                                            showMoveSheet = false
-                                            viewModel.moveSelectedMedia(album.bucketName)
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                androidx.compose.material3.IconButton(
+                                    onClick = {
+                                        val parent = currentBrowsingDirectory.parentFile
+                                        if (parent != null && parent.absolutePath.startsWith(storageRoot.absolutePath)) {
+                                            currentBrowsingDirectory = parent
+                                        } else {
+                                            isBrowsingStorage = false
                                         }
-                                        .padding(vertical = 14.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(40.dp)
-                                            .background(
-                                                color = MaterialTheme.colorScheme.primaryContainer,
-                                                shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
-                                            ),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            Icons.Rounded.Folder,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                            modifier = Modifier.size(20.dp)
-                                        )
                                     }
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            album.bucketName,
-                                            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
-                                        )
-                                        Text(
-                                            "${album.itemCount} items",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
+                                        contentDescription = "Back"
+                                    )
+                                }
+                                Text(
+                                    text = "Browse Storage",
+                                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold),
+                                    modifier = Modifier.weight(1f)
+                                )
+                                androidx.compose.material3.IconButton(
+                                    onClick = { showCreateFolderDialog = true }
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.CreateNewFolder,
+                                        contentDescription = "Create Folder"
+                                    )
+                                }
+                            }
+
+                            val displayPath = remember(currentBrowsingDirectory) {
+                                val relative = currentBrowsingDirectory.absolutePath
+                                    .removePrefix(storageRoot.absolutePath)
+                                    .removePrefix("/")
+                                if (relative.isEmpty()) "Internal Storage" else "Internal Storage > " + relative.replace("/", " > ")
+                            }
+                            Text(
+                                text = displayPath,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(bottom = 12.dp)
+                            )
+
+                            androidx.compose.foundation.lazy.LazyColumn(
+                                modifier = Modifier.heightIn(max = 300.dp).fillMaxWidth()
+                            ) {
+                                if (subdirectories.isEmpty()) {
+                                    item {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(vertical = 32.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = "No subfolders found",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                } else {
+                                    items(subdirectories.size) { index ->
+                                        val folder = subdirectories[index]
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clickable {
+                                                    currentBrowsingDirectory = folder
+                                                }
+                                                .padding(vertical = 12.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(16.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Rounded.Folder,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(24.dp)
+                                            )
+                                            Text(
+                                                text = folder.name,
+                                                style = MaterialTheme.typography.bodyLarge,
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                        }
+                                        if (index < subdirectories.size - 1) {
+                                            HorizontalDivider(
+                                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f),
+                                                modifier = Modifier.padding(start = 40.dp)
+                                            )
+                                        }
                                     }
                                 }
-                                if (index < albums.size - 1) {
-                                    HorizontalDivider(
-                                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
-                                        modifier = Modifier.padding(start = 56.dp)
-                                    )
+                            }
+
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                androidx.compose.material3.OutlinedButton(
+                                    onClick = { isBrowsingStorage = false },
+                                    modifier = Modifier.weight(1f),
+                                    shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
+                                ) {
+                                    Text("Cancel")
+                                }
+                                androidx.compose.material3.Button(
+                                    onClick = {
+                                        showMoveSheet = false
+                                        viewModel.moveSelectedMediaToPath(currentBrowsingDirectory.absolutePath)
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                    shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
+                                ) {
+                                    Text("Move Here")
                                 }
                             }
                         }

@@ -59,6 +59,9 @@ interface MediaDao {
     @Query("UPDATE core_media SET bucketName = :bucket WHERE uriString = :uriString")
     suspend fun updateBucketByUri(uriString: String, bucket: String)
 
+    @Query("UPDATE core_media SET filePath = :newPath, bucketName = :newBucket, name = :newName WHERE id = :id")
+    suspend fun updatePathAndBucket(id: Long, newPath: String, newBucket: String, newName: String)
+
     @Query("UPDATE core_media SET is_indexed_ocr = :isIndexed WHERE id = :id")
     suspend fun updateOcrIndexStatus(id: Long, isIndexed: Boolean)
 

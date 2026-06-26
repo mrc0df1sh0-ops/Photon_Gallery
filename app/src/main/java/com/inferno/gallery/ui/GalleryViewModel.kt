@@ -1707,6 +1707,62 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    fun moveSelectedMediaToPath(targetDirectoryPath: String) {
+        val selected = _selectedUris.value.toList()
+        if (selected.isEmpty()) return
+
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val context = getApplication<android.app.Application>()
+                val targetDir = java.io.File(targetDirectoryPath)
+                if (!targetDir.exists()) {
+                    targetDir.mkdirs()
+                }
+
+                val allMedia = database.mediaDao().getAllMedia().associateBy { it.uriString }
+                val movedPaths = mutableListOf<String>()
+
+                for (uriString in selected) {
+                    val entity = allMedia[uriString] ?: continue
+                    val srcFile = java.io.File(entity.filePath)
+                    if (srcFile.exists()) {
+                        val destFile = java.io.File(targetDir, srcFile.name)
+                        if (srcFile.renameTo(destFile)) {
+                            // Update Room DB immediately
+                            database.mediaDao().updatePathAndBucket(
+                                id = entity.id,
+                                newPath = destFile.absolutePath,
+                                newBucket = targetDir.name,
+                                newName = destFile.name
+                            )
+                            movedPaths.add(srcFile.absolutePath)
+                            movedPaths.add(destFile.absolutePath)
+                        }
+                    }
+                }
+
+                if (movedPaths.isNotEmpty()) {
+                    android.media.MediaScannerConnection.scanFile(
+                        context,
+                        movedPaths.toTypedArray(),
+                        null,
+                        null
+                    )
+                }
+
+                withContext(Dispatchers.Main) {
+                    clearSelection()
+                    showToast("Moved to ${targetDir.name}")
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("GalleryViewModel", "Error moving media to path: ${e.message}", e)
+                withContext(Dispatchers.Main) {
+                    showToast("Error moving media: ${e.message}")
+                }
+            }
+        }
+    }
+
     fun copySelectedMedia(targetBucket: String) {
         val selected = _selectedUris.value.toList()
         if (selected.isEmpty()) return
