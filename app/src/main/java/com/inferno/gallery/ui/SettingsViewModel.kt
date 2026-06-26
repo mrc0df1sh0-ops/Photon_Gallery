@@ -445,14 +445,14 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             val result = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                 val firstResult = trySendTestMessage(token, chatId)
-                
+
                 // Auto-fix: if "chat not found" and missing -100 prefix, retry with corrected ID
-                if (firstResult is ConnectionTestResult.Error && 
+                if (firstResult is ConnectionTestResult.Error &&
                     firstResult.message.contains("chat not found", ignoreCase = true)) {
-                    
+
                     val rawDigits = chatId.trimStart('-')
                     val correctedId = "-100$rawDigits"
-                    
+
                     // Only retry if the ID wasn't already in -100 format
                     if (!chatId.startsWith("-100")) {
                         val retryResult = trySendTestMessage(token, correctedId)
@@ -463,7 +463,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                         }
                     }
                 }
-                
+
                 firstResult
             }
             _connectionTestState.value = result
@@ -567,6 +567,15 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     fun setSmartSearchAutoIndex(enabled: Boolean) {
         viewModelScope.launch {
             repository.updateSmartSearchAutoIndex(enabled)
+            if (enabled) {
+                val shouldIndex = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    val searchEngine = com.inferno.gallery.data.ai.SmartSearchEngine.getInstance(getApplication())
+                    searchEngine.isModelDownloaded() && db.embeddingDao().getUnindexedMediaIds().isNotEmpty()
+                }
+                if (shouldIndex) {
+                    startSmartSearchIndexing()
+                }
+            }
         }
     }
 
@@ -711,13 +720,13 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             val constraints = androidx.work.Constraints.Builder()
                 .setRequiresBatteryNotLow(false)
                 .build()
-            
+
             val workRequest = androidx.work.PeriodicWorkRequestBuilder<com.inferno.gallery.workers.AutoCleanTrashWorker>(
                 24, java.util.concurrent.TimeUnit.HOURS
             )
                 .setConstraints(constraints)
                 .build()
-            
+
             workManager.enqueueUniquePeriodicWork(
                 "AutoCleanTrashWorker",
                 androidx.work.ExistingPeriodicWorkPolicy.UPDATE,

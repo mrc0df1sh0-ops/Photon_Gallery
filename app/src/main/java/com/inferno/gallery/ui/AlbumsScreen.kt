@@ -13,8 +13,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.border
 import androidx.compose.ui.draw.clip
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.Spring
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -62,6 +60,7 @@ import coil3.size.Size
 import com.inferno.gallery.ui.theme.AppShapes
 import com.inferno.gallery.ui.theme.ShapeLarge
 import com.inferno.gallery.ui.theme.ShapeExtraLarge
+import com.inferno.gallery.ui.theme.MotionTokens
 import com.inferno.gallery.ui.theme.ShapeLargeIncreased3
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Delete
@@ -148,11 +147,11 @@ fun AlbumsScreen(
 
     // Long-press state for album cards
     var longPressAlbum by remember { mutableStateOf<String?>(null) }
-    
+
     var showSortMenu by remember { mutableStateOf(false) }
 
     val lazyGridState = rememberLazyGridState()
-    
+
     // -- Pull-down to reveal Private Space --
     var showPrivateSpaceCard by remember { mutableStateOf(false) }
     var pullAccumulator by remember { mutableStateOf(0f) }
@@ -202,11 +201,11 @@ fun AlbumsScreen(
             AnimatedVisibility(
                 visible = showPrivateSpaceCard,
                 enter = expandVertically(
-                    animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessHigh)
-                ) + fadeIn(spring(stiffness = Spring.StiffnessHigh)),
+                    animationSpec = MotionTokens.snappySpring()
+                ) + fadeIn(MotionTokens.snappySpring()),
                 exit = shrinkVertically(
-                    animationSpec = spring(stiffness = Spring.StiffnessHigh)
-                ) + fadeOut(spring(stiffness = Spring.StiffnessHigh))
+                    animationSpec = MotionTokens.snappySpring()
+                ) + fadeOut(MotionTokens.snappySpring())
             ) {
                 Surface(
                     onClick = {
@@ -453,7 +452,7 @@ fun AlbumsScreen(
                     Box {
                         var showUnpinMenu by remember { mutableStateOf(false) }
                         AlbumCard(
-                            bucket = bucket.copy(bucketName = displayBucketName), 
+                            bucket = bucket.copy(bucketName = displayBucketName),
                             gridAutoPlay = gridAutoPlay,
                             onClick = { onAlbumClick(bucket.bucketName) },
                             onLongPress = {
@@ -485,7 +484,7 @@ fun AlbumsScreen(
                     }
                 } else {
                     AlbumCard(
-                        bucket = bucket.copy(bucketName = displayBucketName), 
+                        bucket = bucket.copy(bucketName = displayBucketName),
                         gridAutoPlay = gridAutoPlay,
                         onClick = { onAlbumClick(bucket.bucketName) }
                     )
@@ -528,7 +527,7 @@ fun AlbumsScreen(
                 }
             }
         }
-        
+
         // -- More albums (excluding user-pinned to avoid duplication) --
         val unpinnedAlbums = albums.filter { it.bucketName != "Favorites" && it.bucketName !in userPinnedNames }
 
@@ -562,9 +561,9 @@ fun AlbumsScreen(
                     }
                     Box {
                         androidx.compose.material3.IconButton(
-                            onClick = { 
+                            onClick = {
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                showSortMenu = true 
+                                showSortMenu = true
                             },
                             modifier = Modifier.size(38.dp)
                         ) {
@@ -635,7 +634,7 @@ fun AlbumsScreen(
                     }
                 }
             }
-            
+
             items(
                 items = unpinnedAlbums,
                 key = { "folder_${it.bucketName}" },
@@ -644,7 +643,7 @@ fun AlbumsScreen(
                 Box {
                     var showPinMenu by remember { mutableStateOf(false) }
                     AlbumCard(
-                        bucket = bucket, 
+                        bucket = bucket,
                         gridAutoPlay = gridAutoPlay,
                         onClick = { onAlbumClick(bucket.bucketName) },
                         onLongPress = {
@@ -800,10 +799,7 @@ fun Modifier.expressiveClick(onClick: () -> Unit, onLongPress: (() -> Unit)? = n
     val haptic = LocalHapticFeedback.current
     val scale by animateFloatAsState(
         targetValue = if (isPressed) 0.95f else 1f,
-        animationSpec = spring(
-            dampingRatio = if (isPressed) Spring.DampingRatioNoBouncy else 0.55f,
-            stiffness = if (isPressed) 12000f else Spring.StiffnessMedium
-        ),
+        animationSpec = if (isPressed) MotionTokens.snappySpring() else MotionTokens.bouncySpring(),
         label = "expressiveClickScale"
     )
     return this
@@ -991,9 +987,9 @@ fun AlbumCard(
                     )
                 }
             }
-            
+
             Spacer(modifier = Modifier.height(8.dp))
-            
+
             Text(
                 text = bucket.bucketName,
                 style = MaterialTheme.typography.titleSmall.copy(
@@ -1003,9 +999,9 @@ fun AlbumCard(
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                 modifier = Modifier.padding(horizontal = 4.dp)
             )
-            
+
             Spacer(modifier = Modifier.height(2.dp))
-            
+
             Text(
                 text = java.text.NumberFormat.getInstance(java.util.Locale.US).format(bucket.itemCount),
                 style = MaterialTheme.typography.bodySmall,
@@ -1052,9 +1048,9 @@ fun TrashCard(
                     modifier = Modifier.size(48.dp)
                 )
             }
-            
+
             Spacer(modifier = Modifier.height(8.dp))
-            
+
             Text(
                 text = "Recycle Bin",
                 style = MaterialTheme.typography.titleSmall.copy(
@@ -1064,9 +1060,9 @@ fun TrashCard(
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                 modifier = Modifier.padding(horizontal = 4.dp)
             )
-            
+
             Spacer(modifier = Modifier.height(2.dp))
-            
+
             Text(
                 text = java.text.NumberFormat.getInstance(java.util.Locale.US).format(itemCount),
                 style = MaterialTheme.typography.bodySmall,
@@ -1078,5 +1074,3 @@ fun TrashCard(
         }
     }
 }
-
-

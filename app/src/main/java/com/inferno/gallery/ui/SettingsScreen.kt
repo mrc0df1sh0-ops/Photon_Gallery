@@ -173,7 +173,7 @@ fun SettingsScreen(
     val maxBrightnessEnabled by viewModel.maxBrightnessEnabled.collectAsState()
     val context = androidx.compose.ui.platform.LocalContext.current
     val coroutineScope = rememberCoroutineScope()
-    
+
     val savedTokens by viewModel.telegramBotTokens.collectAsState()
     val savedChatId by viewModel.telegramChatId.collectAsState()
     val backupEnabled by viewModel.telegramBackupEnabled.collectAsState()
@@ -752,7 +752,7 @@ fun SettingsScreen(
                                             )
                                         }
                                     }
-                                    
+
                                     HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
 
                                     ListItem(
@@ -853,7 +853,7 @@ fun SettingsScreen(
                                         trailingContent = {
                                             val isDockFullWidth = dockStyle == com.inferno.gallery.data.DockStyle.FULL_WIDTH
                                             Switch(
-                                                checked = isDockFullWidth, 
+                                                checked = isDockFullWidth,
                                                 onCheckedChange = { isChecked ->
                                                     viewModel.setDockStyle(if (isChecked) com.inferno.gallery.data.DockStyle.FULL_WIDTH else com.inferno.gallery.data.DockStyle.PILL)
                                                 },
@@ -877,7 +877,7 @@ fun SettingsScreen(
                                         supportingContent = { Text("Show albums that start with a dot (e.g., .nomedia folders)") },
                                         trailingContent = {
                                             Switch(
-                                                checked = showHiddenAlbums, 
+                                                checked = showHiddenAlbums,
                                                 onCheckedChange = { isChecked ->
                                                     viewModel.setShowHiddenAlbums(isChecked)
                                                 },
@@ -933,10 +933,10 @@ fun SettingsScreen(
                             "Excluded Folders" -> {
                                 val allFolders by galleryViewModel.allBucketNames.collectAsState()
                                 val excluded by galleryViewModel.excludedFolders.collectAsState()
-                                
+
                                 SettingsGroup(title = "Excluded Folders") {
                                     ListItem(
-                                        headlineContent = { 
+                                        headlineContent = {
                                             Text(
                                                 "Excluded folders won't appear in the Photos tab or Albums grid. You can still access them by searching.",
                                                 style = MaterialTheme.typography.bodySmall,
@@ -945,7 +945,7 @@ fun SettingsScreen(
                                         }
                                     )
                                 }
-                                
+
                                 if (allFolders.isEmpty()) {
                                     SettingsGroup(title = "") {
                                         ListItem(
@@ -1695,8 +1695,8 @@ fun SettingsScreen(
                                                                 Spacer(Modifier.width(4.dp))
                                                                 Text("Back")
                                                             }
-                                                            val isTestSuccess = testResult is ConnectionTestResult.Success || 
-                                                                               testResult is ConnectionTestResult.AutoCorrected || 
+                                                            val isTestSuccess = testResult is ConnectionTestResult.Success ||
+                                                                               testResult is ConnectionTestResult.AutoCorrected ||
                                                                                testResult is ConnectionTestResult.Migrated
                                                             Button(
                                                                 onClick = {
@@ -1855,11 +1855,11 @@ fun SettingsScreen(
                                                 fontWeight = FontWeight.SemiBold,
                                                 modifier = Modifier.weight(1f)
                                             )
-                                            
+
                                             val badgeColor = if (isRunning) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
                                             val badgeTextColor = if (isRunning) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
                                             val badgeText = if (isRunning) "Indexing" else "Idle"
-                                            
+
                                             Surface(
                                                 color = badgeColor,
                                                 contentColor = badgeTextColor,
@@ -1920,7 +1920,7 @@ fun SettingsScreen(
                                                             )
                                                     )
                                                 }
-                                                
+
                                                 Row(
                                                     modifier = Modifier.fillMaxWidth(),
                                                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -1928,8 +1928,8 @@ fun SettingsScreen(
                                                 ) {
                                                     val currentImageName = ocrProgressState.currentImageName
                                                     Text(
-                                                        text = if (isRunning && !currentImageName.isNullOrBlank()) "Scanning: $currentImageName" 
-                                                               else if (indexed == total) "Indexing complete" 
+                                                        text = if (isRunning && !currentImageName.isNullOrBlank()) "Scanning: $currentImageName"
+                                                               else if (indexed == total) "Indexing complete"
                                                                else "Progress",
                                                         style = MaterialTheme.typography.labelMedium,
                                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -2013,7 +2013,7 @@ fun SettingsScreen(
                                                 fontWeight = FontWeight.SemiBold,
                                                 modifier = Modifier.weight(1f)
                                             )
-                                            
+
                                             val badgeColor = if (isIndexing) {
                                                 MaterialTheme.colorScheme.primaryContainer
                                             } else if (isDownloading) {
@@ -2023,7 +2023,7 @@ fun SettingsScreen(
                                             } else {
                                                 MaterialTheme.colorScheme.surfaceVariant
                                             }
-                                            
+
                                             val badgeTextColor = if (isIndexing) {
                                                 MaterialTheme.colorScheme.onPrimaryContainer
                                             } else if (isDownloading) {
@@ -2033,7 +2033,7 @@ fun SettingsScreen(
                                             } else {
                                                 MaterialTheme.colorScheme.onSurfaceVariant
                                             }
-                                            
+
                                             val badgeText = if (isIndexing) {
                                                 "Indexing"
                                             } else if (isDownloading) {
@@ -2095,7 +2095,7 @@ fun SettingsScreen(
                                                     style = MaterialTheme.typography.bodyMedium,
                                                     color = MaterialTheme.colorScheme.onSecondaryContainer
                                                 )
-                                                
+
                                                 if (isDownloading) {
                                                     LinearProgressIndicator(
                                                         progress = { downloadProgress / 100f },
@@ -2142,7 +2142,7 @@ fun SettingsScreen(
                                                 smartSearchThreshold > 0.25f -> "Strict (Shows fewer results, matches exact concepts only)"
                                                 else -> "Balanced (Recommended, default)"
                                             }
-                                            
+
                                             Column(
                                                 modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                                                 verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -2203,11 +2203,11 @@ fun SettingsScreen(
                                                         fontWeight = FontWeight.SemiBold,
                                                         modifier = Modifier.weight(1f)
                                                     )
-                                                    
+
                                                     val badgeColor = if (isIndexing) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
                                                     val badgeTextColor = if (isIndexing) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
                                                     val badgeText = if (isIndexing) "Indexing" else "Idle"
-                                                    
+
                                                     Surface(
                                                         color = badgeColor,
                                                         contentColor = badgeTextColor,
@@ -2261,15 +2261,15 @@ fun SettingsScreen(
                                                                     )
                                                             )
                                                         }
-                                                        
+
                                                         Row(
                                                             modifier = Modifier.fillMaxWidth(),
                                                             horizontalArrangement = Arrangement.SpaceBetween,
                                                             verticalAlignment = Alignment.CenterVertically
                                                         ) {
                                                             Text(
-                                                                text = if (isIndexing && !smartCurrentImageName.isNullOrBlank()) "Scanning: $smartCurrentImageName" 
-                                                                       else if (displayIndexed == displayTotal) "AI indexing complete" 
+                                                                text = if (isIndexing && !smartCurrentImageName.isNullOrBlank()) "Scanning: $smartCurrentImageName"
+                                                                       else if (displayIndexed == displayTotal) "AI indexing complete"
                                                                        else "Progress",
                                                                 style = MaterialTheme.typography.labelMedium,
                                                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -2361,9 +2361,9 @@ fun SettingsScreen(
                                             )
                                         }
                                     }
-                                    
+
                                     Spacer(modifier = Modifier.height(16.dp))
-                                    
+
                                     // 2. App Name below it
                                     Text(
                                         text = "Photon Gallery",
@@ -2377,9 +2377,9 @@ fun SettingsScreen(
                                         textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                                         modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
                                     )
-                                    
+
                                     Spacer(modifier = Modifier.height(24.dp))
-                                    
+
                                     // 3. Card below them (containing dev name and github icon next to the name)
                                     Card(
                                         shape = ShapeLarge as RoundedCornerShape,
@@ -2413,9 +2413,9 @@ fun SettingsScreen(
                                             )
                                         }
                                     }
-                                    
+
                                     Spacer(modifier = Modifier.height(24.dp))
-                                    
+
                                     // 4. Options below the card
                                     val context = androidx.compose.ui.platform.LocalContext.current
                                     SettingsGroup(title = "App Details") {
@@ -2429,12 +2429,12 @@ fun SettingsScreen(
                                             },
                                             colors = ListItemDefaults.colors(containerColor = Color.Transparent)
                                         )
-                                        
+
                                         HorizontalDivider(
                                             modifier = Modifier.padding(horizontal = 16.dp),
                                             color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
                                         )
-                                        
+
                                         // Version number
                                         ListItem(
                                             leadingContent = { Icon(Icons.Rounded.Info, contentDescription = null) },
@@ -2442,12 +2442,12 @@ fun SettingsScreen(
                                             supportingContent = { Text("v2.0.0 (Material 3 Expressive)") },
                                             colors = ListItemDefaults.colors(containerColor = Color.Transparent)
                                         )
-                                        
+
                                         HorizontalDivider(
                                             modifier = Modifier.padding(horizontal = 16.dp),
                                             color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
                                         )
-                                        
+
                                         // Licenses
                                         ListItem(
                                             leadingContent = { Icon(Icons.Rounded.Description, contentDescription = null) },
@@ -2565,7 +2565,7 @@ fun CategoryCard(
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
-    
+
     val scale by animateFloatAsState(
         targetValue = if (isPressed) 0.96f else 1f,
         animationSpec = spring(
@@ -2618,9 +2618,9 @@ fun CategoryCard(
                     modifier = Modifier.size(24.dp)
                 )
             }
-            
+
             Spacer(modifier = Modifier.width(16.dp))
-            
+
             Column(
                 modifier = Modifier.weight(1f)
             ) {
@@ -2638,7 +2638,7 @@ fun CategoryCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            
+
             Icon(
                 imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
                 contentDescription = null,

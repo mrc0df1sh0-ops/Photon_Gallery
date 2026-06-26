@@ -2,9 +2,7 @@ package com.inferno.gallery.ui
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -48,6 +46,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalView
+import com.inferno.gallery.ui.theme.MotionTokens
 import com.inferno.gallery.ui.utils.tick
 import androidx.compose.ui.unit.dp
 
@@ -104,7 +103,7 @@ fun CustomFilterChip(
         color = containerColor,
         contentColor = contentColor,
         modifier = Modifier
-            .height(24.dp)
+            .height(36.dp)
             .clip(CircleShape)
             .expressiveClick(
                 onClick = {
@@ -145,33 +144,24 @@ fun DockItem(
     val view = LocalView.current
     val touchScale by animateFloatAsState(
         targetValue = if (isPressed) 0.90f else 1f,
-        animationSpec = spring(
-            dampingRatio = if (isPressed) Spring.DampingRatioNoBouncy else 0.5f,
-            stiffness = if (isPressed) 12000f else Spring.StiffnessMedium
-        ),
+        animationSpec = if (isPressed) MotionTokens.snappySpring() else MotionTokens.bouncySpring(),
         label = "dockItemScale"
     )
 
     // M3-compliant: secondaryContainer for active indicator, softer than primary
     val pillColor by animateColorAsState(
         targetValue = if (isSelected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioNoBouncy,
-            stiffness = 12000f
-        ),
+        animationSpec = MotionTokens.snappySpring(),
         label = "pillColor"
     )
-    
+
     val contentColor by animateColorAsState(
         targetValue = if (isSelected) {
             MaterialTheme.colorScheme.onSecondaryContainer
         } else {
             MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
         },
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioNoBouncy,
-            stiffness = 12000f
-        ),
+        animationSpec = MotionTokens.snappySpring(),
         label = "contentColor"
     )
 
@@ -199,14 +189,14 @@ fun DockItem(
                 androidx.compose.material3.LocalContentColor provides contentColor
             ) {
                 icon()
-                
+
                 AnimatedVisibility(
                     visible = isSelected,
-                    enter = fadeIn(spring(stiffness = 12000f)) + expandHorizontally(
-                        animationSpec = spring(stiffness = Spring.StiffnessHigh)
+                    enter = fadeIn(MotionTokens.snappySpring()) + expandHorizontally(
+                        animationSpec = MotionTokens.snappySpring()
                     ),
-                    exit = fadeOut(spring(stiffness = 12000f)) + shrinkHorizontally(
-                        animationSpec = spring(stiffness = Spring.StiffnessHigh)
+                    exit = fadeOut(MotionTokens.snappySpring()) + shrinkHorizontally(
+                        animationSpec = MotionTokens.snappySpring()
                     )
                 ) {
                     Row {
@@ -241,10 +231,10 @@ fun getEnterTransition(initialRoute: String?, targetRoute: String?): androidx.co
     val fromIndex = getTabRouteIndex(initialRoute)
     val toIndex = getTabRouteIndex(targetRoute)
     return fadeIn(
-        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = 12000f)
+        animationSpec = MotionTokens.snappySpring()
     ) + slideInHorizontally(
         initialOffsetX = { if (toIndex > fromIndex) it / 5 else -it / 5 },
-        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessHigh)
+        animationSpec = MotionTokens.snappySpring()
     )
 }
 
@@ -252,9 +242,9 @@ fun getExitTransition(initialRoute: String?, targetRoute: String?): androidx.com
     val fromIndex = getTabRouteIndex(initialRoute)
     val toIndex = getTabRouteIndex(targetRoute)
     return androidx.compose.animation.fadeOut(
-        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = 12000f)
+        animationSpec = MotionTokens.snappySpring()
     ) + androidx.compose.animation.slideOutHorizontally(
         targetOffsetX = { if (toIndex > fromIndex) -it / 5 else it / 5 },
-        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessHigh)
+        animationSpec = MotionTokens.snappySpring()
     )
 }

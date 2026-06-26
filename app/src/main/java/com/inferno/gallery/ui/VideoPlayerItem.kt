@@ -162,7 +162,7 @@ fun VideoPlayerItemWithResolvedUri(uri: Uri, isCurrentPage: Boolean, modifier: M
     val exoPlayer = remember(uri) {
         val renderersFactory = androidx.media3.exoplayer.DefaultRenderersFactory(context)
             .setExtensionRendererMode(androidx.media3.exoplayer.DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
-            
+
         ExoPlayer.Builder(context)
             .setRenderersFactory(renderersFactory)
             .build().apply {
@@ -276,21 +276,21 @@ fun VideoPlayerItemWithResolvedUri(uri: Uri, isCurrentPage: Boolean, modifier: M
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurface
                     )
-                    
+
                     // M3 Slider
                     Slider(
                         value = (dragPosition ?: currentPosition).toFloat(),
                         onValueChange = { dragPosition = it.toLong() },
-                        onValueChangeFinished = { 
+                        onValueChangeFinished = {
                             dragPosition?.let { exoPlayer.seekTo(it) }
-                            dragPosition = null 
+                            dragPosition = null
                         },
                         valueRange = 0f..videoDuration.coerceAtLeast(1L).toFloat(),
                         modifier = Modifier
                             .weight(1f)
                             .padding(horizontal = 12.dp)
                     )
-                    
+
                     // Mute Toggle
                     IconButton(onClick = { isMuted = !isMuted }, modifier = Modifier.size(32.dp)) {
                         Icon(
