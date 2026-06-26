@@ -381,11 +381,12 @@ fun MainAppLayout(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
         topBar = {
-            Column(
-                modifier = Modifier
-                    .background(MaterialTheme.colorScheme.surfaceContainerLow)
-                    .statusBarsPadding()
-            ) {
+            if (currentRoute != "photo_map") {
+                Column(
+                    modifier = Modifier
+                        .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                        .statusBarsPadding()
+                ) {
                     if (isSelectionMode) {
                         Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh) {
                             Row(
@@ -636,9 +637,10 @@ fun MainAppLayout(
                         )
                 }
             }
+            }
         },
         bottomBar = {
-            val isDockVisible = currentRoute != "settings" && currentRoute != "duplicate_cleaner" && !isSelectionMode && (dockStyle != DockStyle.PILL || isScrollDockVisible)
+            val isDockVisible = currentRoute != "settings" && currentRoute != "duplicate_cleaner" && currentRoute != "photo_map" && !isSelectionMode && (dockStyle != DockStyle.PILL || isScrollDockVisible)
             AnimatedVisibility(
                 visible = isDockVisible,
                 enter = slideInVertically(initialOffsetY = { it }),
@@ -941,6 +943,7 @@ fun MainAppLayout(
             composable("photo_map") {
                 PhotoMapScreen(
                     galleryViewModel = viewModel,
+                    onPhotoClick = onPhotoClick,
                     onBackClick = { nestedNavController.popBackStack() }
                 )
             }

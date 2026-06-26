@@ -449,6 +449,39 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
                 _detailMedia.value = favoriteMedia.value
                 return@launch
             }
+            if (bucketName == "geotagged") {
+                val queryString = "SELECT cm.*, tb.telegramFileId, tb.telegramThumbFileId, tb.backupStatus FROM core_media cm LEFT JOIN telegram_backups tb ON cm.id = tb.mediaId WHERE cm.latitude IS NOT NULL AND cm.longitude IS NOT NULL AND cm.bucketName != 'Trash' ORDER BY cm.dateAdded DESC"
+                val query = androidx.sqlite.db.SimpleSQLiteQuery(queryString)
+                val entities = try {
+                    database.mediaDao().getMediaRaw(query)
+                } catch (e: Exception) {
+                    emptyList()
+                }
+                val items = entities.map { entity ->
+                    val uri = Uri.parse(entity.uriString)
+                    val (exists, resolved) = resolveItemFields(uri, entity.filePath, entity.telegramThumbFileId, entity.telegramFileId)
+                    GalleryItem(
+                        id = entity.id.toString(),
+                        uri = uri,
+                        bucketName = entity.bucketName,
+                        dateAdded = entity.dateAdded,
+                        size = entity.size,
+                        name = entity.name,
+                        dateModified = entity.dateModified,
+                        path = entity.filePath,
+                        isVideo = entity.isVideo,
+                        durationMs = entity.durationMs,
+                        telegramFileId = entity.telegramFileId,
+                        telegramThumbFileId = entity.telegramThumbFileId,
+                        localExists = exists,
+                        resolvedUri = resolved,
+                        latitude = entity.latitude,
+                        longitude = entity.longitude
+                    )
+                }
+                _detailMedia.value = items
+                return@launch
+            }
 
             // Build the SQLite query for the bucket
             val filterIndex = selectedFilterIndex.value
