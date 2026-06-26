@@ -142,6 +142,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.runtime.LaunchedEffect
 import com.inferno.gallery.ui.theme.ShapeLargeIncreased3
 import com.inferno.gallery.ui.theme.ShapeExtraLarge
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.core.content.FileProvider
@@ -653,7 +654,9 @@ fun MainAppLayout(
                     ) {
                         HorizontalFloatingToolbar(
                             expanded = true,
-                            modifier = Modifier.fillMaxWidth(0.80f)
+                            modifier = Modifier
+                                .fillMaxWidth(0.80f)
+                                .pointerInput(Unit) {}
                         ) {
                             Row(
                                 modifier = Modifier
@@ -708,7 +711,8 @@ fun MainAppLayout(
                 } else {
                     androidx.compose.material3.Surface(
                         modifier = Modifier
-                            .fillMaxWidth(),
+                            .fillMaxWidth()
+                            .pointerInput(Unit) {},
                         color = MaterialTheme.colorScheme.surfaceContainer,
                         tonalElevation = 0.dp
                     ) {
