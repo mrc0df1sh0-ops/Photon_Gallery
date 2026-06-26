@@ -869,7 +869,7 @@ fun CollageCover(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight()
-                        .clip(CircleShape)
+                        .clip(MaterialTheme.shapes.large)
                 )
                 AsyncImage(
                     model = requests.getOrNull(1),
@@ -878,7 +878,7 @@ fun CollageCover(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight()
-                        .clip(CircleShape)
+                        .clip(MaterialTheme.shapes.large)
                 )
             }
             Row(
@@ -892,7 +892,7 @@ fun CollageCover(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight()
-                        .clip(CircleShape)
+                        .clip(MaterialTheme.shapes.large)
                 )
                 AsyncImage(
                     model = requests.getOrNull(3),
@@ -901,7 +901,7 @@ fun CollageCover(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight()
-                        .clip(CircleShape)
+                        .clip(MaterialTheme.shapes.large)
                 )
             }
         }
