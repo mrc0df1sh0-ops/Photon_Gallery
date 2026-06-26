@@ -957,6 +957,40 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
         _selectedUris.value = emptySet()
     }
 
+    private var baseSelectedUris = emptySet<String>()
+    private val _draggedUris = MutableStateFlow<Set<String>>(emptySet())
+    private var dragSelecting = true
+
+    fun startDragSelection(initialUri: String, isSelecting: Boolean) {
+        baseSelectedUris = _selectedUris.value
+        dragSelecting = isSelecting
+        _draggedUris.value = setOf(initialUri)
+        updateSelectionState()
+    }
+
+    fun updateDragSelection(uris: Set<String>) {
+        _draggedUris.value = uris
+        updateSelectionState()
+    }
+
+    fun endDragSelection() {
+        _selectedUris.value = getMergedSelection()
+        _draggedUris.value = emptySet()
+        baseSelectedUris = emptySet()
+    }
+
+    private fun getMergedSelection(): Set<String> {
+        return if (dragSelecting) {
+            baseSelectedUris + _draggedUris.value
+        } else {
+            baseSelectedUris - _draggedUris.value
+        }
+    }
+
+    private fun updateSelectionState() {
+        _selectedUris.value = getMergedSelection()
+    }
+
     fun toggleSelectAll() {
         viewModelScope.launch(Dispatchers.IO) {
             val bucket = _currentBucket.value

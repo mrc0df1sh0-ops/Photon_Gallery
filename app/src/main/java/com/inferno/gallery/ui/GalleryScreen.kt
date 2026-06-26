@@ -67,6 +67,8 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.lazy.grid.LazyGridState
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.CheckCircle
@@ -255,6 +257,12 @@ fun GalleryScreen(
                 color = androidx.compose.material3.MaterialTheme.colorScheme.background,
             )
             .gridZoomGestureModifier(gridCellsCount, viewModel::setGridCellsCount, isSelectionMode)
+            .dragSelectGesture(
+                lazyGridState = lazyGridState,
+                pagedMedia = pagedMedia,
+                viewModel = viewModel,
+                hapticFeedback = androidx.compose.ui.platform.LocalHapticFeedback.current
+            )
     ) {
         if (viewMode == ViewMode.Immersive) {
             items(
@@ -278,7 +286,7 @@ fun GalleryScreen(
                         sharedTransitionScope = sharedTransitionScope,
                         animatedVisibilityScope = animatedVisibilityScope,
                         onClick = onMediaClick,
-                        onLongClick = onMediaLongClick,
+                        onLongClick = null,
                         modifier = Modifier,
                         isSelected = selectedUris.contains(uriString),
                         gridAutoPlay = gridAutoPlay,
@@ -331,7 +339,7 @@ fun GalleryScreen(
                         sharedTransitionScope = sharedTransitionScope,
                         animatedVisibilityScope = animatedVisibilityScope,
                         onClick = onMediaClick,
-                        onLongClick = onMediaLongClick,
+                        onLongClick = null,
                         modifier = Modifier,
                         isSelected = selectedUris.contains(uriString),
                         gridAutoPlay = gridAutoPlay,
@@ -475,7 +483,7 @@ fun GalleryGridItem(
     sharedTransitionScope: SharedTransitionScope,
     animatedVisibilityScope: AnimatedVisibilityScope,
     onClick: (GalleryItem) -> Unit,
-    onLongClick: (GalleryItem) -> Unit = {},
+    onLongClick: ((GalleryItem) -> Unit)? = null,
     modifier: Modifier = Modifier,
     isSelected: Boolean = false,
     gridAutoPlay: Boolean = true,
@@ -581,9 +589,11 @@ fun GalleryGridItem(
                         haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
                         onClick(item)
                     },
-                    onLongClick = {
-                        haptic.thud()
-                        onLongClick(item)
+                    onLongClick = onLongClick?.let {
+                        {
+                            haptic.thud()
+                            it(item)
+                        }
                     }
                 )
 
@@ -1109,4 +1119,117 @@ fun FastScroller(
             )
         }
     }
+}
+
+private fun androidx.compose.foundation.lazy.grid.LazyGridState.getItemIndexAtOffset(offset: Offset): Int? {
+    val items = layoutInfo.visibleItemsInfo
+    val matched = items.firstOrNull { item: androidx.compose.foundation.lazy.grid.LazyGridItemInfo ->
+        val x = item.offset.x.toFloat()
+        val y = item.offset.y.toFloat()
+        val width = item.size.width.toFloat()
+        val height = item.size.height.toFloat()
+        offset.x >= x && offset.x <= x + width &&
+                offset.y >= y && offset.y <= y + height
+    }
+    return matched?.index
+}
+
+private fun Modifier.dragSelectGesture(
+    lazyGridState: androidx.compose.foundation.lazy.grid.LazyGridState,
+    pagedMedia: androidx.paging.compose.LazyPagingItems<GalleryListItem>,
+    viewModel: GalleryViewModel,
+    hapticFeedback: androidx.compose.ui.hapticfeedback.HapticFeedback
+): Modifier = composed {
+    var autoScrollSpeed by remember { mutableStateOf(0f) }
+    var lastPointerPosition by remember { mutableStateOf<Offset?>(null) }
+    var initialIndex by remember { mutableStateOf<Int?>(null) }
+
+    LaunchedEffect(autoScrollSpeed) {
+        if (autoScrollSpeed != 0f) {
+            while (true) {
+                lazyGridState.scrollBy(autoScrollSpeed)
+                val currentPos = lastPointerPosition
+                val startIndex = initialIndex
+                if (currentPos != null && startIndex != null) {
+                    val currentIndex = lazyGridState.getItemIndexAtOffset(currentPos)
+                    if (currentIndex != null && currentIndex >= 0 && currentIndex < pagedMedia.itemCount) {
+                        val minIndex = minOf(startIndex, currentIndex)
+                        val maxIndex = maxOf(startIndex, currentIndex)
+                        val uris = mutableSetOf<String>()
+                        for (i in minIndex..maxIndex) {
+                            val item = pagedMedia.itemSnapshotList.getOrNull(i)
+                            if (item is GalleryListItem.Item) {
+                                uris.add(item.galleryItem.uri.toString())
+                            }
+                        }
+                        viewModel.updateDragSelection(uris)
+                    }
+                }
+                delay(16)
+            }
+        }
+    }
+
+    this.then(
+        Modifier.pointerInput(lazyGridState, pagedMedia) {
+            detectDragGesturesAfterLongPress(
+                onDragStart = { startOffset ->
+                    val index = lazyGridState.getItemIndexAtOffset(startOffset)
+                    if (index != null && index >= 0 && index < pagedMedia.itemCount) {
+                        val listItem = pagedMedia.itemSnapshotList.getOrNull(index)
+                        if (listItem is GalleryListItem.Item) {
+                            val uri = listItem.galleryItem.uri.toString()
+                            val isSelecting = !viewModel.selectedUris.value.contains(uri)
+                            initialIndex = index
+                            lastPointerPosition = startOffset
+                            viewModel.startDragSelection(uri, isSelecting)
+                            hapticFeedback.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                        }
+                    }
+                },
+                onDragEnd = {
+                    viewModel.endDragSelection()
+                    initialIndex = null
+                    lastPointerPosition = null
+                    autoScrollSpeed = 0f
+                },
+                onDragCancel = {
+                    viewModel.endDragSelection()
+                    initialIndex = null
+                    lastPointerPosition = null
+                    autoScrollSpeed = 0f
+                },
+                onDrag = { change, _ ->
+                    val startIndex = initialIndex ?: return@detectDragGesturesAfterLongPress
+                    change.consume()
+                    val currentOffset = change.position
+                    lastPointerPosition = currentOffset
+
+                    val currentIndex = lazyGridState.getItemIndexAtOffset(currentOffset)
+                    if (currentIndex != null && currentIndex >= 0 && currentIndex < pagedMedia.itemCount) {
+                        val minIndex = minOf(startIndex, currentIndex)
+                        val maxIndex = maxOf(startIndex, currentIndex)
+                        val uris = mutableSetOf<String>()
+                        for (i in minIndex..maxIndex) {
+                            val item = pagedMedia.itemSnapshotList.getOrNull(i)
+                            if (item is GalleryListItem.Item) {
+                                uris.add(item.galleryItem.uri.toString())
+                            }
+                        }
+                        viewModel.updateDragSelection(uris)
+                    }
+
+                    // Auto-scroll calculation
+                    val y = currentOffset.y
+                    val threshold = 150f
+                    val maxSpeed = 35f
+                    autoScrollSpeed = when {
+                        y < threshold -> -maxSpeed * (1f - (y.coerceAtLeast(0f) / threshold))
+                        y > size.height - threshold -> maxSpeed * (1f - ((size.height - y).coerceAtLeast(0f) / threshold))
+                        else -> 0f
+                    }
+                }
+            )
+        }
+    )
 }
