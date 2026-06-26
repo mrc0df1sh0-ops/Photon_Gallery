@@ -630,13 +630,16 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun startSmartSearchIndexing() {
-        val request = OneTimeWorkRequestBuilder<com.inferno.gallery.workers.SmartSearchIndexWorker>()
-            .build()
-        WorkManager.getInstance(getApplication()).enqueueUniqueWork(
-            "SmartSearchIndexWorker",
-            ExistingWorkPolicy.REPLACE,
-            request
-        )
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            db.embeddingStatusDao().clearAllStatuses()
+            val request = OneTimeWorkRequestBuilder<com.inferno.gallery.workers.SmartSearchIndexWorker>()
+                .build()
+            WorkManager.getInstance(getApplication()).enqueueUniqueWork(
+                "SmartSearchIndexWorker",
+                ExistingWorkPolicy.REPLACE,
+                request
+            )
+        }
     }
 
     fun stopSmartSearchIndexing() {
@@ -647,6 +650,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             WorkManager.getInstance(getApplication()).cancelUniqueWork("SmartSearchIndexWorker")
             db.embeddingDao().clearAllEmbeddings()
+            db.embeddingStatusDao().clearAllStatuses()
         }
     }
 

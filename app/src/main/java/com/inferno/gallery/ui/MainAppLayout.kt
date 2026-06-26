@@ -440,7 +440,9 @@ fun MainAppLayout(
                                 }
                                 Text(
                                     friendlyTitle,
-                                    style = MaterialTheme.typography.displayMedium,
+                                    style = if (friendlyTitle.length > 15) MaterialTheme.typography.headlineMedium else MaterialTheme.typography.displayMedium,
+                                    maxLines = 1,
+                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                                     modifier = Modifier.padding(start = 16.dp).weight(1f)
                                 )
                             }
@@ -462,7 +464,9 @@ fun MainAppLayout(
                                 }
                                 Text(
                                     settingsActiveSection ?: "Settings",
-                                    style = MaterialTheme.typography.displayMedium,
+                                    style = if (settingsActiveSection != null) MaterialTheme.typography.headlineMedium else MaterialTheme.typography.displayMedium,
+                                    maxLines = 1,
+                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                                     modifier = Modifier.padding(start = 16.dp).weight(1f)
                                 )
                             }

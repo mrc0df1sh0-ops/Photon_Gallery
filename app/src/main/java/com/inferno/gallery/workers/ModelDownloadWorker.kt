@@ -118,6 +118,7 @@ class ModelDownloadWorker(
 
             val totalBytesExpected = downloadTargets.sumOf { it.expectedSize }
             var totalBytesDownloaded = 0L
+            var lastReportedPercent = -1
 
             for (target in downloadTargets) {
                 if (isStopped) break
@@ -166,8 +167,15 @@ class ModelDownloadWorker(
                         totalBytesDownloaded += bytesRead
 
                         val overallPercent = ((totalBytesDownloaded.toFloat() / totalBytesExpected.toFloat()) * 100).toInt().coerceIn(0, 100)
-                        setProgress(workDataOf("progress" to overallPercent))
-                        setForeground(createForegroundInfo("Downloaded $overallPercent% ($fileName)"))
+                        if (overallPercent > lastReportedPercent) {
+                            lastReportedPercent = overallPercent
+                            setProgress(workDataOf("progress" to overallPercent))
+                            try {
+                                setForeground(createForegroundInfo("Downloaded $overallPercent% ($fileName)"))
+                            } catch (e: Exception) {
+                                Log.w(TAG, "Failed to set foreground info: ${e.message}")
+                            }
+                        }
                     }
 
                     outputStream.flush()
@@ -199,6 +207,7 @@ class ModelDownloadWorker(
             val db = DatabaseProvider.getDatabase(applicationContext)
             val shouldAutoIndex = withContext(Dispatchers.IO) {
                 db.embeddingDao().clearAllEmbeddings()
+                db.embeddingStatusDao().clearAllStatuses()
                 com.inferno.gallery.data.SettingsRepository.getInstance(applicationContext)
                     .smartSearchAutoIndexFlow
                     .first() && db.embeddingDao().getUnindexedMediaIds().isNotEmpty()
