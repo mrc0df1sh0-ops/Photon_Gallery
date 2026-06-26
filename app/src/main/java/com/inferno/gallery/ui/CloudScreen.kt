@@ -172,7 +172,7 @@ fun CloudScreen(
                         dragStarted = false
                         val x = offset.x.toInt()
                         val y = offset.y.toInt()
-                        
+
                         val item = gridState.layoutInfo.visibleItemsInfo.firstOrNull { itemInfo ->
                             x in itemInfo.offset.x..(itemInfo.offset.x + itemInfo.size.width) &&
                             y in itemInfo.offset.y..(itemInfo.offset.y + itemInfo.size.height)
@@ -196,7 +196,7 @@ fun CloudScreen(
                         if (dragStarted) {
                             val x = change.position.x.toInt()
                             val y = change.position.y.toInt()
-                            
+
                             val inset = 30
                             val item = gridState.layoutInfo.visibleItemsInfo.firstOrNull { itemInfo ->
                                 x in (itemInfo.offset.x + inset)..(itemInfo.offset.x + itemInfo.size.width - inset) &&
@@ -207,7 +207,7 @@ fun CloudScreen(
                                 val matchedItem = galleryItems.find { item -> item.id == id }
                                 val uri = matchedItem?.uri?.toString()
                                 if (uri != null && uri != initialItemUri) {
-                                    viewModel.addSelection(uri) 
+                                    viewModel.addSelection(uri)
                                 }
                             }
                         }
@@ -329,7 +329,7 @@ fun CloudScreen(
                             val total = photoBytes + videoBytes
                             val photoRatio = if (total > 0) photoBytes.toFloat() / total else 0f
                             val videoRatio = if (total > 0) videoBytes.toFloat() / total else 0f
-                            
+
                             object {
                                 val photos = photoBytes
                                 val videos = videoBytes
@@ -359,7 +359,7 @@ fun CloudScreen(
                         )
 
                         Spacer(modifier = Modifier.height(4.dp))
-                        
+
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -431,7 +431,7 @@ fun CloudScreen(
                                 )
                             }
                         }
-                        
+
                         Spacer(modifier = Modifier.height(4.dp))
                         HorizontalDivider(color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.15f))
                         Spacer(modifier = Modifier.height(2.dp))
@@ -525,7 +525,7 @@ fun CloudScreen(
                                             )
                                         }
                                     }
-                                    
+
                                     if (systemStatus.isOffline) {
                                         Surface(
                                             shape = RoundedCornerShape(8.dp),

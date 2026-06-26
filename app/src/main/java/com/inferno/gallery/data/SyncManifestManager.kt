@@ -24,7 +24,7 @@ object SyncManifestManager {
             val db = DatabaseProvider.getDatabase(context)
             val successfulBackups = db.telegramBackupDao().observeAllBackups().first()
                 .filter { it.backupStatus == "SUCCESS" }
-            
+
             val jsonArray = JSONArray()
             val allLocalMedia = db.mediaDao().getAllMedia()
 
@@ -46,20 +46,20 @@ object SyncManifestManager {
             tempFile.writeText(jsonArray.toString(2))
 
             val client = TelegramClient(botToken, chatId)
-            
+
             // 1. Upload new manifest
             val uploadResult = client.uploadDocument(tempFile, "application/json")
-            
+
             // 2. Fetch the old pinned message ID
             val oldPinnedId = client.getPinnedMessageIdOrNull()
-            
+
             // 3. Pin the new manifest message
             try {
                 client.pinChatMessage(uploadResult.messageId)
             } catch (pinEx: Exception) {
                 Log.e(TAG, "Failed to pin chat message: ${pinEx.message}")
             }
-            
+
             // 4. Delete the old pinned message (to save space and reduce clutter)
             if (oldPinnedId != null) {
                 try {
@@ -68,7 +68,7 @@ object SyncManifestManager {
                     Log.e(TAG, "Failed to delete old pinned manifest message $oldPinnedId: ${delEx.message}")
                 }
             }
-            
+
             Log.d(TAG, "Sync manifest updated successfully. New pinned message ID: ${uploadResult.messageId}")
         } catch (e: com.inferno.gallery.data.network.TelegramMigrationException) {
             Log.i(TAG, "Group chat migrated to supergroup! Updating chat ID to ${e.newChatId}")
@@ -108,7 +108,7 @@ object SyncManifestManager {
 
     /**
      * Restore backup records from the pinned sync manifest in the Telegram chat.
-     * 
+     *
      * IMPORTANT: This clears ALL existing backup records before restoring to prevent
      * conflicts when the user switches bots, changes chat IDs, or re-syncs.
      * The manifest is the single source of truth for what's backed up.
@@ -120,7 +120,7 @@ object SyncManifestManager {
             val fileUrl = client.getFileUrl(fileId)
             val manifestText = client.downloadFileText(fileUrl)
             if (manifestText.isBlank()) return false
-            
+
             val jsonArray = JSONArray(manifestText)
             val db = DatabaseProvider.getDatabase(context)
             val localMedia = db.mediaDao().getAllMedia()
@@ -130,7 +130,7 @@ object SyncManifestManager {
             // previous bot/chat configurations. The manifest is the source of truth.
             backupDao.clearAllBackups()
             Log.d(TAG, "Cleared existing backup records before manifest restore.")
-            
+
             var restoreCount = 0
             var cloudOnlyCount = 0
             for (i in 0 until jsonArray.length()) {
@@ -144,13 +144,13 @@ object SyncManifestManager {
                 val filePathVal = obj.optString("filePath", "")
                 // Use isVideo from manifest if present, otherwise detect from file extension
                 val isVideoVal = if (obj.has("isVideo")) obj.getBoolean("isVideo") else isVideoFile(nameVal)
-                
+
                 // Match priority:
                 // 1. Same filePath
                 // 2. Same name and size
                 var matchedMedia = localMedia.firstOrNull { it.filePath == filePathVal }
                     ?: localMedia.firstOrNull { it.name == nameVal && it.size == sizeVal }
-                
+
                 if (matchedMedia == null) {
                     // Cloud-only item — create a placeholder in core_media
                     val mimeType = when {
@@ -178,19 +178,18 @@ object SyncManifestManager {
                     cloudOnlyCount++
                 }
 
-                if (matchedMedia != null) {
-                    backupDao.insertOrUpdate(
-                        TelegramBackupEntity(
-                            mediaId = matchedMedia.id,
-                            telegramFileId = fileIdVal,
-                            telegramThumbFileId = thumbIdVal,
-                            telegramMessageId = messageIdVal,
-                            backupStatus = "SUCCESS",
-                            backupTimestamp = timestampVal
-                        )
+                val resolvedMedia = matchedMedia ?: continue
+                backupDao.insertOrUpdate(
+                    TelegramBackupEntity(
+                        mediaId = resolvedMedia.id,
+                        telegramFileId = fileIdVal,
+                        telegramThumbFileId = thumbIdVal,
+                        telegramMessageId = messageIdVal,
+                        backupStatus = "SUCCESS",
+                        backupTimestamp = timestampVal
                     )
-                    restoreCount++
-                }
+                )
+                restoreCount++
             }
             Log.i(TAG, "Restored $restoreCount backup records ($cloudOnlyCount cloud-only) from Telegram sync manifest.")
             return restoreCount > 0

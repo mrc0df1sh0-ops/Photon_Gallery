@@ -113,4 +113,16 @@ object MediaQueryBuilder {
         "NameAsc" -> "ORDER BY cm.name ASC"
         else -> "ORDER BY cm.dateAdded DESC"
     }
+
+    fun buildOrderClause(order: String, bucket: String?, smartIds: List<String>): String {
+        if (bucket == BucketNames.SEARCH_SMART) {
+            val numericIds = smartIds.mapNotNull { it.toLongOrNull() }
+            if (numericIds.isNotEmpty()) {
+                val cases = numericIds.mapIndexed { index, id -> "WHEN $id THEN $index" }
+                    .joinToString(" ")
+                return "ORDER BY CASE cm.id $cases ELSE ${numericIds.size} END"
+            }
+        }
+        return buildOrderClause(order)
+    }
 }

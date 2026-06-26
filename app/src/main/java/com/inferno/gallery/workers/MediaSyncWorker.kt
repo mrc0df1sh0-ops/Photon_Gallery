@@ -22,21 +22,22 @@ class MediaSyncWorker(
             Log.d("MediaSyncWorker", "Starting MediaStore sync...")
             val mediaRepository = LocalMediaRepository(applicationContext.contentResolver)
             val database = DatabaseProvider.getDatabase(applicationContext)
-            
+            val settingsRepo = SettingsRepository.getInstance(applicationContext)
+
             val mediaStoreList = mediaRepository.getImagesListForSync()
             val dbList = database.mediaDao().getAllMedia()
-            
+
             val mediaStoreMap = mediaStoreList.associateBy { it.id }
             val dbMap = dbList.associateBy { it.id }
-            
+
             val toInsert = mutableListOf<CoreMediaEntity>()
             val toDelete = mutableListOf<Long>()
-            
+
             // Find items in MediaStore not in DB or changed (e.g. trashed/restored)
             for (media in mediaStoreList) {
                 val dbItem = dbMap[media.id]
-                val needsUpdate = dbItem == null || 
-                                  dbItem.bucketName != media.bucketName || 
+                val needsUpdate = dbItem == null ||
+                                  dbItem.bucketName != media.bucketName ||
                                   dbItem.dateModified != media.dateModified
 
                 if (needsUpdate) {
@@ -53,7 +54,7 @@ class MediaSyncWorker(
                             dateModified = media.dateModified,
                             size = media.size,
                             name = media.name,
-                            mimeType = dbItem?.mimeType, 
+                            mimeType = dbItem?.mimeType,
                             isVideo = media.isVideo,
                             durationMs = media.durationMs,
                             isIndexedOcr = dbItem?.isIndexedOcr ?: false,
@@ -66,7 +67,7 @@ class MediaSyncWorker(
                     )
                 }
             }
-            
+
             // Find items in DB not in MediaStore, except those that have been successfully backed up to Telegram
             val successfulBackupIds = database.telegramBackupDao().getSuccessfulBackupIds().toSet()
             for (dbItem in dbList) {
@@ -74,12 +75,11 @@ class MediaSyncWorker(
                     toDelete.add(dbItem.id)
                 }
             }
-            
+
             if (toInsert.isNotEmpty()) {
                 Log.d("MediaSyncWorker", "Inserting ${toInsert.size} new items into Room SSOT.")
                 database.mediaDao().insertAll(toInsert)
 
-                val settingsRepo = SettingsRepository.getInstance(applicationContext)
                 val autoBackupEnabled = settingsRepo.telegramBackupEnabledFlow.first()
                 if (autoBackupEnabled) {
                     val autoBackupFolders = settingsRepo.telegramAutoBackupFoldersFlow.first()
@@ -89,7 +89,7 @@ class MediaSyncWorker(
                             autoBackupFolders.contains(item.bucketName) &&
                                     (backupMode == "userbot" || !item.isVideo)
                         }
-                        
+
                         val backupDao = database.telegramBackupDao()
                         if (toBackup.isNotEmpty()) {
                             Log.d("MediaSyncWorker", "Auto-queueing ${toBackup.size} items for backup...")
@@ -131,26 +131,26 @@ class MediaSyncWorker(
                             )
                         }
                 }
-
-                // Trigger Smart Search auto-indexing if enabled and model is downloaded
-                val smartSearchEngine = com.inferno.gallery.data.ai.SmartSearchEngine.getInstance(applicationContext)
-                val autoIndexSmartEnabled = settingsRepo.smartSearchAutoIndexFlow.first()
-                if (autoIndexSmartEnabled && smartSearchEngine.isModelDownloaded()) {
-                    Log.d("MediaSyncWorker", "Auto-indexing new images for Smart Search...")
-                    val indexRequest = androidx.work.OneTimeWorkRequestBuilder<SmartSearchIndexWorker>().build()
-                    androidx.work.WorkManager.getInstance(applicationContext).enqueueUniqueWork(
-                        "SmartSearchIndexWorker",
-                        androidx.work.ExistingWorkPolicy.KEEP,
-                        indexRequest
-                    )
-                }
             }
-            
+
             if (toDelete.isNotEmpty()) {
                 Log.d("MediaSyncWorker", "Deleting ${toDelete.size} items from Room SSOT.")
                 database.mediaDao().deleteByIds(toDelete)
             }
-            
+
+            val autoIndexSmartEnabled = settingsRepo.smartSearchAutoIndexFlow.first()
+            val smartSearchEngine = com.inferno.gallery.data.ai.SmartSearchEngine.getInstance(applicationContext)
+            val unindexedSmartCount = database.embeddingDao().getUnindexedMediaIds().size
+            if (autoIndexSmartEnabled && smartSearchEngine.isModelDownloaded() && unindexedSmartCount > 0) {
+                Log.d("MediaSyncWorker", "Auto-indexing $unindexedSmartCount images for Smart Search...")
+                val indexRequest = androidx.work.OneTimeWorkRequestBuilder<SmartSearchIndexWorker>().build()
+                androidx.work.WorkManager.getInstance(applicationContext).enqueueUniqueWork(
+                    "SmartSearchIndexWorker",
+                    androidx.work.ExistingWorkPolicy.KEEP,
+                    indexRequest
+                )
+            }
+
             Log.d("MediaSyncWorker", "Sync complete.")
             Result.success()
         } catch (e: Exception) {
