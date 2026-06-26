@@ -1,11 +1,23 @@
 package com.inferno.gallery.ui
 
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.draw.clip
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.geometry.Offset
+import coil3.compose.AsyncImage
 import androidx.compose.material.icons.rounded.Cloud
 import androidx.compose.material.icons.rounded.Security
 import androidx.compose.material.icons.rounded.FolderOff
 import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.Folder
+import androidx.compose.material.icons.rounded.Code
 import androidx.compose.ui.draw.alpha
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.launch
@@ -200,6 +212,7 @@ fun SettingsScreen(
     var showClearIndexConfirm by remember { mutableStateOf(false) }
     var showDeleteModelConfirm by remember { mutableStateOf(false) }
     var showLicensesDialog by remember { mutableStateOf(false) }
+    var showPrivacyDialog by remember { mutableStateOf(false) }
     var showResetBackupDialog by remember { mutableStateOf(false) }
 
     // Backup mode state (hoisted for dialog access)
@@ -288,7 +301,16 @@ fun SettingsScreen(
                                "• Room Database (Apache 2.0 License)\n" +
                                "• ONNX Runtime (MIT License)\n" +
                                "• MobileCLIP (MIT License)\n" +
-                               "• Google Sans Flex (SIL Open Font License 1.1)",
+                               "• Roboto Flex & Google Sans Flex (SIL OFL 1.1)\n" +
+                               "• AndroidX Lifecycle & DataStore (Apache 2.0 License)\n" +
+                               "• AndroidX Navigation Compose (Apache 2.0 License)\n" +
+                               "• AndroidX WorkManager (Apache 2.0 License)\n" +
+                               "• AndroidX Graphics Shapes (Apache 2.0 License)\n" +
+                               "• AndroidX Biometric (Apache 2.0 License)\n" +
+                               "• Media3 ExoPlayer (Apache 2.0 License)\n" +
+                               "• osmdroid (Apache 2.0 License)\n" +
+                               "• TDLib / td-ktx (BSL-1.0 License)\n" +
+                               "• Google ML Kit Text Recognition (Google APIs Terms of Service)",
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
@@ -296,6 +318,27 @@ fun SettingsScreen(
             confirmButton = {
                 androidx.compose.material3.TextButton(onClick = { showLicensesDialog = false }) {
                     Text("Close")
+                }
+            }
+        )
+    }
+
+    if (showPrivacyDialog) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showPrivacyDialog = false },
+            title = { Text("Privacy Notice", fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    text = "Photon Gallery is built with a privacy-first, offline-first approach.\n\n" +
+                           "• All advanced AI features, including Smart Search vector embeddings, face detection, scene recognition, and OCR, run 100% locally on your device.\n\n" +
+                           "• No telemetry, usage statistics, tracking analytics, or personal data is collected or uploaded to any remote servers.\n\n" +
+                           "• Your media files and search index databases never leave your device.",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = { showPrivacyDialog = false }) {
+                    Text("Understood")
                 }
             }
         )
@@ -2340,7 +2383,7 @@ fun SettingsScreen(
                                         .padding(vertical = 16.dp),
                                     horizontalAlignment = Alignment.CenterHorizontally
                                 ) {
-                                    // 1. Placeholder app icon in the top center
+                                    // 1. App Icon with elegant morph container
                                     Card(
                                         shape = ShapeLargeIncreased3 as RoundedCornerShape,
                                         colors = CardDefaults.cardColors(
@@ -2364,14 +2407,41 @@ fun SettingsScreen(
 
                                     Spacer(modifier = Modifier.height(16.dp))
 
-                                    // 2. App Name below it
+                                    // 2. App Name & Open Source Chip
                                     Text(
                                         text = "Photon Gallery",
                                         style = MaterialTheme.typography.headlineLarge,
                                         fontWeight = FontWeight.Bold
                                     )
+                                    
+                                    Spacer(modifier = Modifier.height(6.dp))
+
+                                    Surface(
+                                        color = MaterialTheme.colorScheme.primaryContainer,
+                                        shape = RoundedCornerShape(percent = 50),
+                                        modifier = Modifier.padding(bottom = 8.dp)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Rounded.Code,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                            Text(
+                                                text = "Open Source",
+                                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                                            )
+                                        }
+                                    }
+
                                     Text(
-                                        text = "open source android media gallery app .",
+                                        text = "An elegant, AI-powered local media gallery for Android.",
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
                                         textAlign = androidx.compose.ui.text.style.TextAlign.Center,
@@ -2380,43 +2450,122 @@ fun SettingsScreen(
 
                                     Spacer(modifier = Modifier.height(24.dp))
 
-                                    // 3. Card below them (containing dev name and github icon next to the name)
+                                    // 3. Maintainer Card Section
+                                    Text(
+                                        text = "Maintainer",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.align(Alignment.Start).padding(start = 24.dp, end = 24.dp, bottom = 8.dp)
+                                    )
+
                                     Card(
                                         shape = ShapeLarge as RoundedCornerShape,
                                         colors = CardDefaults.cardColors(
-                                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                            contentColor = MaterialTheme.colorScheme.onSurface
                                         ),
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .padding(horizontal = 16.dp)
-                                            .clickable { uriHandler.openUri("https://github.com/Bn5prS") }
+                                            .border(
+                                                width = 0.5.dp,
+                                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
+                                                shape = ShapeLarge as RoundedCornerShape
+                                            )
                                     ) {
                                         Row(
                                             modifier = Modifier
                                                 .fillMaxWidth()
+                                                .clickable { uriHandler.openUri("https://github.com/Bn5prS") }
                                                 .padding(16.dp),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.Center
+                                            verticalAlignment = Alignment.CenterVertically
                                         ) {
-                                            Icon(
-                                                imageVector = GithubIcon,
-                                                contentDescription = "GitHub",
-                                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                modifier = Modifier.size(24.dp)
+                                            WavyMaintainerAvatar(
+                                                imageUrl = "https://github.com/Bn5prS.png",
+                                                avatarSize = 64.dp,
+                                                outlineColor = MaterialTheme.colorScheme.primary,
+                                                amplitude = 3.dp,
+                                                wavesCount = 8
                                             )
-                                            Spacer(modifier = Modifier.width(12.dp))
-                                            Text(
-                                                text = "Bn5prS",
-                                                style = MaterialTheme.typography.titleMedium,
-                                                fontWeight = FontWeight.Bold
-                                            )
+                                            
+                                            Spacer(modifier = Modifier.width(16.dp))
+                                            
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = "Bn5prS",
+                                                    style = MaterialTheme.typography.titleMedium,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                                Text(
+                                                    text = "GitHub Developer",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+
+                                            IconButton(
+                                                onClick = { uriHandler.openUri("https://github.com/Bn5prS") }
+                                            ) {
+                                                Icon(
+                                                    imageVector = GithubIcon,
+                                                    contentDescription = "GitHub Developer Profile",
+                                                    tint = MaterialTheme.colorScheme.primary,
+                                                    modifier = Modifier.size(28.dp)
+                                                )
+                                            }
                                         }
                                     }
 
                                     Spacer(modifier = Modifier.height(24.dp))
 
-                                    // 4. Options below the card
+                                    // 4. Quick Action Buttons Row (Source Code & Privacy Notice)
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 16.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                    ) {
+                                        OutlinedButton(
+                                            onClick = { uriHandler.openUri("https://github.com/Bn5prS/Photon_Gallery") },
+                                            modifier = Modifier.weight(1f),
+                                            shape = RoundedCornerShape(12.dp)
+                                        ) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = GithubIcon,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                                Text("Source Code", style = MaterialTheme.typography.labelLarge)
+                                            }
+                                        }
+
+                                        OutlinedButton(
+                                            onClick = { showPrivacyDialog = true },
+                                            modifier = Modifier.weight(1f),
+                                            shape = RoundedCornerShape(12.dp)
+                                        ) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Rounded.Security,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                                Text("Privacy Notice", style = MaterialTheme.typography.labelLarge)
+                                            }
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.height(24.dp))
+
+                                    // 5. System Details Group
                                     val context = androidx.compose.ui.platform.LocalContext.current
                                     SettingsGroup(title = "App Details") {
                                         // Check for updates
@@ -2425,7 +2574,7 @@ fun SettingsScreen(
                                             headlineContent = { Text("Check for updates") },
                                             supportingContent = { Text("Verify if you are running the latest release") },
                                             modifier = Modifier.clickable {
-                                                android.widget.Toast.makeText(context, "Photon Gallery is up to date (v1.0.0)", android.widget.Toast.LENGTH_SHORT).show()
+                                                android.widget.Toast.makeText(context, "Photon Gallery is up to date (v2.0.0)", android.widget.Toast.LENGTH_SHORT).show()
                                             },
                                             colors = ListItemDefaults.colors(containerColor = Color.Transparent)
                                         )
@@ -2751,5 +2900,79 @@ private fun SetupGuideStep(
                 }
             }
         }
+    }
+}
+
+@Composable
+fun WavyMaintainerAvatar(
+    imageUrl: String,
+    modifier: Modifier = Modifier,
+    avatarSize: androidx.compose.ui.unit.Dp = 80.dp,
+    outlineColor: Color = MaterialTheme.colorScheme.primary,
+    strokeWidth: androidx.compose.ui.unit.Dp = 3.dp,
+    amplitude: androidx.compose.ui.unit.Dp = 4.dp,
+    wavesCount: Int = 10
+) {
+    var phase by remember { mutableFloatStateOf(0f) }
+    var lastFrameNanos by remember { mutableFloatStateOf(0f) }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            withFrameNanos { frameNanos ->
+                val frameNanosFloat = frameNanos.toFloat()
+                if (lastFrameNanos != 0f) {
+                    val deltaSeconds = (frameNanosFloat - lastFrameNanos) / 1_000_000_000f
+                    phase = (phase + 3f * deltaSeconds) % (2f * Math.PI.toFloat())
+                }
+                lastFrameNanos = frameNanosFloat
+            }
+        }
+    }
+
+    Box(
+        modifier = modifier.size(avatarSize + amplitude * 2),
+        contentAlignment = Alignment.Center
+    ) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val center = Offset(size.width / 2f, size.height / 2f)
+            val baseRadius = avatarSize.toPx() / 2f + strokeWidth.toPx()
+            val ampPx = amplitude.toPx()
+            val strokePx = strokeWidth.toPx()
+
+            val path = Path()
+            val steps = 180
+            for (i in 0..steps) {
+                val theta = (i.toFloat() / steps) * 2f * Math.PI.toFloat()
+                val r = baseRadius + kotlin.math.sin(theta * wavesCount - phase) * ampPx
+                val x = center.x + r * kotlin.math.cos(theta).toFloat()
+                val y = center.y + r * kotlin.math.sin(theta).toFloat()
+
+                if (i == 0) {
+                    path.moveTo(x, y)
+                } else {
+                    path.lineTo(x, y)
+                }
+            }
+            path.close()
+
+            drawPath(
+                path = path,
+                color = outlineColor,
+                style = Stroke(
+                    width = strokePx,
+                    cap = StrokeCap.Round,
+                    join = StrokeJoin.Round
+                )
+            )
+        }
+
+        AsyncImage(
+            model = imageUrl,
+            contentDescription = "Maintainer Profile",
+            modifier = Modifier
+                .size(avatarSize)
+                .clip(CircleShape),
+            contentScale = ContentScale.Crop
+        )
     }
 }

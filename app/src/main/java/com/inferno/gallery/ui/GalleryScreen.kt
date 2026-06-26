@@ -696,16 +696,6 @@ fun GalleryGridItem(
                     scaleOut(spring(stiffness = 12000f), targetScale = 0.6f)
         ) {
             Box(modifier = Modifier.matchParentSize()) {
-                // Thick primary border inside the bounds
-                Box(
-                    modifier = Modifier
-                        .matchParentSize()
-                        .border(
-                            width = 4.dp,
-                            color = MaterialTheme.colorScheme.primary,
-                            shape = androidx.compose.foundation.shape.RoundedCornerShape(thumbnailCornerRadius.dp)
-                        )
-                )
                 Surface(
                     modifier = Modifier
                         .align(Alignment.TopStart)
