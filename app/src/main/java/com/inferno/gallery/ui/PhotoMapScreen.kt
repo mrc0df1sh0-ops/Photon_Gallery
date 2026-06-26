@@ -187,6 +187,38 @@ fun PhotoMapScreen(
             // Grid state to track scrolling
             val gridState = rememberLazyGridState()
 
+            val clusterBitmaps = remember { mutableStateMapOf<String, Bitmap>() }
+
+            // Preload cluster cover thumbnails
+            LaunchedEffect(clusters) {
+                clusters.forEach { cluster ->
+                    val firstItem = cluster.items.firstOrNull()
+                    if (firstItem != null && !clusterBitmaps.containsKey(firstItem.id)) {
+                        launch(Dispatchers.IO) {
+                            try {
+                                val loader = coil3.SingletonImageLoader.get(context)
+                                val request = ImageRequest.Builder(context)
+                                    .data(firstItem.resolvedUri)
+                                    .size(160, 160)
+                                    .precision(Precision.EXACT)
+                                    .allowHardware(false)
+                                    .build()
+                                val result = loader.execute(request)
+                                val image = (result as? coil3.request.SuccessResult)?.image
+                                val bitmap = when (image) {
+                                    is BitmapImage -> image.bitmap
+                                    is DrawableImage -> drawableToBitmap(image.drawable)
+                                    else -> null
+                                }
+                                if (bitmap != null) {
+                                    clusterBitmaps[firstItem.id] = bitmap
+                                }
+                            } catch (_: Exception) {}
+                        }
+                    }
+                }
+            }
+
             // Track the first visible image of the scrolled viewport
             val firstVisibleImage by remember(groupedMedia) {
                 derivedStateOf {
@@ -229,6 +261,28 @@ fun PhotoMapScreen(
             )
 
             var loadedBitmapState by remember { mutableStateOf<Bitmap?>(null) }
+
+            // Spring-pop scale Animatable for focused marker
+            val markerScale = remember { Animatable(1f) }
+
+            // Spring-pop animation: plays when focused image changes
+            LaunchedEffect(firstVisibleImage) {
+                markerScale.snapTo(0f)
+                markerScale.animateTo(
+                    targetValue = 1.1f,
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                        stiffness = Spring.StiffnessHigh
+                    )
+                )
+                markerScale.animateTo(
+                    targetValue = 1f,
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioLowBouncy,
+                        stiffness = Spring.StiffnessMediumLow
+                    )
+                )
+            }
 
             // 1. Asynchronously load the raw bitmap on change (prevents infinite reloading)
             LaunchedEffect(firstVisibleImage) {
@@ -275,9 +329,10 @@ fun PhotoMapScreen(
                 }
             }
 
-            // 3. Dynamic Marker Render Updating
+            // 3. Dynamic Marker Render Updating (includes spring-pop scale)
             val animPhase = breatheAnimation
-            LaunchedEffect(loadedBitmapState, animPhase, firstVisibleImage, mapView) {
+            val currentMarkerScale = markerScale.value
+            LaunchedEffect(loadedBitmapState, animPhase, currentMarkerScale, firstVisibleImage, mapView) {
                 val item = firstVisibleImage
                 val map = mapView
                 if (item != null && map != null) {
@@ -287,9 +342,9 @@ fun PhotoMapScreen(
                         val geoPoint = GeoPoint(lat, lon)
                         val bitmap = loadedBitmapState
                         val wavyDrawable = if (bitmap != null) {
-                            createWavyDrawable(context, bitmap, animPhase)
+                            createWavyDrawable(context, bitmap, animPhase, currentMarkerScale)
                         } else {
-                            createDefaultWavyDrawable(context, animPhase)
+                            createDefaultWavyDrawable(context, animPhase, currentMarkerScale)
                         }
 
                         var marker = focusedMarker
@@ -346,23 +401,58 @@ fun PhotoMapScreen(
                                 marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
                                 marker.title = "${count} photo${if (count > 1) "s" else ""}"
 
-                                val sizeDp = (36 + minOf(count * 4, 40))
+                                val sizeDp = (42 + minOf(count * 2, 20)).coerceAtMost(64)
                                 val density = context.resources.displayMetrics.density
                                 val sizePx = (sizeDp * density).toInt()
 
-                                val drawable = createClusterDrawable(
-                                    context = context,
-                                    count = count,
-                                    sizePx = sizePx,
-                                    bgColor = primaryColor.toArgb(),
-                                    textColor = onPrimaryColor.toArgb()
-                                )
+                                val firstItem = cluster.items.firstOrNull()
+                                val bitmap = firstItem?.let { clusterBitmaps[it.id] }
+
+                                val drawable = if (bitmap != null) {
+                                    createWavyClusterDrawable(
+                                        context = context,
+                                        bitmap = bitmap,
+                                        count = count,
+                                        sizePx = sizePx,
+                                        bgColor = primaryColor.toArgb(),
+                                        textColor = onPrimaryColor.toArgb()
+                                    )
+                                } else {
+                                    createPlaceholderWavyClusterDrawable(
+                                        context = context,
+                                        count = count,
+                                        sizePx = sizePx,
+                                        bgColor = primaryColor.toArgb(),
+                                        textColor = onPrimaryColor.toArgb()
+                                    )
+                                }
                                 marker.icon = drawable
 
                                 marker.setOnMarkerClickListener { _, _ ->
-                                    map.controller.animateTo(cluster.center)
+                                    // Cluster-burst zoom: fit the map to the cluster's bounding box
+                                    val clusterItems = cluster.items
+                                    if (clusterItems.size <= 1) {
+                                        // Single item — zoom in close
+                                        map.controller.animateTo(cluster.center)
+                                        map.controller.setZoom(17.0)
+                                    } else {
+                                        val lats = clusterItems.mapNotNull { it.latitude }
+                                        val lons = clusterItems.mapNotNull { it.longitude }
+                                        if (lats.isNotEmpty() && lons.isNotEmpty()) {
+                                            val padding = 0.003
+                                            val boundingBox = BoundingBox(
+                                                lats.max() + padding,
+                                                lons.max() + padding,
+                                                lats.min() - padding,
+                                                lons.min() - padding
+                                            )
+                                            map.post {
+                                                map.zoomToBoundingBox(boundingBox, true, 60)
+                                            }
+                                        }
+                                    }
                                     // Smoothly scroll list to the first image of this cluster
-                                    val targetId = cluster.items.firstOrNull()?.id
+                                    val targetId = clusterItems.firstOrNull()?.id
                                     val index = groupedMedia.indexOfFirst {
                                         (it as? GalleryListItem.Item)?.galleryItem?.id == targetId
                                     }
@@ -607,10 +697,12 @@ fun PhotoMapScreen(
 private fun createWavyDrawable(
     context: android.content.Context,
     bitmap: Bitmap,
-    phase: Float
+    phase: Float,
+    springScale: Float = 1f
 ): Drawable {
     val sizePx = 160
-    val scale = 1.0f + 0.04f * sin(phase)
+    val breatheScale = 1.0f + 0.04f * sin(phase)
+    val scale = breatheScale * springScale.coerceAtLeast(0.01f)
     val finalSize = (sizePx * scale).toInt()
     val output = Bitmap.createBitmap(finalSize, finalSize, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(output)
@@ -670,10 +762,12 @@ private fun createWavyDrawable(
 
 private fun createDefaultWavyDrawable(
     context: android.content.Context,
-    phase: Float
+    phase: Float,
+    springScale: Float = 1f
 ): Drawable {
     val sizePx = 120
-    val scale = 1.0f + 0.04f * sin(phase)
+    val breatheScale = 1.0f + 0.04f * sin(phase)
+    val scale = breatheScale * springScale.coerceAtLeast(0.01f)
     val finalSize = (sizePx * scale).toInt()
     val output = Bitmap.createBitmap(finalSize, finalSize, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(output)
@@ -766,41 +860,140 @@ private fun clusterPhotos(
 
 // ── Custom Cluster Marker Drawable ──
 
-private fun createClusterDrawable(
+private fun createWavyClusterDrawable(
+    context: android.content.Context,
+    bitmap: Bitmap,
+    count: Int,
+    sizePx: Int,
+    bgColor: Int,
+    textColor: Int
+): Drawable {
+    val output = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(output)
+
+    val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+    val path = Path()
+
+    val centerX = sizePx / 2f
+    val centerY = sizePx / 2f
+    val r0 = sizePx / 2f - 8f
+    val amplitude = r0 * 0.07f
+    val waveCount = 8f
+    val numPoints = 120
+
+    for (i in 0 until numPoints) {
+        val angle = i * (2 * Math.PI / numPoints)
+        val r = r0 + amplitude * sin(waveCount * angle)
+        val x = (centerX + r * cos(angle)).toFloat()
+        val y = (centerY + r * sin(angle)).toFloat()
+        if (i == 0) {
+            path.moveTo(x, y)
+        } else {
+            path.lineTo(x, y)
+        }
+    }
+    path.close()
+
+    // Draw shadow
+    val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0x2A000000
+        style = Paint.Style.FILL
+    }
+    val shadowPath = Path(path).apply {
+        offset(0f, 3f)
+    }
+    canvas.drawPath(shadowPath, shadowPaint)
+
+    // Clip and draw image
+    canvas.save()
+    canvas.clipPath(path)
+    val srcRect = Rect(0, 0, bitmap.width, bitmap.height)
+    val destRect = Rect(0, 0, sizePx, sizePx)
+    canvas.drawBitmap(bitmap, srcRect, destRect, paint)
+
+    // Draw dark semi-transparent overlay to make text pop
+    val overlayPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0x66000000
+        style = Paint.Style.FILL
+    }
+    canvas.drawPath(path, overlayPaint)
+    canvas.restore()
+
+    // Draw white border
+    val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = android.graphics.Color.WHITE
+        style = Paint.Style.STROKE
+        strokeWidth = 5f
+    }
+    canvas.drawPath(path, borderPaint)
+
+    // Draw count text centered
+    val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = android.graphics.Color.WHITE
+        textSize = sizePx * 0.35f
+        textAlign = Paint.Align.CENTER
+        typeface = android.graphics.Typeface.DEFAULT_BOLD
+        setShadowLayer(4f, 0f, 2f, 0xFF000000.toInt())
+    }
+    val textY = sizePx / 2f - (textPaint.ascent() + textPaint.descent()) / 2f
+    canvas.drawText(count.toString(), sizePx / 2f, textY, textPaint)
+
+    return BitmapDrawable(context.resources, output)
+}
+
+private fun createPlaceholderWavyClusterDrawable(
     context: android.content.Context,
     count: Int,
     sizePx: Int,
     bgColor: Int,
     textColor: Int
 ): Drawable {
-    val bitmap = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
-    val canvas = Canvas(bitmap)
+    val output = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(output)
 
-    // Draw circle background with shadow effect
-    val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    val path = Path()
+    val centerX = sizePx / 2f
+    val centerY = sizePx / 2f
+    val r0 = sizePx / 2f - 8f
+    val amplitude = r0 * 0.07f
+    val waveCount = 8f
+    val numPoints = 120
+
+    for (i in 0 until numPoints) {
+        val angle = i * (2 * Math.PI / numPoints)
+        val r = r0 + amplitude * sin(waveCount * angle)
+        val x = (centerX + r * cos(angle)).toFloat()
+        val y = (centerY + r * sin(angle)).toFloat()
+        if (i == 0) {
+            path.moveTo(x, y)
+        } else {
+            path.lineTo(x, y)
+        }
+    }
+    path.close()
+
+    // Draw fill with primary background color
+    val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = bgColor
         style = Paint.Style.FILL
-        setShadowLayer(4f, 0f, 2f, 0x44000000)
     }
-    canvas.drawCircle(sizePx / 2f, sizePx / 2f, sizePx / 2f - 4f, bgPaint)
+    canvas.drawPath(path, fillPaint)
 
-    // Draw border
     val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = 0x33FFFFFF
+        color = android.graphics.Color.WHITE
         style = Paint.Style.STROKE
-        strokeWidth = 2f
+        strokeWidth = 4f
     }
-    canvas.drawCircle(sizePx / 2f, sizePx / 2f, sizePx / 2f - 5f, borderPaint)
+    canvas.drawPath(path, borderPaint)
 
-    // Draw count text
     val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = textColor
-        textSize = sizePx * 0.38f
+        textSize = sizePx * 0.35f
         textAlign = Paint.Align.CENTER
         typeface = android.graphics.Typeface.DEFAULT_BOLD
     }
     val textY = sizePx / 2f - (textPaint.ascent() + textPaint.descent()) / 2f
     canvas.drawText(count.toString(), sizePx / 2f, textY, textPaint)
 
-    return BitmapDrawable(context.resources, bitmap)
+    return BitmapDrawable(context.resources, output)
 }
