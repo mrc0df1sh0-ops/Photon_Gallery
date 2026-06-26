@@ -9,81 +9,52 @@ import java.security.MessageDigest
 object HashUtils {
 
     /**
-     * Generates an MD5 hash of the file contents.
-     * This is a cryptographic hash — two files with the same MD5 are byte-identical.
-     * Used for "Exact Copies" detection.
-     *
-     * Reads only the first 64KB + last 64KB for large files (>1MB) as a fast approximation
-     * combined with file size matching for accurate results without reading entire files.
+     * Generates a SHA-256 hash of the full file contents.
+     * SHA-256 has hardware acceleration on ARMv8 CPUs and is faster than MD5 on modern Android.
+     * Full-file hashing eliminates false positives from partial-read strategies.
      */
     fun computeFileHash(file: File): String? {
-        try {
+        return try {
             if (!file.exists() || !file.canRead()) return null
-            val digest = MessageDigest.getInstance("MD5")
-            val fileSize = file.length()
-
+            val digest = MessageDigest.getInstance("SHA-256")
+            val buffer = ByteArray(65536) // 64KB chunks
             FileInputStream(file).use { fis ->
-                if (fileSize <= 1_048_576L) {
-                    // Small file: hash entire content
-                    val buffer = ByteArray(8192)
-                    var bytesRead: Int
-                    while (fis.read(buffer).also { bytesRead = it } != -1) {
-                        digest.update(buffer, 0, bytesRead)
-                    }
-                } else {
-                    // Large file: hash first 64KB + last 64KB + file size
-                    // This is extremely unlikely to produce false positives when combined
-                    // with size-based pre-grouping
-                    val chunkSize = 65536
-                    val buffer = ByteArray(chunkSize)
-
-                    // First 64KB
-                    var totalRead = 0
-                    while (totalRead < chunkSize) {
-                        val read = fis.read(buffer, 0, minOf(chunkSize - totalRead, buffer.size))
-                        if (read == -1) break
-                        digest.update(buffer, 0, read)
-                        totalRead += read
-                    }
-
-                    // Last 64KB
-                    val channel = fis.channel
-                    val lastStart = maxOf(0L, fileSize - chunkSize)
-                    channel.position(lastStart)
-                    totalRead = 0
-                    while (totalRead < chunkSize) {
-                        val read = fis.read(buffer, 0, minOf(chunkSize - totalRead, buffer.size))
-                        if (read == -1) break
-                        digest.update(buffer, 0, read)
-                        totalRead += read
-                    }
-
-                    // Include file size in hash to further reduce collisions
-                    digest.update(fileSize.toString().toByteArray())
+                var bytesRead: Int
+                while (fis.read(buffer).also { bytesRead = it } != -1) {
+                    digest.update(buffer, 0, bytesRead)
                 }
             }
-
-            val hashBytes = digest.digest()
-            return hashBytes.joinToString("") { "%02x".format(it) }
+            digest.digest().joinToString("") { "%02x".format(it) }
         } catch (e: Exception) {
             e.printStackTrace()
-            return null
+            null
         }
+    }
+
+    /**
+     * Returns true if two file sizes are close enough (within 10%) to warrant deeper comparison.
+     * Used as a fast pre-filter before expensive perceptual hash comparisons.
+     */
+    fun similarFileSize(sizeA: Long, sizeB: Long): Boolean {
+        if (sizeA <= 0 || sizeB <= 0) return true // unknown size: don't filter
+        val larger = maxOf(sizeA, sizeB).toDouble()
+        val diff = Math.abs(sizeA - sizeB).toDouble()
+        return diff / larger <= 0.10
     }
 
     /**
      * Generates a 64-bit Difference Hash (dHash) for the given bitmap.
      *
-     * dHash is more discriminating than aHash because it encodes gradient direction
-     * (whether the next pixel is brighter or darker) rather than absolute brightness.
-     * This makes it far more resistant to false positives from unrelated images.
+     * dHash encodes gradient direction (whether the next pixel is brighter or darker)
+     * rather than absolute brightness. This makes it robust against rescaling,
+     * compression artefacts, and minor crops while still catching visually identical images.
      *
-     * Process: resize to 9x8, convert to grayscale, compare each pixel to its right neighbor.
+     * Process: resize to 9×8, convert to grayscale, compare each pixel to its right neighbor.
      * Produces a 64-bit hash (8 rows × 8 comparisons per row).
      */
     fun generatePerceptualHash(bitmap: Bitmap): Long? {
-        try {
-            // 1. Resize to 9x8 (9 wide so we get 8 horizontal differences per row)
+        return try {
+            // 1. Resize to 9×8
             val scaledBitmap = Bitmap.createScaledBitmap(bitmap, 9, 8, true)
 
             // 2. Convert to grayscale
@@ -114,21 +85,31 @@ object HashUtils {
             }
 
             scaledBitmap.recycle()
-            return hash
+            hash
         } catch (e: Exception) {
             e.printStackTrace()
-            return null
+            null
         }
     }
 
     /**
-     * Computes the Hamming Distance between two 64-bit hashes.
-     * A distance of 0 means visually identical images.
-     * A distance <= 5 usually indicates visually similar images (rescaled, recompressed).
-     * A distance <= 10 may indicate loosely similar images.
+     * Computes the Hamming Distance between two 64-bit perceptual hashes.
+     * Distance 0   = pixel-identical after rescale
+     * Distance ≤ 4 = High confidence similar (burst shots, minor edits)
+     * Distance ≤ 10 = Medium confidence similar (recompressed, cropped, filtered)
      */
     fun hammingDistance(hash1: Long, hash2: Long): Int {
         val xor = hash1 xor hash2
         return java.lang.Long.bitCount(xor)
+    }
+
+    /**
+     * Returns a human-readable confidence label for a given Hamming distance.
+     * Used to label near-identical groups in the UI.
+     */
+    fun pHashConfidence(distance: Int): String = when {
+        distance <= 4  -> "High"
+        distance <= 10 -> "Medium"
+        else           -> "Low"
     }
 }

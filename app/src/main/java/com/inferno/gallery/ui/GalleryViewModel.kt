@@ -117,7 +117,8 @@ data class AlbumBucket(
 @Immutable
 data class DuplicateGroup(
     val pHash: Long,
-    val items: List<GalleryItem>
+    val items: List<GalleryItem>,
+    val confidence: String = "Exact" // "Exact", "High", "Medium"
 )
 
 sealed class DuplicateScanState {
@@ -1053,13 +1054,14 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
             }.filter { it.fileHash != null }
             .groupBy { it.fileHash!! }
             .filter { it.value.size > 1 }
-            .map { (_, items) -> DuplicateGroup(items.first().pHash ?: 0L, items) }
+            .map { (_, items) -> DuplicateGroup(items.first().pHash ?: 0L, items, confidence = "Exact") }
             .sortedByDescending { group -> group.items.sumOf { it.size } }
         }.flowOn(Dispatchers.IO).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val similarPhotos: StateFlow<List<DuplicateGroup>> = database.mediaDao().observeAllHashedMedia()
         .map { entities ->
-            val items = entities.map { entity ->
+            val items = entities.mapNotNull { entity ->
+                if (entity.pHash == null) return@mapNotNull null
                 val uri = Uri.parse(entity.uriString)
                 val exists = java.io.File(entity.filePath).exists()
                 GalleryItem(
@@ -1081,49 +1083,64 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
                     fileHash = entity.fileHash
                 )
             }
-            
+
             // Build set of exact duplicate fileHash values to exclude pure-copy groups
             val exactDuplicateHashes = items
                 .filter { it.fileHash != null }
                 .groupBy { it.fileHash!! }
                 .filter { it.value.size > 1 }
                 .keys
-            
-            val groups = mutableListOf<List<GalleryItem>>()
-            val visited = BooleanArray(items.size)
-            
-            for (i in items.indices) {
+
+            // Sort by pHash value for sorted-bucket sliding window — collapses most of the
+            // O(n²) search space since near-identical hashes cluster together after sorting.
+            val sorted = items.sortedBy { it.pHash }
+            val visited = BooleanArray(sorted.size)
+            val groups = mutableListOf<Pair<List<GalleryItem>, String>>() // items + confidence
+
+            for (i in sorted.indices) {
                 if (visited[i]) continue
-                val h1 = items[i].pHash ?: continue
-                
-                val currentGroup = mutableListOf(items[i])
+                val h1 = sorted[i].pHash ?: continue
+
+                val currentGroup = mutableListOf(sorted[i])
                 visited[i] = true
-                
-                for (j in i + 1 until items.size) {
+                var groupMinDistance = Int.MAX_VALUE
+
+                // Only compare against a bounded window ahead (hashes are sorted,
+                // so distant indices have large Hamming distances).
+                val windowEnd = minOf(sorted.size, i + 500)
+                for (j in i + 1 until windowEnd) {
                     if (visited[j]) continue
-                    val h2 = items[j].pHash ?: continue
-                    
+                    val h2 = sorted[j].pHash ?: continue
+
+                    // Size pre-filter: skip if sizes differ by more than 10%
+                    if (!com.inferno.gallery.utils.HashUtils.similarFileSize(
+                            sorted[i].size, sorted[j].size)) continue
+
                     val distance = com.inferno.gallery.utils.HashUtils.hammingDistance(h1, h2)
-                    // dHash distance 0-4: visually very similar
-                    if (distance <= 4) {
-                        currentGroup.add(items[j])
+                    if (distance <= 10) {
+                        currentGroup.add(sorted[j])
                         visited[j] = true
+                        if (distance < groupMinDistance) groupMinDistance = distance
                     }
                 }
-                
+
                 if (currentGroup.size > 1) {
-                    // Skip groups where ALL items share the same fileHash (those are exact copies, already shown in other tab)
+                    // Skip groups where all items are exact byte-identical copies
                     val uniqueFileHashes = currentGroup.mapNotNull { it.fileHash }.toSet()
                     val allSameHash = uniqueFileHashes.size == 1 && uniqueFileHashes.first() in exactDuplicateHashes
                     if (!allSameHash) {
-                        groups.add(currentGroup)
+                        val confidence = com.inferno.gallery.utils.HashUtils.pHashConfidence(
+                            if (groupMinDistance == Int.MAX_VALUE) 10 else groupMinDistance
+                        )
+                        groups.add(Pair(currentGroup, confidence))
                     }
                 }
             }
-            
-            groups.map { DuplicateGroup(it.first().pHash ?: 0L, it) }
-                .sortedByDescending { group -> group.items.sumOf { it.size } }
-        }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+            groups.map { (groupItems, confidence) ->
+                DuplicateGroup(groupItems.first().pHash ?: 0L, groupItems, confidence)
+            }.sortedByDescending { group -> group.items.sumOf { it.size } }
+        }.flowOn(Dispatchers.IO).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // ── Duplicate Scan State ──
     private val _duplicateScanState = MutableStateFlow<DuplicateScanState>(DuplicateScanState.Idle)
