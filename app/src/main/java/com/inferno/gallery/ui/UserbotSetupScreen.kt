@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package com.inferno.gallery.ui
 
 import androidx.compose.animation.*
@@ -13,6 +15,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.Send
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -202,7 +205,7 @@ private fun TelegramHeader() {
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                Icons.Rounded.Send,
+                Icons.AutoMirrored.Rounded.Send,
                 contentDescription = "Telegram",
                 tint = Color.White,
                 modifier = Modifier.size(30.dp)
@@ -357,7 +360,7 @@ private fun InitializingState(message: String = "Connecting to Telegram…") {
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    Icons.Rounded.Send,
+                    Icons.AutoMirrored.Rounded.Send,
                     contentDescription = null,
                     tint = TelegramBlue.copy(alpha = pulseAlpha),
                     modifier = Modifier.size(36.dp)
@@ -366,10 +369,8 @@ private fun InitializingState(message: String = "Connecting to Telegram…") {
 
             Spacer(Modifier.height(20.dp))
 
-            com.inferno.gallery.ui.components.ShapeMorphLoadingIndicator(
-                modifier = Modifier.size(32.dp),
-                color = TelegramBlue,
-                contained = true
+            androidx.compose.material3.ContainedLoadingIndicator(
+                modifier = Modifier.size(32.dp)
             )
 
             Spacer(Modifier.height(12.dp))
@@ -771,10 +772,8 @@ private fun ConnectedState(
                             .height(60.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        com.inferno.gallery.ui.components.ShapeMorphLoadingIndicator(
-                            modifier = Modifier.size(28.dp),
-                            color = TelegramBlue,
-                            contained = false
+                        androidx.compose.material3.ContainedLoadingIndicator(
+                            modifier = Modifier.size(28.dp)
                         )
                     }
                 } else if (channels.isEmpty()) {

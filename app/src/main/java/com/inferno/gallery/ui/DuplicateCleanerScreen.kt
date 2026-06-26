@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package com.inferno.gallery.ui
 
 import android.provider.MediaStore
@@ -23,6 +25,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.CompareArrows
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -477,7 +480,7 @@ fun DuplicateGroupItem(
                         onClick = { compareExpanded = !compareExpanded },
                         label = { Text("Compare", style = MaterialTheme.typography.labelMedium) },
                         leadingIcon = {
-                            Icon(Icons.Rounded.CompareArrows, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Icon(Icons.AutoMirrored.Rounded.CompareArrows, contentDescription = null, modifier = Modifier.size(16.dp))
                         }
                     )
                 }
@@ -671,7 +674,7 @@ private fun CompareDiffViewer(
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                imageVector = Icons.Rounded.CompareArrows,
+                imageVector = Icons.AutoMirrored.Rounded.CompareArrows,
                 contentDescription = "Drag to compare",
                 tint = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.size(20.dp)
@@ -747,36 +750,8 @@ private fun ScanningAnimation(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Box(
-                modifier = Modifier
-                    .size(72.dp)
-                    .scale(breathScale)
-                    .drawBehind {
-                        val sizePx = size.minDimension
-                        val strokeWidth = 4.dp.toPx()
-                        val cornerRadius = sizePx * (0.25f + 0.25f * morphProgress)
-                        rotate(rotation) {
-                            drawRoundRect(
-                                brush = Brush.sweepGradient(
-                                    colors = listOf(
-                                        primaryColor, secondaryColor,
-                                        primaryColor.copy(alpha = 0.3f),
-                                        secondaryColor, primaryColor
-                                    )
-                                ),
-                                cornerRadius = CornerRadius(cornerRadius),
-                                style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
-                            )
-                        }
-                        rotate(rotation * 0.5f) {
-                            drawRoundRect(
-                                color = surfaceVariant.copy(alpha = 0.5f),
-                                cornerRadius = CornerRadius(cornerRadius * 0.8f),
-                                size = Size(sizePx * 0.6f, sizePx * 0.6f),
-                                topLeft = Offset(sizePx * 0.2f, sizePx * 0.2f)
-                            )
-                        }
-                    }
+            androidx.compose.material3.ContainedLoadingIndicator(
+                modifier = Modifier.size(72.dp)
             )
 
             Spacer(Modifier.height(24.dp))

@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package com.inferno.gallery.ui
 
 import android.content.Context
@@ -30,6 +32,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.RotateRight
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -292,9 +295,8 @@ fun CollageScreen(
                     contentAlignment = Alignment.TopCenter
                 ) {
                     if (isSaving) {
-                        com.inferno.gallery.ui.components.ShapeMorphLoadingIndicator(
-                            modifier = Modifier.size(64.dp),
-                            contained = true
+                        androidx.compose.material3.ContainedLoadingIndicator(
+                            modifier = Modifier.size(64.dp)
                         )
                     } else {
                         BoxWithConstraints(
@@ -332,9 +334,9 @@ fun CollageScreen(
                                                 .offset(x = left, y = top)
                                                 .size(width = width, height = height)
                                                 .padding(spacing.dp / 2)
-                                                .clip(RoundedCornerShape(cornerRadius.dp))
-                                                .background(Color(0xFF222222))
-                                                .border(
+                                                                                                .clip(RoundedCornerShape(cornerRadius.dp))
+                                                                                                .background(MaterialTheme.colorScheme.surfaceContainer)
+                                                                                                .border(
                                                     width = if (selectedSlotIndex == index) 3.dp else 0.dp,
                                                     color = if (selectedSlotIndex == index) MaterialTheme.colorScheme.primary else Color.Transparent,
                                                     shape = RoundedCornerShape(cornerRadius.dp)
@@ -390,9 +392,9 @@ fun CollageScreen(
                         if (selectedSlotIndex != -1) {
                             Card(
                                 colors = CardDefaults.cardColors(
-                                    containerColor = Color(0xFF1E1E1E).copy(alpha = 0.9f),
-                                    contentColor = Color.White
-                                ),
+                                                                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                                                    contentColor = MaterialTheme.colorScheme.onSurface
+                                                                ),
                                 shape = CircleShape,
                                 elevation = CardDefaults.cardElevation(8.dp),
                                 modifier = Modifier
@@ -410,7 +412,7 @@ fun CollageScreen(
                                         updated[selectedSlotIndex] = curr.copy(rotation = (curr.rotation + 90) % 360)
                                         slotStates = updated
                                     }) {
-                                        Icon(Icons.Rounded.RotateRight, contentDescription = "Rotate")
+                                        Icon(Icons.AutoMirrored.Rounded.RotateRight, contentDescription = "Rotate")
                                     }
                                     IconButton(onClick = {
                                         val updated = slotStates.toMutableList()
@@ -507,9 +509,9 @@ fun CollageScreen(
                                                     .size(64.dp)
                                                     .clip(RoundedCornerShape(8.dp))
                                                     .background(
-                                                        if (isSelected) MaterialTheme.colorScheme.primaryContainer
-                                                        else Color(0xFF333333)
-                                                    )
+                                                                                                            if (isSelected) MaterialTheme.colorScheme.primaryContainer
+                                                                                                            else MaterialTheme.colorScheme.surfaceContainerHigh
+                                                                                                        )
                                                     .border(
                                                         width = if (isSelected) 2.dp else 0.dp,
                                                         color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
@@ -521,11 +523,11 @@ fun CollageScreen(
                                             }
                                             Spacer(modifier = Modifier.height(4.dp))
                                             Text(
-                                                text = layout.name,
-                                                color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Gray,
-                                                fontSize = 10.sp,
-                                                fontWeight = FontWeight.Bold
-                                            )
+                                                                                            text = layout.name,
+                                                                                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                                                            fontSize = 10.sp,
+                                                                                            fontWeight = FontWeight.Bold
+                                                                                        )
                                         }
                                     }
                                 }
@@ -609,9 +611,9 @@ fun CollageScreen(
                                         Button(
                                             onClick = { selectedRatioLabel = label; ratioValue = value },
                                             colors = ButtonDefaults.buttonColors(
-                                                containerColor = if (isSelected) MaterialTheme.colorScheme.primary else Color(0xFF333333),
-                                                contentColor = if (isSelected) Color.Black else Color.White
-                                            ),
+                                                                                            containerColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh,
+                                                                                            contentColor = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+                                                                                        ),
                                             shape = RoundedCornerShape(12.dp),
                                             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
                                         ) {
@@ -687,10 +689,10 @@ fun LocalGalleryChooser(
 
     Box(
         modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0xFF121212))
-            .statusBarsPadding()
-            .navigationBarsPadding()
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.surface)
+                    .statusBarsPadding()
+                    .navigationBarsPadding()
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             // Header
@@ -704,33 +706,33 @@ fun LocalGalleryChooser(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = onDismiss) {
                         Icon(
-                            imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
-                            contentDescription = "Back",
-                            tint = Color.White
-                        )
+                                                    imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
+                                                    contentDescription = "Back",
+                                                    tint = MaterialTheme.colorScheme.onSurface
+                                                )
                     }
                     Spacer(modifier = Modifier.width(8.dp))
                     Column {
                         Text(
-                            text = "Select Photo to Replace",
-                            color = Color.White,
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                                                    text = "Select Photo to Replace",
+                                                    color = MaterialTheme.colorScheme.onSurface,
+                                                    fontSize = 18.sp,
+                                                    fontWeight = FontWeight.Bold
+                                                )
                         Text(
-                            text = "Select up to $maxSelection photo${if (maxSelection > 1) "s" else ""}",
-                            color = Color.Gray,
-                            fontSize = 12.sp
-                        )
+                                                    text = "Select up to $maxSelection photo${if (maxSelection > 1) "s" else ""}",
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    fontSize = 12.sp
+                                                )
                     }
                 }
                 Button(
                     onClick = { onConfirm(selectedUris) },
                     enabled = selectedUris.isNotEmpty(),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = Color.Black
-                    ),
+                                            containerColor = MaterialTheme.colorScheme.primary,
+                                            contentColor = MaterialTheme.colorScheme.onPrimary
+                                        ),
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Text("Replace (${selectedUris.size})", fontWeight = FontWeight.Bold)
@@ -743,7 +745,7 @@ fun LocalGalleryChooser(
                     modifier = Modifier.weight(1f).fillMaxWidth(),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("No photos found", color = Color.Gray)
+                    Text("No photos found", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             } else {
                 LazyVerticalGrid(
@@ -760,9 +762,9 @@ fun LocalGalleryChooser(
                         Box(
                             modifier = Modifier
                                 .aspectRatio(1f)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(Color(0xFF222222))
-                                .border(
+                                                                .clip(RoundedCornerShape(8.dp))
+                                                                .background(MaterialTheme.colorScheme.surfaceContainer)
+                                                                .border(
                                     width = if (isSelected) 3.dp else 0.dp,
                                     color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
                                     shape = RoundedCornerShape(8.dp)

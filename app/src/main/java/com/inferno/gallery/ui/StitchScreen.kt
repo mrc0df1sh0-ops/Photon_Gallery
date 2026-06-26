@@ -112,7 +112,7 @@ import coil3.compose.AsyncImage
 import coil3.request.CachePolicy
 import coil3.request.ImageRequest
 import com.inferno.gallery.data.db.DatabaseProvider
-import com.inferno.gallery.ui.components.ShapeMorphLoadingIndicator
+
 import com.inferno.gallery.workers.MediaSyncWorker
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -249,9 +249,8 @@ fun StitchScreen(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
-                            ShapeMorphLoadingIndicator(
-                                modifier = Modifier.size(56.dp),
-                                contained = true
+                            androidx.compose.material3.ContainedLoadingIndicator(
+                                modifier = Modifier.size(56.dp)
                             )
                             Text(
                                 text  = "Stitching…",

@@ -88,7 +88,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import coil3.gif.repeatCount
 import coil3.video.videoFrameMillis
-import com.inferno.gallery.ui.components.ShapeMorphLoadingIndicator
+
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
@@ -163,7 +163,7 @@ import com.inferno.gallery.ui.GalleryListItem
 
 // Removed resolvedUriCache
 
-@OptIn(ExperimentalSharedTransitionApi::class)
+@OptIn(ExperimentalSharedTransitionApi::class, androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun GalleryScreen(
     sharedTransitionScope: SharedTransitionScope,
@@ -364,9 +364,8 @@ fun GalleryScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    ShapeMorphLoadingIndicator(
-                        modifier = Modifier.size(56.dp),
-                        contained = true
+                    androidx.compose.material3.ContainedLoadingIndicator(
+                        modifier = Modifier.size(56.dp)
                     )
                     Text(
                         text = "Scanning media…",
@@ -500,7 +499,7 @@ fun GalleryGridItem(
             .memoryCachePolicy(CachePolicy.ENABLED)
             .diskCachePolicy(cachePolicy)
             .networkCachePolicy(CachePolicy.ENABLED)
-            .crossfade(false)
+            .crossfade(90)
             .apply {
                 if (item.isVideo || !gridAutoPlay) {
                     videoFrameMillis(0)
@@ -609,7 +608,7 @@ fun GalleryGridItem(
                 }
                 Image(
                     painter = painter,
-                    contentDescription = null, 
+                    contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize()
                 )
@@ -759,7 +758,7 @@ fun GalleryGridItem(
                 val icon = if (isCloudOnly) Icons.Rounded.CloudDownload else Icons.Rounded.CloudDone
                 val tint = if (isCloudOnly) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary
                 val contentDesc = if (isCloudOnly) "Cloud only" else "Backed up"
-                
+
                 Icon(
                     imageVector = icon,
                     contentDescription = contentDesc,
@@ -842,41 +841,41 @@ private fun Modifier.gridZoomGestureModifier(
     this.then(
         Modifier.pointerInput(isSelectionMode) {
             if (isSelectionMode) return@pointerInput
-            
+
             var accumulatedScale = 1f
             var activeZoom = 1f
-            
+
             awaitEachGesture {
                 val down = awaitFirstDown(requireUnconsumed = false)
                 val initialEvent = awaitPointerEvent()
-                
+
                 val pointers = initialEvent.changes.filter { it.pressed }
                 if (pointers.size >= 2) {
                     accumulatedScale = 1f
                     activeZoom = 1f
-                    
+
                     val initialGridCellsCount = currentGridCellsCount
-                    
+
                     do {
                         val zoomEvent = awaitPointerEvent()
                         val currentPointers = zoomEvent.changes.filter { it.pressed }
-                        
+
                         if (currentPointers.size >= 2) {
                             val zoomChange = zoomEvent.calculateZoom()
-                            
+
                             // Consume ALL events immediately to prevent scroll conflicts
-                            zoomEvent.changes.forEach { 
-                                if (it.positionChanged()) it.consume() 
+                            zoomEvent.changes.forEach {
+                                if (it.positionChanged()) it.consume()
                             }
-                            
+
                             if (kotlin.math.abs(zoomChange - 1f) > 0.01f) {
                                 accumulatedScale *= zoomChange
                                 activeZoom = accumulatedScale
-                                
+
                                 val zoomRatio = 1f / activeZoom
                                 val newCount = initialGridCellsCount * zoomRatio
                                 val roundedCount = newCount.roundToInt().coerceIn(2, 6)
-                                
+
                                 if (roundedCount != currentGridCellsCount) {
                                     // Physical click for each column-count snap
                                     haptic.tick()
@@ -885,7 +884,7 @@ private fun Modifier.gridZoomGestureModifier(
                             }
                         }
                     } while (zoomEvent.changes.any { it.pressed })
-                    
+
                     accumulatedScale = 1f
                     activeZoom = 1f
                 }
@@ -960,13 +959,13 @@ fun FastScroller(
         }
     }
 
-    // Smooth out the passive offset calculation. Because headers and images take up different 
+    // Smooth out the passive offset calculation. Because headers and images take up different
     // amounts of physical height per "item", the raw index-based offset changes at varying speeds.
     // The spring animation absorbs these speed changes, making the pill glide perfectly smoothly.
     val smoothPassiveOffset by animateFloatAsState(
         targetValue = passiveOffset,
         animationSpec = spring(
-            stiffness = Spring.StiffnessMedium, 
+            stiffness = Spring.StiffnessMedium,
             dampingRatio = Spring.DampingRatioNoBouncy
         ),
         label = "smoothPassiveOffset"

@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package com.inferno.gallery.ui
 
 import androidx.compose.animation.core.LinearEasing
@@ -124,40 +126,8 @@ fun GpsScanningAnimation(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(72.dp)
-                        .scale(breathScale)
-                        .drawBehind {
-                            val sizePx = size.minDimension
-                            val strokeWidth = 4.dp.toPx()
-                            val cornerRadius = sizePx * (0.25f + 0.25f * morphProgress)
-
-                            rotate(rotation) {
-                                drawRoundRect(
-                                    brush = Brush.sweepGradient(
-                                        colors = listOf(
-                                            primaryColor,
-                                            tertiaryColor,
-                                            primaryColor.copy(alpha = 0.3f),
-                                            tertiaryColor,
-                                            primaryColor
-                                        )
-                                    ),
-                                    cornerRadius = CornerRadius(cornerRadius),
-                                    style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
-                                )
-                            }
-
-                            rotate(rotation * 0.5f) {
-                                drawRoundRect(
-                                    color = surfaceVariant.copy(alpha = 0.5f),
-                                    cornerRadius = CornerRadius(cornerRadius * 0.8f),
-                                    size = Size(sizePx * 0.6f, sizePx * 0.6f),
-                                    topLeft = Offset(sizePx * 0.2f, sizePx * 0.2f)
-                                )
-                            }
-                        }
+                androidx.compose.material3.ContainedLoadingIndicator(
+                    modifier = Modifier.size(72.dp)
                 )
 
                 Spacer(Modifier.height(24.dp))
