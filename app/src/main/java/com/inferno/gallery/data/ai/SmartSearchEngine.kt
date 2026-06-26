@@ -2,6 +2,7 @@ package com.inferno.gallery.data.ai
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.Rect
 import android.util.Log
 import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
@@ -124,10 +125,10 @@ class SmartSearchEngine(private val context: Context) {
         val shape = longArrayOf(1, 77)
         val inputNames = currentTextSession.inputNames
         val inputs = mutableMapOf<String, OnnxTensor>()
-        
+
         val inputIdsTensor = OnnxTensor.createTensor(currentEnv, LongBuffer.wrap(tokenIds), shape)
         inputs["input_ids"] = inputIdsTensor
-        
+
         var maskTensor: OnnxTensor? = null
         if (inputNames.contains("attention_mask")) {
             maskTensor = OnnxTensor.createTensor(currentEnv, LongBuffer.wrap(attentionMask), shape)
@@ -163,18 +164,13 @@ class SmartSearchEngine(private val context: Context) {
         val currentEnv = env ?: throw IllegalStateException("Environment not loaded")
         val currentVisionSession = visionSession ?: throw IllegalStateException("Vision session not loaded")
 
-        // 1. Ensure bitmap is 224x224
-        val scaledBitmap = if (bitmap.width == 224 && bitmap.height == 224) {
-            bitmap
-        } else {
-            Bitmap.createScaledBitmap(bitmap, 224, 224, true)
-        }
+        val inputBitmap = prepareClipInputBitmap(bitmap)
 
-        // 2. Preprocess pixels into RGB flat NCHW buffer
+        // Preprocess pixels into RGB flat NCHW buffer
         val pixels = IntArray(224 * 224)
-        scaledBitmap.getPixels(pixels, 0, 224, 0, 0, 224, 224)
-        if (scaledBitmap != bitmap) {
-            scaledBitmap.recycle()
+        inputBitmap.getPixels(pixels, 0, 224, 0, 0, 224, 224)
+        if (inputBitmap != bitmap) {
+            inputBitmap.recycle()
         }
 
         val floatBuffer = FloatArray(3 * 224 * 224)
@@ -221,6 +217,41 @@ class SmartSearchEngine(private val context: Context) {
         } finally {
             imageTensor.close()
         }
+    }
+
+    private fun prepareClipInputBitmap(bitmap: Bitmap): Bitmap {
+        if (bitmap.width == 224 && bitmap.height == 224) return bitmap
+
+        val sourceWidth = bitmap.width
+        val sourceHeight = bitmap.height
+        if (sourceWidth <= 0 || sourceHeight <= 0) {
+            throw IllegalArgumentException("Bitmap has invalid dimensions: ${sourceWidth}x$sourceHeight")
+        }
+
+        val sourceAspect = sourceWidth.toFloat() / sourceHeight.toFloat()
+        val targetAspect = 1f
+        val cropRect = if (sourceAspect > targetAspect) {
+            val cropWidth = sourceHeight
+            val left = (sourceWidth - cropWidth) / 2
+            Rect(left, 0, left + cropWidth, sourceHeight)
+        } else {
+            val cropHeight = sourceWidth
+            val top = (sourceHeight - cropHeight) / 2
+            Rect(0, top, sourceWidth, top + cropHeight)
+        }
+
+        val cropped = Bitmap.createBitmap(
+            bitmap,
+            cropRect.left,
+            cropRect.top,
+            cropRect.width(),
+            cropRect.height()
+        )
+        val scaled = Bitmap.createScaledBitmap(cropped, 224, 224, true)
+        if (cropped != bitmap) {
+            cropped.recycle()
+        }
+        return scaled
     }
 
     private fun l2Normalize(vector: FloatArray): FloatArray {

@@ -19,7 +19,7 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
-import kotlinx.coroutines.flow.collectLatest
+
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -57,20 +57,27 @@ fun SearchScreen(
 
     val hasAnyResults = ftsResults.isNotEmpty() || smartResults.isNotEmpty()
 
+    var searchExpanded by remember { mutableStateOf(false) }
+
     Column(
         modifier = modifier
             .fillMaxSize()
             .padding(contentPadding)
     ) {
         // ── Search Bar ──────────────────────────────────────────────────────────
-        SearchBar(
+        DockedSearchBar(
             inputField = {
                 SearchBarDefaults.InputField(
                     query = query,
-                    onQueryChange = { viewModel.updateSearchQuery(it) },
-                    onSearch = { /* Auto-search handles this via debounce */ },
-                    expanded = false,
-                    onExpandedChange = {},
+                    onQueryChange = {
+                        viewModel.updateSearchQuery(it)
+                        searchExpanded = it.isNotBlank()
+                    },
+                    onSearch = {
+                        searchExpanded = false
+                    },
+                    expanded = searchExpanded,
+                    onExpandedChange = { searchExpanded = it },
                     leadingIcon = {
                         Icon(
                             imageVector = Icons.Rounded.Search,
@@ -80,7 +87,10 @@ fun SearchScreen(
                     },
                     trailingIcon = {
                         if (query.isNotEmpty()) {
-                            IconButton(onClick = { viewModel.updateSearchQuery("") }) {
+                            IconButton(onClick = {
+                                viewModel.updateSearchQuery("")
+                                searchExpanded = false
+                            }) {
                                 Icon(Icons.Rounded.Clear, contentDescription = "Clear")
                             }
                         }
@@ -90,15 +100,22 @@ fun SearchScreen(
                     }
                 )
             },
-            expanded = false,
-            onExpandedChange = {},
+            expanded = searchExpanded && query.isNotBlank(),
+            onExpandedChange = { searchExpanded = it },
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 8.dp)
         ) {}
 
         // ── Search Scope Indicator ──────────────────────────────────────────────
-        val isSmartReady by viewModel.isSmartSearchReady.collectAsState()
+        val smartStatus by viewModel.smartSearchStatus.collectAsState()
+        val isSmartReady = smartStatus.modelDownloaded && smartStatus.indexedCount > 0
+        val smartLabel = when {
+            !smartStatus.modelDownloaded -> "Semantic — not installed"
+            smartStatus.isIndexing -> "Semantic — indexing"
+            smartStatus.indexedCount == 0 -> "Semantic — not indexed"
+            else -> "Semantic (AI)"
+        }
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -118,7 +135,7 @@ fun SearchScreen(
                     )
                 },
                 colors = SuggestionChipDefaults.suggestionChipColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f),
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
                     labelColor = MaterialTheme.colorScheme.onPrimaryContainer,
                     iconContentColor = MaterialTheme.colorScheme.onPrimaryContainer
                 ),
@@ -130,7 +147,7 @@ fun SearchScreen(
                 onClick = {},
                 label = {
                     Text(
-                        text = if (isSmartReady) "Semantic (AI)" else "Semantic — not installed",
+                        text = smartLabel,
                         style = MaterialTheme.typography.labelSmall
                     )
                 },
@@ -140,21 +157,27 @@ fun SearchScreen(
                             .size(8.dp)
                             .clip(CircleShape)
                             .background(
-                                if (isSmartReady) androidx.compose.ui.graphics.Color(0xFF4CAF50)
-                                else MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+                                when {
+                                    isSmartReady -> MaterialTheme.colorScheme.primary
+                                    smartStatus.modelDownloaded -> MaterialTheme.colorScheme.tertiary
+                                    else -> MaterialTheme.colorScheme.outlineVariant
+                                }
                             )
                     )
                 },
                 colors = SuggestionChipDefaults.suggestionChipColors(
                     containerColor = if (isSmartReady)
-                        MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f)
+                        MaterialTheme.colorScheme.secondaryContainer
                     else
                         MaterialTheme.colorScheme.surfaceContainerHigh,
                     labelColor = if (isSmartReady)
                         MaterialTheme.colorScheme.onSecondaryContainer
                     else
-                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                    iconContentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                        MaterialTheme.colorScheme.onSurfaceVariant,
+                    iconContentColor = if (isSmartReady)
+                        MaterialTheme.colorScheme.onSecondaryContainer
+                    else
+                        MaterialTheme.colorScheme.onSurfaceVariant
                 ),
                 border = null,
                 modifier = Modifier.height(28.dp)
@@ -241,6 +264,7 @@ private fun EmptySearchState() {
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun SearchingState() {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -248,12 +272,8 @@ private fun SearchingState() {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            LinearProgressIndicator(
-                modifier = Modifier
-                    .width(160.dp)
-                    .clip(CircleShape),
-                color = MaterialTheme.colorScheme.primary,
-                trackColor = MaterialTheme.colorScheme.primaryContainer
+            ContainedLoadingIndicator(
+                modifier = Modifier.size(48.dp)
             )
             Text(
                 text = "Thinking…",
@@ -377,17 +397,16 @@ private fun SearchResultsList(
                     )
                     Column {
                         Text(
-                            text = "TEXT MATCHES",
-                            style = MaterialTheme.typography.titleSmall.copy(
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = 1.sp
+                            text = "Text matches",
+                            style = MaterialTheme.typography.labelLarge.copy(
+                                fontWeight = FontWeight.SemiBold
                             ),
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
                             text = "${ftsResults.size} images containing text",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -414,8 +433,8 @@ private fun SearchResultsList(
                         Button(
                             onClick = { onAlbumClick("search_text") },
                             colors = ButtonDefaults.filledTonalButtonColors(
-                                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
-                                contentColor = MaterialTheme.colorScheme.primary
+                                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
                             ),
                             shape = MaterialTheme.shapes.medium
                         ) {
@@ -456,17 +475,16 @@ private fun SearchResultsList(
                     )
                     Column {
                         Text(
-                            text = "SEMANTIC MATCHES",
-                            style = MaterialTheme.typography.titleSmall.copy(
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = 1.sp
+                            text = "Semantic matches",
+                            style = MaterialTheme.typography.labelLarge.copy(
+                                fontWeight = FontWeight.SemiBold
                             ),
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
                             text = "${smartResults.size} images matching description",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -493,8 +511,8 @@ private fun SearchResultsList(
                         Button(
                             onClick = { onAlbumClick("search_smart") },
                             colors = ButtonDefaults.filledTonalButtonColors(
-                                containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f),
-                                contentColor = MaterialTheme.colorScheme.secondary
+                                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
                             ),
                             shape = MaterialTheme.shapes.medium
                         ) {
@@ -510,4 +528,3 @@ private fun SearchResultsList(
         }
     }
 }
-

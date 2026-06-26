@@ -6,7 +6,9 @@ import android.content.Context
 import android.content.pm.ServiceInfo
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Matrix
 import android.net.Uri
+import androidx.exifinterface.media.ExifInterface
 import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
@@ -17,6 +19,7 @@ import androidx.work.workDataOf
 import com.inferno.gallery.data.ai.SmartSearchEngine
 import com.inferno.gallery.data.db.DatabaseProvider
 import com.inferno.gallery.data.db.MediaEmbeddingEntity
+import com.inferno.gallery.data.db.MediaEmbeddingStatusEntity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
@@ -69,13 +72,17 @@ class SmartSearchIndexWorker(
     private data class LoadedImage(
         val mediaId: Long,
         val bitmap: Bitmap,
-        val name: String
+        val name: String,
+        val dateModified: Long,
+        val size: Long
     )
 
     private data class EmbeddedImage(
         val mediaId: Long,
         val embedding: FloatArray,
-        val name: String
+        val name: String,
+        val dateModified: Long,
+        val size: Long
     )
 
     private fun openInputStream(context: Context, filePath: String, uriString: String): InputStream {
@@ -95,9 +102,53 @@ class SmartSearchIndexWorker(
         return file.inputStream()
     }
 
+    private fun readExifOrientation(context: Context, filePath: String, uriString: String): Int {
+        return try {
+            openInputStream(context, filePath, uriString).use { input ->
+                ExifInterface(input).getAttributeInt(
+                    ExifInterface.TAG_ORIENTATION,
+                    ExifInterface.ORIENTATION_NORMAL
+                )
+            }
+        } catch (e: Exception) {
+            Log.d(TAG, "Unable to read EXIF orientation for $uriString: ${e.message}")
+            ExifInterface.ORIENTATION_NORMAL
+        }
+    }
+
+    private fun applyExifOrientation(bitmap: Bitmap, orientation: Int): Bitmap {
+        val matrix = Matrix()
+        when (orientation) {
+            ExifInterface.ORIENTATION_ROTATE_90 -> matrix.postRotate(90f)
+            ExifInterface.ORIENTATION_ROTATE_180 -> matrix.postRotate(180f)
+            ExifInterface.ORIENTATION_ROTATE_270 -> matrix.postRotate(270f)
+            ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> matrix.preScale(-1f, 1f)
+            ExifInterface.ORIENTATION_FLIP_VERTICAL -> matrix.preScale(1f, -1f)
+            ExifInterface.ORIENTATION_TRANSPOSE -> {
+                matrix.postRotate(90f)
+                matrix.postScale(-1f, 1f)
+            }
+            ExifInterface.ORIENTATION_TRANSVERSE -> {
+                matrix.postRotate(270f)
+                matrix.postScale(-1f, 1f)
+            }
+            else -> return bitmap
+        }
+
+        return try {
+            val rotated = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+            if (rotated != bitmap) bitmap.recycle()
+            rotated
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to apply EXIF orientation: ${e.message}")
+            bitmap
+        }
+    }
+
     private fun decodeDownsampledBitmap(context: Context, filePath: String, uriString: String): Bitmap? {
         var input: InputStream? = null
         try {
+            val orientation = readExifOrientation(context, filePath, uriString)
             input = openInputStream(context, filePath, uriString)
             val options = BitmapFactory.Options().apply {
                 inJustDecodeBounds = true
@@ -122,7 +173,7 @@ class SmartSearchIndexWorker(
             }
             input = openInputStream(context, filePath, uriString)
             val decoded = BitmapFactory.decodeStream(input, null, decodeOptions)
-            return decoded
+            return decoded?.let { applyExifOrientation(it, orientation) }
         } finally {
             try {
                 input?.close()
@@ -176,7 +227,7 @@ class SmartSearchIndexWorker(
             }
             val alreadyIndexed = totalCount - unindexedIds.size
             var processedCount = 0
-            
+
             Log.d(TAG, "Smart Search indexing started. Unindexed: ${unindexedIds.size}, total: $totalCount")
 
             com.inferno.gallery.data.IndexingProgressManager.updateClipProgress(
@@ -203,30 +254,80 @@ class SmartSearchIndexWorker(
                 launch(Dispatchers.IO) {
                     for (mediaId in unindexedIds) {
                         if (isStopped) break
+                        var entity: com.inferno.gallery.data.db.CoreMediaEntity? = null
                         try {
-                            val entity = db.mediaDao().getMediaById(mediaId)
+                            entity = db.mediaDao().getMediaById(mediaId)
                             if (entity == null) {
                                 // Deleted in background, skip
                                 continue
                             }
                             val bitmap = decodeDownsampledBitmap(applicationContext, entity.filePath, entity.uriString)
                             if (bitmap != null) {
-                                loadChannel.send(LoadedImage(mediaId, bitmap, entity.name))
+                                loadChannel.send(
+                                    LoadedImage(
+                                        mediaId = mediaId,
+                                        bitmap = bitmap,
+                                        name = entity.name,
+                                        dateModified = entity.dateModified,
+                                        size = entity.size
+                                    )
+                                )
                             } else {
                                 // Invalid file format / corrupt image, insert zero-vector to avoid retrying endlessly
                                 Log.w(TAG, "Bitmap decoding returned null for ${entity.name}. Marking with zero vector.")
-                                db.embeddingDao().insertEmbedding(MediaEmbeddingEntity(mediaId, FloatArray(512)))
+                                db.embeddingStatusDao().upsertStatus(
+                                    MediaEmbeddingStatusEntity(
+                                        mediaId = mediaId,
+                                        status = MediaEmbeddingEntity.STATUS_FAILED_PERMANENT,
+                                        dateModified = entity.dateModified,
+                                        size = entity.size,
+                                        updatedAt = System.currentTimeMillis()
+                                    )
+                                )
                             }
                         } catch (e: java.io.FileNotFoundException) {
                             Log.e(TAG, "FileNotFoundException loading $mediaId (${e.message}). Marking with zero vector.")
                             // File genuinely deleted or inaccessible on disk, mark with zero vector to avoid infinite retries
-                            db.embeddingDao().insertEmbedding(MediaEmbeddingEntity(mediaId, FloatArray(512)))
+                            val fallback = entity
+                            if (fallback != null) {
+                                db.embeddingStatusDao().upsertStatus(
+                                    MediaEmbeddingStatusEntity(
+                                        mediaId = mediaId,
+                                        status = MediaEmbeddingEntity.STATUS_FAILED_PERMANENT,
+                                        dateModified = fallback.dateModified,
+                                        size = fallback.size,
+                                        updatedAt = System.currentTimeMillis()
+                                    )
+                                )
+                            }
                         } catch (e: SecurityException) {
-                            Log.e(TAG, "SecurityException loading $mediaId: ${e.message}. Skipping to retry later.")
-                            // Permission revoked or not granted yet, do NOT write a zero vector
+                            Log.e(TAG, "SecurityException loading $mediaId: ${e.message}. Marking as transient failure.")
+                            val fallback = entity
+                            if (fallback != null) {
+                                db.embeddingStatusDao().upsertStatus(
+                                    MediaEmbeddingStatusEntity(
+                                        mediaId = mediaId,
+                                        status = MediaEmbeddingEntity.STATUS_FAILED_TRANSIENT,
+                                        dateModified = fallback.dateModified,
+                                        size = fallback.size,
+                                        updatedAt = System.currentTimeMillis()
+                                    )
+                                )
+                            }
                         } catch (e: Exception) {
-                            Log.e(TAG, "Failed loading $mediaId: ${e.message}")
-                            // Other transient exceptions, do NOT write a zero vector
+                            Log.e(TAG, "Failed loading $mediaId: ${e.message}. Marking as transient failure.")
+                            val fallback = entity
+                            if (fallback != null) {
+                                db.embeddingStatusDao().upsertStatus(
+                                    MediaEmbeddingStatusEntity(
+                                        mediaId = mediaId,
+                                        status = MediaEmbeddingEntity.STATUS_FAILED_TRANSIENT,
+                                        dateModified = fallback.dateModified,
+                                        size = fallback.size,
+                                        updatedAt = System.currentTimeMillis()
+                                    )
+                                )
+                            }
                         }
                     }
                     loadChannel.close()
@@ -241,7 +342,15 @@ class SmartSearchIndexWorker(
                         }
                         try {
                             val embedding = searchEngine.encodeImage(loaded.bitmap)
-                            embedChannel.send(EmbeddedImage(loaded.mediaId, embedding, loaded.name))
+                            embedChannel.send(
+                                EmbeddedImage(
+                                    mediaId = loaded.mediaId,
+                                    embedding = embedding,
+                                    name = loaded.name,
+                                    dateModified = loaded.dateModified,
+                                    size = loaded.size
+                                )
+                            )
                         } catch (e: Exception) {
                             Log.e(TAG, "Stage2 embedding failed for ${loaded.name}: ${e.message}")
                         } finally {
@@ -257,14 +366,20 @@ class SmartSearchIndexWorker(
                         if (isStopped) break
                         try {
                             db.embeddingDao().insertEmbedding(
-                                MediaEmbeddingEntity(embedded.mediaId, embedded.embedding)
+                                MediaEmbeddingEntity(
+                                    mediaId = embedded.mediaId,
+                                    embedding = embedded.embedding,
+                                    dateModified = embedded.dateModified,
+                                    size = embedded.size
+                                )
                             )
+                            db.embeddingStatusDao().deleteStatus(embedded.mediaId)
                             processedCount++
-                            
+
                             val sample = embedded.embedding.take(5).joinToString(", ")
                             val nonZero = embedded.embedding.count { it != 0f }
                             Log.d(TAG, "Inserted embedding for ${embedded.name} (ID: ${embedded.mediaId}). Size: ${embedded.embedding.size}, Non-Zero count: $nonZero, Sample: [$sample]")
-                            
+
                             val current = alreadyIndexed + processedCount
                             com.inferno.gallery.data.IndexingProgressManager.updateClipProgress(
                                 isIndexing = true,

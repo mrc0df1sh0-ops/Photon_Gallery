@@ -13,7 +13,7 @@ class BPETokenizer(jsonContent: String) {
     init {
         val root = JSONObject(jsonContent)
         val model = root.getJSONObject("model")
-        
+
         // Load Vocab
         val vocabJson = model.getJSONObject("vocab")
         val vocabMap = mutableMapOf<String, Int>()
@@ -73,14 +73,16 @@ class BPETokenizer(jsonContent: String) {
 
     private fun bpe(token: String): String {
         if (token.isEmpty()) return ""
-        
-        // Convert to unicode byte-representation chars
+
+        // CLIP BPE attaches the end-of-word marker before merging. Adding it
+        // after merging changes token IDs for common multi-subword terms.
         val bytes = token.toByteArray(Charsets.UTF_8)
         var word = bytes.map { b -> byteEncoder[b]?.toString() ?: "" }.toMutableList()
         if (word.isEmpty()) return ""
+        word[word.lastIndex] = word.last() + "</w>"
 
         var pairs = getPairs(word)
-        if (pairs.isEmpty()) return token
+        if (pairs.isEmpty()) return word.first()
 
         while (true) {
             val bigram = pairs.minByOrNull { bpeRanks[it] ?: Int.MAX_VALUE } ?: break
@@ -117,7 +119,7 @@ class BPETokenizer(jsonContent: String) {
     fun encode(text: String): LongArray {
         val cleanedText = text.trim().lowercase()
             .replace("\\s+".toRegex(), " ")
-        
+
         if (cleanedText.isEmpty()) {
             val emptyResult = LongArray(77)
             emptyResult[0] = startToken.toLong()
@@ -128,7 +130,7 @@ class BPETokenizer(jsonContent: String) {
         // Standard CLIP regex split pattern
         val regex = "'s|'t|'re|'ve|'m|'ll|'d|\\p{L}+|\\p{N}+|[^\\s\\p{L}\\p{N}]+".toRegex()
         val matches = regex.findAll(cleanedText).map { it.value }.toList()
-        
+
         val tokenIds = mutableListOf<Int>()
         tokenIds.add(startToken)
 
@@ -136,8 +138,7 @@ class BPETokenizer(jsonContent: String) {
             val bpeResult = bpe(token)
             val bpeTokens = bpeResult.split(" ")
             for (bpeToken in bpeTokens) {
-                val tokenWithW = if (bpeToken == bpeTokens.last()) "$bpeToken</w>" else bpeToken
-                val id = vocab[tokenWithW]
+                val id = vocab[bpeToken]
                 if (id != null) {
                     tokenIds.add(id)
                 }

@@ -13,12 +13,14 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.inferno.gallery.data.db.DatabaseProvider
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
+import java.security.MessageDigest
 
 class ModelDownloadWorker(
     appContext: Context,
@@ -37,7 +39,18 @@ class ModelDownloadWorker(
         private const val TEXT_MODEL_NAME = "text_model_quantized.onnx"
         private const val VISION_MODEL_NAME = "vision_model_quantized.onnx"
         private const val TOKENIZER_NAME = "tokenizer.json"
+
+        private const val TEXT_MODEL_SHA256 = "9106b51e6c663a56b99182ec617c2b3d53577b037e7e24a7717eb78048a0c97a"
+        private const val VISION_MODEL_SHA256 = "44eece4fe5fe4e0359a88268a327adf758633a1aade3917690b952bef1501f96"
+        private const val TOKENIZER_SHA256 = "72ed5c96db5729294468543e4bc75fce14ca63f58e37300290189ba1c1e52b85"
     }
+
+    private data class DownloadTarget(
+        val url: String,
+        val fileName: String,
+        val expectedSize: Long,
+        val expectedSha256: String
+    )
 
     override suspend fun getForegroundInfo(): ForegroundInfo =
         createForegroundInfo("Preparing model download…")
@@ -67,6 +80,25 @@ class ModelDownloadWorker(
         )
     }
 
+    private fun verifySha256(file: File, expected: String): Boolean {
+        return try {
+            val digest = MessageDigest.getInstance("SHA-256")
+            file.inputStream().use { input ->
+                val buffer = ByteArray(8192)
+                var read = input.read(buffer)
+                while (read > 0) {
+                    digest.update(buffer, 0, read)
+                    read = input.read(buffer)
+                }
+            }
+            val actual = digest.digest().joinToString("") { "%02x".format(it) }
+            actual.equals(expected, ignoreCase = true)
+        } catch (e: Exception) {
+            Log.e(TAG, "Checksum verification failed for ${file.name}: ${e.message}")
+            false
+        }
+    }
+
     override suspend fun doWork(): Result {
         try {
             setForeground(createForegroundInfo("Connecting…"))
@@ -79,25 +111,30 @@ class ModelDownloadWorker(
             val client = OkHttpClient()
 
             val downloadTargets = listOf(
-                Triple(TOKENIZER_URL, TOKENIZER_NAME, 2.1 * 1024 * 1024L), // tokenizer
-                Triple(TEXT_MODEL_URL, TEXT_MODEL_NAME, 61.5 * 1024 * 1024L), // text model
-                Triple(VISION_MODEL_URL, VISION_MODEL_NAME, 83.4 * 1024 * 1024L) // vision model
+                DownloadTarget(TOKENIZER_URL, TOKENIZER_NAME, 2_224_081L, TOKENIZER_SHA256),
+                DownloadTarget(TEXT_MODEL_URL, TEXT_MODEL_NAME, 64_504_507L, TEXT_MODEL_SHA256),
+                DownloadTarget(VISION_MODEL_URL, VISION_MODEL_NAME, 87_461_602L, VISION_MODEL_SHA256)
             )
 
-            val totalBytesExpected = downloadTargets.sumOf { it.third }
+            val totalBytesExpected = downloadTargets.sumOf { it.expectedSize }
             var totalBytesDownloaded = 0L
 
             for (target in downloadTargets) {
                 if (isStopped) break
-                val url = target.first
-                val fileName = target.second
-                
+                val url = target.url
+                val fileName = target.fileName
+
                 val finalFile = File(modelDir, fileName)
-                // If it already exists and seems complete, skip
-                if (finalFile.exists() && finalFile.length() > target.third * 0.95) {
-                    totalBytesDownloaded += finalFile.length()
-                    Log.d(TAG, "$fileName already exists and appears complete, skipping.")
-                    continue
+                // If it already exists and seems complete, verify hash before skipping
+                if (finalFile.exists() && finalFile.length() > target.expectedSize * 0.95) {
+                    if (verifySha256(finalFile, target.expectedSha256)) {
+                        totalBytesDownloaded += finalFile.length()
+                        Log.d(TAG, "$fileName already exists and checksum matches, skipping.")
+                        continue
+                    } else {
+                        Log.w(TAG, "$fileName checksum mismatch. Re-downloading.")
+                        finalFile.delete()
+                    }
                 }
 
                 val tempFile = File(modelDir, "$fileName.tmp")
@@ -143,6 +180,13 @@ class ModelDownloadWorker(
                             tempFile.renameTo(finalFile)
                         }
                     }
+
+                    if (!isStopped && finalFile.exists()) {
+                        if (!verifySha256(finalFile, target.expectedSha256)) {
+                            finalFile.delete()
+                            throw java.io.IOException("Checksum verification failed for $fileName")
+                        }
+                    }
                 }
             }
 
@@ -153,8 +197,20 @@ class ModelDownloadWorker(
 
             // Clear all old embeddings so they get re-calculated with the new model
             val db = DatabaseProvider.getDatabase(applicationContext)
-            withContext(Dispatchers.IO) {
+            val shouldAutoIndex = withContext(Dispatchers.IO) {
                 db.embeddingDao().clearAllEmbeddings()
+                com.inferno.gallery.data.SettingsRepository.getInstance(applicationContext)
+                    .smartSearchAutoIndexFlow
+                    .first() && db.embeddingDao().getUnindexedMediaIds().isNotEmpty()
+            }
+
+            if (shouldAutoIndex) {
+                val indexRequest = androidx.work.OneTimeWorkRequestBuilder<SmartSearchIndexWorker>().build()
+                androidx.work.WorkManager.getInstance(applicationContext).enqueueUniqueWork(
+                    "SmartSearchIndexWorker",
+                    androidx.work.ExistingWorkPolicy.KEEP,
+                    indexRequest
+                )
             }
 
             Log.d(TAG, "Model download completed successfully. Cleared old database embeddings for re-indexing.")

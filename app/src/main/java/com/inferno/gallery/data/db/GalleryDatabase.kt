@@ -52,13 +52,13 @@ interface MediaDao {
 
     @Query("DELETE FROM core_media WHERE id IN (:ids)")
     suspend fun deleteByIds(ids: List<Long>)
-    
+
     @Query("DELETE FROM core_media WHERE uriString = :uriString")
     suspend fun deleteByUri(uriString: String)
-    
+
     @Query("UPDATE core_media SET bucketName = :bucket WHERE uriString = :uriString")
     suspend fun updateBucketByUri(uriString: String, bucket: String)
-    
+
     @Query("UPDATE core_media SET is_indexed_ocr = :isIndexed WHERE id = :id")
     suspend fun updateOcrIndexStatus(id: Long, isIndexed: Boolean)
 
@@ -121,12 +121,13 @@ interface MediaDao {
         CoreMediaEntity::class,
         TelegramBackupEntity::class,
         MediaEmbeddingEntity::class,
+        MediaEmbeddingStatusEntity::class,
         VaultMediaEntity::class
         // ImageFtsEntity is intentionally excluded: @Fts5 has a KSP 2.2.x incompatibility.
         // The FTS5 virtual table is instead created manually in DatabaseProvider's
         // RoomDatabase.Callback onCreate hook using raw CREATE VIRTUAL TABLE SQL.
     ],
-    version = 10,
+    version = 12,
     exportSchema = true
 )
 @androidx.room.TypeConverters(EmbeddingConverter::class)
@@ -134,5 +135,6 @@ abstract class GalleryDatabase : RoomDatabase() {
     abstract fun mediaDao(): MediaDao
     abstract fun telegramBackupDao(): TelegramBackupDao
     abstract fun embeddingDao(): EmbeddingDao
+    abstract fun embeddingStatusDao(): EmbeddingStatusDao
     abstract fun vaultDao(): VaultDao
 }
