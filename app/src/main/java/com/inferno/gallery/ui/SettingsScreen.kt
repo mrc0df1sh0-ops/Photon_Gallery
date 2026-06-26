@@ -329,10 +329,10 @@ fun SettingsScreen(
             title = { Text("Privacy Notice", fontWeight = FontWeight.Bold) },
             text = {
                 Text(
-                    text = "Photon Gallery is built with a privacy-first, offline-first approach.\n\n" +
-                           "• All advanced AI features, including Smart Search vector embeddings, face detection, scene recognition, and OCR, run 100% locally on your device.\n\n" +
+                    text = "Photon Gallery is built with a privacy-first approach.\n\n" +
+                           "• All Smart Search, face detection, and OCR processing happens completely on your device.\n\n" +
                            "• No telemetry, usage statistics, tracking analytics, or personal data is collected or uploaded to any remote servers.\n\n" +
-                           "• Your media files and search index databases never leave your device.",
+                           "• The application source code is fully open for anyone to inspect.",
                     style = MaterialTheme.typography.bodyMedium
                 )
             },
@@ -2441,7 +2441,7 @@ fun SettingsScreen(
                                     }
 
                                     Text(
-                                        text = "An elegant, AI-powered local media gallery for Android.",
+                                        text = "An elegant, clean media gallery app for Android.",
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
                                         textAlign = androidx.compose.ui.text.style.TextAlign.Center,
@@ -2481,12 +2481,18 @@ fun SettingsScreen(
                                                 .padding(16.dp),
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
-                                            WavyMaintainerAvatar(
-                                                imageUrl = "https://github.com/Bn5prS.png",
-                                                avatarSize = 64.dp,
-                                                outlineColor = MaterialTheme.colorScheme.primary,
-                                                amplitude = 3.dp,
-                                                wavesCount = 8
+                                            AsyncImage(
+                                                model = "https://github.com/Bn5prS.png",
+                                                contentDescription = "Maintainer Profile",
+                                                modifier = Modifier
+                                                    .size(64.dp)
+                                                    .clip(CircleShape)
+                                                    .border(
+                                                        width = 1.5.dp,
+                                                        color = MaterialTheme.colorScheme.primary,
+                                                        shape = CircleShape
+                                                    ),
+                                                contentScale = ContentScale.Crop
                                             )
                                             
                                             Spacer(modifier = Modifier.width(16.dp))
@@ -2498,7 +2504,7 @@ fun SettingsScreen(
                                                     fontWeight = FontWeight.Bold
                                                 )
                                                 Text(
-                                                    text = "GitHub Developer",
+                                                    text = "Developer",
                                                     style = MaterialTheme.typography.bodySmall,
                                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                                 )
